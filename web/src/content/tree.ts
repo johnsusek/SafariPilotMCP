@@ -98,6 +98,18 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
           child.hasAttribute("aria-label") ||
           child.hasAttribute("aria-labelledby"));
 
+  // A label's text already names its control, and a legend's names its fieldset.
+  let control = (child as HTMLLabelElement).control;
+
+  if (control && !isPruned(control))
+    children = children.filter((item) => !("text" in item));
+
+  if (
+    child.localName === "legend" &&
+    child.parentElement?.localName === "fieldset"
+  )
+    return;
+
   if (!shown) {
     for (let item of children) {
       if ("text" in item) pushText(items, item.text);
@@ -124,6 +136,20 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
     !leafTags.has(child.localName)
   )
     return;
+
+  // A clickable wrapper around a single widget of the same role and name (a custom element hosting a real button) shows as that widget.
+  let only = children.length === 1 ? children[0] : null;
+
+  if (
+    interactive &&
+    only &&
+    "element" in only &&
+    only.role === role &&
+    only.name === name
+  ) {
+    items.push(only);
+    return;
+  }
 
   items.push({ element: child, role, name, children });
 }

@@ -176,6 +176,10 @@ export function nameOf(element: Element, fromContent = true) {
         : "",
     () => (element.localName === "img" ? element.getAttribute("alt") : ""),
     () => svgTitle(element),
+    () =>
+      element.localName === "fieldset"
+        ? element.querySelector(":scope > legend")?.textContent
+        : "",
     () => {
       if (!fromContent || isTextField || element.localName === "select")
         return "";

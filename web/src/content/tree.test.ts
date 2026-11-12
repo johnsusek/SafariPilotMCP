@@ -141,6 +141,22 @@ describe("treeText", () => {
     expect(withoutRefs(text)).toBe('textbox "Code" value="let x"');
   });
 
+  test("label and legend text is not repeated beside what it names", () => {
+    let { text } = render(
+      '<fieldset><legend>Size</legend><label><input type="radio"> Small</label></fieldset><label for="n">Name <b>*</b></label><input id="n">',
+    );
+    expect(withoutRefs(text)).toBe(
+      ['group "Size"', '  radio "Small"', 'textbox "Name *"'].join("\n"),
+    );
+  });
+
+  test("a widget wrapping the same widget shows once", () => {
+    let { text } = render(
+      '<div role="button" tabindex="0"><button>Next</button></div>',
+    );
+    expect(withoutRefs(text)).toBe('button "Next"');
+  });
+
   test("links take a descendant's title when it has no text", () => {
     let { text } = render('<a href="/vote"><div title="upvote"></div></a>');
     expect(withoutRefs(text)).toBe('link "upvote" href=/vote');
