@@ -9,7 +9,7 @@ async function sendToContent(
   request: ContentRequest,
 ): Promise<ContentResponse> {
   let tab = await resolveTab(tabId);
-  let noScript = `no content script answered in tab ${tab.id} (${tab.url ?? "unknown url"}); reload the tab, or the page does not allow extensions`;
+  let noScript = `no content script answered in tab ${tab.id} (${tab.url ?? "unknown url"}); open the URL in a new tab (tabs from before the extension was installed or updated stay unreachable), or the page does not allow extensions`;
   let response = await browser.tabs
     .sendMessage(tab.id, request)
     .catch((error) => ({ ok: false as const, error: `${noScript}: ${error}` }));

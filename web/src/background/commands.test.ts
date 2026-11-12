@@ -114,7 +114,7 @@ describe("runCommand", () => {
     expect(result).toEqual({ ok: true, url: "u", title: "t" });
   });
 
-  test("content without a content script asks for a reload", async () => {
+  test("content without a content script asks for a new tab", async () => {
     fake.tabs.sendMessage.mockRejectedValue(
       new Error("Could not establish connection"),
     );
@@ -125,7 +125,7 @@ describe("runCommand", () => {
     });
     expect(rejected).toMatchObject({ ok: false });
     expect((rejected as { error: string }).error).toMatch(
-      /^no content script answered in tab 5 .*reload the tab/,
+      /^no content script answered in tab 5 .*open the URL in a new tab/,
     );
     fake.tabs.sendMessage.mockResolvedValue(undefined);
     let silent = await run({
@@ -133,7 +133,9 @@ describe("runCommand", () => {
       tabId: null,
       request: { op: "ping" },
     });
-    expect((silent as { error: string }).error).toMatch(/reload the tab/);
+    expect((silent as { error: string }).error).toMatch(
+      /open the URL in a new tab/,
+    );
   });
 
   test("screenshot fails unless the tab is active in its window", async () => {
