@@ -4,7 +4,7 @@ import { find } from "./find";
 import { inspect } from "./inspect";
 import { locate } from "./locate";
 import { pageText } from "./pageText";
-import { scroll } from "./scroll";
+import { scroll, scrollIntoView } from "./scroll";
 import { snapshot } from "./snapshot";
 import { readPage } from "./tree";
 
@@ -19,11 +19,17 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "events") return takeEvents(request.clear, request.arm);
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "readPage")
-      return readPage(request.filter, request.maxChars);
+      return readPage(
+        request.filter,
+        request.maxChars,
+        request.ref,
+        request.depth,
+      );
     if (request.op === "find") return find(request.name, request.role);
     if (request.op === "pageText") return pageText(request.maxChars);
     if (request.op === "scroll")
       return scroll(request.ref, request.left, request.top);
+    if (request.op === "scrollIntoView") return scrollIntoView(request.ref);
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

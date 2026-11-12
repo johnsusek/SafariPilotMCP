@@ -21,11 +21,13 @@ enum CommandLineParsing {
     tab-select ID                   make a tab active in its window
     tab-close ID                    close a tab
     navigate URL|back|forward       load a URL or walk history
-    read-page [--all] [--max-chars N]  element tree with refs
+    read-page [--all] [--max-chars N] [--ref REF] [--depth N]  element tree with refs
     find [NAME] [--role ROLE]       visible elements whose name contains NAME and role is ROLE
     text [--max-chars N]            readable page text
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
-    screenshot [PATH]               save the tab as PNG
+    scroll-to REF                   center REF in the view
+    screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
+    resize WIDTH HEIGHT             resize the tab's window in points
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
     debug-cg click|hover REF        the same for a click or a hover
@@ -57,9 +59,28 @@ enum CommandLineParsing {
     case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first))
     case "tab-select": invocation = try Invocation(command: .tabSelect(tabId: integer(rest.first, "ID")))
     case "tab-close": invocation = try Invocation(command: .tabClose(tabId: integer(rest.first, "ID")))
-    case "read-page": invocation = Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars))
+    case "read-page":
+      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let depth = try option("--depth", &rest).map { try integer($0, "--depth") }
+      invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth))
+    case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, ref: integer(rest.first, "REF")))
+    case "resize":
+      guard rest.count == 2 else { throw Failure(description: "resize needs WIDTH and HEIGHT") }
+
+      invocation = try Invocation(command: .resize(tabId: tabId, width: integer(rest[0], "WIDTH"), height: integer(rest[1], "HEIGHT")))
     case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
-    case "screenshot": invocation = Invocation(command: .screenshot(tabId: tabId), outputPath: rest.first)
+    case "screenshot":
+      let region = try option("--region", &rest).map { text in
+        try text.split(separator: ",").map { word in
+          guard let number = Double(word) else { throw Failure(description: "--region must be X0,Y0,X1,Y1, not \(text)") }
+          return number
+        }
+      }
+      let scale = try option("--scale", &rest).map { text in
+        guard let number = Double(text) else { throw Failure(description: "--scale must be a number, not \(text)") }
+        return number
+      }
+      invocation = try Invocation(command: .screenshot(tabId: tabId, corners: region, scale: scale), outputPath: rest.first)
     case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try integer($0, "REF") }))
     case "debug-cg":
       let windowFields = !flag("--no-window-fields", &rest)

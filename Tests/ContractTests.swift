@@ -49,7 +49,9 @@ struct ContractTests {
     ])
     #expect(ContentRequest.events(clear: true, arm: true).json == ["op": "events", "clear": .bool(true), "arm": .bool(true)])
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": .number(5)])
-    #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100)])
+    #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
+    #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": .number(7)])
+    #expect(BackgroundCommand.resize(tabId: 4, width: 1200, height: 800).json == ["type": "resize", "tabId": .number(4), "width": .number(1200), "height": .number(800)])
   }
 
   @Test func appCommandRoundTripsThroughCLIRequest() throws {

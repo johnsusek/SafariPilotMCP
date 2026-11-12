@@ -54,10 +54,17 @@ export type ContentRequest =
   // arm turns on move and drag-over logging until the next events request.
   | { op: "events"; clear: boolean; arm: boolean }
   | { op: "inspect"; ref: number }
-  | { op: "readPage"; filter: "interactive" | "all"; maxChars: number }
+  | {
+      op: "readPage";
+      filter: "interactive" | "all";
+      maxChars: number;
+      ref: number | null;
+      depth: number | null;
+    }
   | { op: "find"; name: string; role: string }
   | { op: "pageText"; maxChars: number }
-  | { op: "scroll"; ref: number | null; left: number; top: number };
+  | { op: "scroll"; ref: number | null; left: number; top: number }
+  | { op: "scrollIntoView"; ref: number };
 
 export type Failure = { ok: false; error: string };
 export type PingResult = { ok: true; url: string; title: string };
@@ -107,7 +114,8 @@ export type InspectResult = {
 };
 
 // readPage: an indented element tree as text, one node per line, with refs from the same
-// ref space as snapshot and locate. filter "interactive" keeps only actionable elements.
+// ref space as snapshot and locate. filter "interactive" keeps only actionable elements;
+// ref limits it to that element's subtree and depth to that many levels.
 export type ReadPageResult = {
   ok: true;
   url: string;
@@ -131,7 +139,7 @@ export type PageTextResult = {
 };
 
 // scroll: scrolls by (left, top) CSS px the nearest scrollable ancestor of ref, or the document
-// when ref is null. moved is false when nothing could scroll.
+// when ref is null. moved is false when nothing could scroll. scrollIntoView answers the same way.
 export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
 
 export type ContentResponse =

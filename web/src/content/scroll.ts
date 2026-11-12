@@ -45,3 +45,20 @@ export function scroll(
   let moved = target.scrollLeft !== before[0] || target.scrollTop !== before[1];
   return { ok: true, moved, viewport: readViewport() };
 }
+
+// Centers ref in the view, scrolling every container around it; moved is false when it was already there.
+export function scrollIntoView(ref: number): ScrollResult | Failure {
+  let element = resolveRef(ref);
+
+  if (!(element instanceof Element)) return element;
+
+  let before = element.getBoundingClientRect();
+  element.scrollIntoView({
+    block: "center",
+    inline: "center",
+    behavior: "instant",
+  });
+  let after = element.getBoundingClientRect();
+  let moved = before.left !== after.left || before.top !== after.top;
+  return { ok: true, moved, viewport: readViewport() };
+}

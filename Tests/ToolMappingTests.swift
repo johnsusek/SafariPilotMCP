@@ -5,10 +5,10 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down"]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600)]
 
-    // key needs keys or text but neither is required by itself; browser_batch runs in MCPServer, not through command.
-    for tool in Tools.definitions where tool.name != "browser_batch" {
+    // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
+    for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
       let arguments = samples.filter { tool.required.contains($0.key) }.merging(tool.name == "key" ? ["keys": "Enter"] : [:]) { $1 }
       #expect(throws: Never.self) { try map(tool.name, arguments) }
     }
@@ -22,7 +22,7 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsAcceptTabId() {
-    let tabless: Set = ["tabs_list", "tab_create", "browser_batch"]
+    let tabless: Set = ["tabs_list", "tab_create", "browser_batch", "wait"]
 
     for tool in Tools.definitions where !tabless.contains(tool.name) {
       #expect(tool.properties["tabId"] != nil, "\(tool.name)")
@@ -38,7 +38,29 @@ struct ToolMappingTests {
   @Test func omittedTabIdUsesTheSessionTab() throws {
     #expect(try map("click", ["ref": .number(4)]) == .click(tabId: 20, ref: 4))
     #expect(try map("get_page_text") == .pageText(tabId: 20, maxChars: AppCommand.defaultMaxChars))
-    #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20))
+    #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20, region: nil, scale: 1))
+  }
+
+  @Test func tierOneToolsMap() throws {
+    #expect(try map("scroll_to", ["ref": .number(9)]) == .scrollTo(tabId: 20, ref: 9))
+    #expect(try map("resize_window", ["width": .number(1200), "height": .number(800)]) == .resizeWindow(tabId: 20, width: 1200, height: 800))
+    #expect(try map("read_page", ["ref_id": .number(5), "depth": .number(2)]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: 5, depth: 2))
+    #expect(try map("screenshot", ["region": .array([.number(10), .number(20), .number(110.4), .number(220)]), "scale": .number(0.5)]) == .screenshot(tabId: 20, region: PixelRect(x0: 10, y0: 20, x1: 110, y1: 220), scale: 0.5))
+    #expect(try Tools.waitSeconds(["seconds": .number(2.5)]) == 2.5)
+  }
+
+  @Test func tierOneToolsRefuseBadArguments() {
+    let bad: [(String, [String: JSONValue])] = [
+      ("read_page", ["depth": .number(0)]),
+      ("screenshot", ["scale": .number(2)]),
+      ("screenshot", ["region": .array([.number(10), .number(20), .number(5), .number(220)])]),
+      ("screenshot", ["region": .array([.number(10), .number(20)])]),
+      ("resize_window", ["width": .number(0), "height": .number(800)]),
+    ]
+
+    for (name, arguments) in bad { #expect(throws: Failure.self, "\(name) \(arguments)") { try map(name, arguments) } }
+
+    #expect(throws: Failure.self) { try Tools.waitSeconds(["seconds": .number(11)]) }
   }
 
   @Test func findTakesNameAndRole() throws {
@@ -52,9 +74,9 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsWithoutAnyTabFail() throws {
-    for name in ["click", "form_input", "key", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
+    for name in ["click", "form_input", "key", "find", "read_page", "get_page_text", "scroll", "scroll_to", "screenshot", "resize_window", "navigate"] {
       #expect("\(name)") {
-        try map(name, ["ref": .number(1), "value": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back"], session: nil)
+        try map(name, ["ref": .number(1), "value": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back", "width": .number(800), "height": .number(600)], session: nil)
       } throws: { error in
         (error as? Failure)?.description == TabSession.noCurrent
       }
@@ -160,8 +182,8 @@ struct ToolMappingTests {
   }
 
   @Test func readPageDefaultsToAll() throws {
-    #expect(try map("read_page") == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars))
-    #expect(try map("read_page", ["filter": "interactive", "max_chars": .number(900)]) == .readPage(tabId: 20, filter: .interactive, maxChars: 900))
+    #expect(try map("read_page") == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil))
+    #expect(try map("read_page", ["filter": "interactive", "max_chars": .number(900)]) == .readPage(tabId: 20, filter: .interactive, maxChars: 900, ref: nil, depth: nil))
   }
 
   @Test func scrollConvertsStepsToPixels() throws {
@@ -232,11 +254,15 @@ struct CommandLineParsingTests {
   }
 
   @Test func optionsAndDefaults() throws {
-    #expect(try parse("read-page --all --max-chars 10").command == .readPage(tabId: nil, filter: .all, maxChars: 10))
-    #expect(try parse("read-page").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars))
+    #expect(try parse("read-page --all --max-chars 10").command == .readPage(tabId: nil, filter: .all, maxChars: 10, ref: nil, depth: nil))
+    #expect(try parse("read-page --ref 4 --depth 2").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: 4, depth: 2))
+    #expect(try parse("scroll-to 6").command == .scrollTo(tabId: nil, ref: 6))
+    #expect(try parse("resize 1000 700").command == .resizeWindow(tabId: nil, width: 1000, height: 700))
+    #expect(try parse("screenshot a.png --region 0,0,50,40 --scale 0.5") == Invocation(command: .screenshot(tabId: nil, region: PixelRect(x0: 0, y0: 0, x1: 50, y1: 40), scale: 0.5), outputPath: "a.png"))
+    #expect(try parse("read-page").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil))
     #expect(try parse("scroll down 2 --ref 8").command == .scroll(tabId: nil, ref: 8, left: 0, top: 200))
     #expect(try parse("navigate back").command == .history(tabId: nil, direction: .back))
-    #expect(try parse("screenshot shot.png") == Invocation(command: .screenshot(tabId: nil), outputPath: "shot.png"))
+    #expect(try parse("screenshot shot.png") == Invocation(command: .screenshot(tabId: nil, region: nil, scale: 1), outputPath: "shot.png"))
   }
 
   @Test func debugCGParses() throws {

@@ -28,13 +28,17 @@ enum AppCommand: Codable, Sendable, Equatable {
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
-  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int)
+  /// ref limits the tree to that element's subtree and depth to that many levels.
+  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: Int?, depth: Int?)
   case find(tabId: Int?, name: String, role: String)
   case pageText(tabId: Int?, maxChars: Int)
   case scroll(tabId: Int?, ref: Int?, left: Double, top: Double)
+  case scrollTo(tabId: Int?, ref: Int)
   /// Presses chords in order, the whole sequence `times` times, after focusing ref when given.
   case key(tabId: Int?, chords: [KeyChord], ref: Int?, times: Int)
-  case screenshot(tabId: Int?)
+  /// region is in the full screenshot's pixels; scale shrinks the result.
+  case screenshot(tabId: Int?, region: PixelRect?, scale: Double)
+  case resizeWindow(tabId: Int?, width: Int, height: Int)
   case debugAX(tabId: Int?, ref: Int?)
   /// windowFields sets the window-under-pointer fields on mouse posts.
   case debugCG(tabId: Int?, probe: CGProbe, windowFields: Bool)
@@ -42,13 +46,40 @@ enum AppCommand: Codable, Sendable, Equatable {
   static let defaultMaxChars = 50000
   static let scrollStep = 100.0
   static let maxKeyPresses = 100
+  static let scaleRange = 0.1...1.0
+
+  /// corners are four numbers x0, y0, x1, y1 with the second corner below and right of the first.
+  static func screenshot(tabId: Int?, corners region: [Double]?, scale: Double?) throws -> AppCommand {
+    let scale = scale ?? 1
+
+    guard scaleRange.contains(scale) else { throw Failure(description: "scale must be from 0.1 to 1, not \(scale)") }
+    guard let region else { return .screenshot(tabId: tabId, region: nil, scale: scale) }
+
+    let corners = region.compactMap { Int(exactly: $0.rounded()) }
+
+    guard region.count == 4, corners.count == 4 else { throw Failure(description: "region must be four numbers [x0, y0, x1, y1], not \(region)") }
+    guard corners.allSatisfy({ $0 >= 0 }), corners[2] > corners[0], corners[3] > corners[1] else { throw Failure(description: "region needs 0 <= x0 < x1 and 0 <= y0 < y1, not \(corners)") }
+
+    return .screenshot(tabId: tabId, region: PixelRect(x0: corners[0], y0: corners[1], x1: corners[2], y1: corners[3]), scale: scale)
+  }
+
+  static func resize(tabId: Int?, width: Int, height: Int) throws -> AppCommand {
+    guard width > 0, height > 0 else { throw Failure(description: "width and height must be positive, not \(width) x \(height)") }
+    return .resizeWindow(tabId: tabId, width: width, height: height)
+  }
+
+  static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: Int?, depth: Int?) throws -> AppCommand {
+    if let depth, depth < 1 { throw Failure(description: "depth must be at least 1, not \(depth)") }
+
+    return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth)
+  }
 
   /// The tab the command acts on, or nil for commands that act on no tab or on the active one.
   var targetTab: Int? {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .key(tabId, _, _, _), let .screenshot(tabId), let .debugAX(tabId, _), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -94,6 +125,14 @@ enum AppCommand: Codable, Sendable, Equatable {
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
+}
+
+/// A rectangle in image pixels from its top-left corner to its bottom-right corner.
+struct PixelRect: Codable, Sendable, Equatable {
+  let x0: Int
+  let y0: Int
+  let x1: Int
+  let y1: Int
 }
 
 /// What form_input sets: text for a text field or a select's option value or label, checked for a checkbox or radio, which also accepts the text "true" or "false".

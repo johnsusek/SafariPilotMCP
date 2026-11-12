@@ -1,15 +1,20 @@
-import type { ReadPageResult } from "../shared/protocol";
+import type { Failure, ReadPageResult } from "../shared/protocol";
 import { collapse, contentRoles, nameOf, roleOf } from "./describe";
 import { flatChildren, isPruned } from "./flat";
 import { readViewport } from "./geometry";
-import { pruneRefs, refFor } from "./refs";
+import { pruneRefs, refFor, resolveRef } from "./refs";
 import { isInteractive } from "./snapshot";
 
 type Item =
   | { text: string }
   | { element: Element; role: string; name: string; children: Item[] };
 
-type Output = { lines: string[]; length: number; maxChars: number };
+type Output = {
+  lines: string[];
+  length: number;
+  maxChars: number;
+  maxDepth: number;
+};
 
 let leafTags = new Set([
   "input",
@@ -60,52 +65,55 @@ function pushText(items: Item[], text: string) {
   items.push({ text });
 }
 
+// Adds child to items: text joins the previous run, and an element that is not shown gives its children up to the parent.
+function add(items: Item[], child: Node, interactiveOnly: boolean) {
+  if (child.nodeType === Node.TEXT_NODE) {
+    let text = interactiveOnly ? "" : collapse(child.textContent, textMax);
+
+    if (text) pushText(items, text);
+
+    return;
+  }
+
+  if (!(child instanceof Element) || isPruned(child)) return;
+
+  let role = roleOf(child);
+  let interactive = isInteractive(child);
+  let name = displayName(child, role);
+  let children = leafTags.has(child.localName)
+    ? []
+    : build(child, interactiveOnly);
+  let shown = interactiveOnly
+    ? interactive
+    : interactive ||
+      (role === "img" ? name !== "" : !collapsibleRoles.has(role) || !!name);
+
+  if (!shown) {
+    for (let item of children) {
+      if ("text" in item) pushText(items, item.text);
+      else items.push(item);
+    }
+
+    return;
+  }
+
+  let fromContent = interactive || contentRoles.has(role);
+
+  if (fromContent && name)
+    children = children.filter((item) => !("text" in item));
+
+  if (!name && children.length === 1 && "text" in children[0]) {
+    name = collapse(children[0].text, textMax);
+    children = [];
+  }
+
+  items.push({ element: child, role, name, children });
+}
+
 function build(node: Node, interactiveOnly: boolean): Item[] {
   let items: Item[] = [];
 
-  for (let child of flatChildren(node)) {
-    if (child.nodeType === Node.TEXT_NODE) {
-      let text = interactiveOnly ? "" : collapse(child.textContent, textMax);
-
-      if (text) pushText(items, text);
-
-      continue;
-    }
-
-    if (!(child instanceof Element) || isPruned(child)) continue;
-
-    let role = roleOf(child);
-    let interactive = isInteractive(child);
-    let name = displayName(child, role);
-    let children = leafTags.has(child.localName)
-      ? []
-      : build(child, interactiveOnly);
-    let shown = interactiveOnly
-      ? interactive
-      : interactive ||
-        (role === "img" ? name !== "" : !collapsibleRoles.has(role) || !!name);
-
-    if (!shown) {
-      for (let item of children) {
-        if ("text" in item) pushText(items, item.text);
-        else items.push(item);
-      }
-
-      continue;
-    }
-
-    let fromContent = interactive || contentRoles.has(role);
-
-    if (fromContent && name)
-      children = children.filter((item) => !("text" in item));
-
-    if (!name && children.length === 1 && "text" in children[0]) {
-      name = collapse(children[0].text, textMax);
-      children = [];
-    }
-
-    items.push({ element: child, role, name, children });
-  }
+  for (let child of flatChildren(node)) add(items, child, interactiveOnly);
 
   return items;
 }
@@ -221,32 +229,54 @@ function render(items: Item[], depth: number, output: Output): boolean {
 
     if (!emit(output, line)) return false;
 
+    if (depth + 1 >= output.maxDepth) continue;
+
     if (!render(children, depth + 1, output)) return false;
   }
 
   return true;
 }
 
-export function treeText(
-  root: Node,
-  filter: "interactive" | "all",
-  maxChars: number,
-) {
-  let output: Output = { lines: [], length: 0, maxChars };
-  let complete = render(build(root, filter === "interactive"), 0, output);
+function textOf(items: Item[], maxChars: number, maxDepth: number) {
+  let output: Output = { lines: [], length: 0, maxChars, maxDepth };
+  let complete = render(items, 0, output);
   return { text: output.lines.join("\n"), truncated: !complete };
 }
 
+export let treeText = (
+  root: Node,
+  filter: "interactive" | "all",
+  maxChars: number,
+  maxDepth = Infinity,
+) => textOf(build(root, filter === "interactive"), maxChars, maxDepth);
+
+// ref limits the tree to that element and what is inside it; depth limits how many levels are shown.
 export function readPage(
   filter: "interactive" | "all",
   maxChars: number,
-): ReadPageResult {
+  ref: number | null,
+  depth: number | null,
+): ReadPageResult | Failure {
   pruneRefs();
+  let interactiveOnly = filter === "interactive";
+  let items: Item[] = [];
+
+  if (ref === null)
+    items = build(document.body ?? document.documentElement, interactiveOnly);
+
+  if (ref !== null) {
+    let element = resolveRef(ref);
+
+    if (!(element instanceof Element)) return element;
+
+    add(items, element, interactiveOnly);
+  }
+
   return {
     ok: true,
     url: location.href,
     title: document.title,
     viewport: readViewport(),
-    ...treeText(document.body ?? document.documentElement, filter, maxChars),
+    ...textOf(items, maxChars, depth ?? Infinity),
   };
 }

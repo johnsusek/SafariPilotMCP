@@ -78,10 +78,11 @@ enum ContentRequest: Equatable, Sendable {
   case locate(ref: Int)
   case events(clear: Bool, arm: Bool)
   case inspect(ref: Int)
-  case readPage(filter: ReadFilter, maxChars: Int)
+  case readPage(filter: ReadFilter, maxChars: Int, ref: Int?, depth: Int?)
   case find(name: String, role: String)
   case pageText(maxChars: Int)
   case scroll(ref: Int?, left: Double, top: Double)
+  case scrollIntoView(ref: Int)
 
   var json: [String: JSONValue] {
     switch self {
@@ -90,10 +91,11 @@ enum ContentRequest: Equatable, Sendable {
     case let .locate(ref): ["op": "locate", "ref": .number(Double(ref))]
     case let .events(clear, arm): ["op": "events", "clear": .bool(clear), "arm": .bool(arm)]
     case let .inspect(ref): ["op": "inspect", "ref": .number(Double(ref))]
-    case let .readPage(filter, maxChars): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars))]
+    case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .number(Double($0)) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .number(Double($0)) } ?? .null, "left": .number(left), "top": .number(top)]
+    case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .number(Double(ref))]
     }
   }
 }
@@ -109,6 +111,7 @@ enum BackgroundCommand: Equatable, Sendable {
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
   case screenshot(tabId: Int?)
+  case resize(tabId: Int?, width: Int, height: Int)
 
   var json: [String: JSONValue] {
     let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
@@ -123,6 +126,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .navigate(tabId, url): return ["type": "navigate", "tabId": id(tabId), "url": .string(url)]
     case let .history(tabId, direction): return ["type": "history", "tabId": id(tabId), "direction": .string(direction.rawValue)]
     case let .screenshot(tabId): return ["type": "screenshot", "tabId": id(tabId)]
+    case let .resize(tabId, width, height): return ["type": "resize", "tabId": id(tabId), "width": .number(Double(width)), "height": .number(Double(height))]
     }
   }
 

@@ -76,6 +76,15 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     });
   }
 
+  if (command.type === "resize") {
+    let tab = await resolveTab(command.tabId);
+    await browser.windows.update(tab.windowId, {
+      width: command.width,
+      height: command.height,
+    });
+    return { ok: true, tab: await tabInfo(await resolveTab(tab.id)) };
+  }
+
   let tab = await resolveTab(command.tabId);
 
   if (!tab.active)

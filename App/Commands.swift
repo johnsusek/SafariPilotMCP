@@ -21,12 +21,14 @@ struct Commands {
     case let .tabClose(tabId): try await tabClose(tabId)
     case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))
     case let .history(tabId, direction): try await tabReply("went \(direction.rawValue) to", call(.history(tabId: tabId, direction: direction)))
-    case let .readPage(tabId, filter, maxChars): try await readPage(tabId, filter, maxChars)
+    case let .readPage(tabId, filter, maxChars, ref, depth): try await readPage(tabId, filter, maxChars, ref, depth)
     case let .find(tabId, name, role): try await find(tabId, name, role)
     case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
+    case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
+    case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
-    case let .screenshot(tabId): try await screenshot(tabId)
+    case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
     case let .debugCG(tabId, probe, windowFields): try await debugCG(tabId, probe, windowFields)
     }
@@ -141,8 +143,8 @@ struct Commands {
     return try CLIReply(ok: true, text: "closed tab \(response.decode(ClosedResult.self).closed)", data: response)
   }
 
-  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int) async throws -> CLIReply {
-    let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars))
+  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int, _ ref: Int?, _ depth: Int?) async throws -> CLIReply {
+    let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars, ref: ref, depth: depth))
     let result = try response.decode(ReadPageResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
     return CLIReply(ok: true, text: result.text + truncated, data: response)
@@ -170,8 +172,27 @@ struct Commands {
     return CLIReply(ok: true, text: text, data: response)
   }
 
+  private func scrollTo(_ tabId: Int?, _ ref: Int) async throws -> CLIReply {
+    let response = try await content(tabId, .scrollIntoView(ref: ref))
+    let result = try response.decode(ScrollResult.self)
+    let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
+    return CLIReply(ok: true, text: "\(result.moved ? "scrolled ref \(ref) into view" : "ref \(ref) was already in view"); \(position)", data: response)
+  }
+
+  /// Safari may clamp the size to the screen, so the reply reports the frame it actually got.
+  private func resizeWindow(_ tabId: Int?, _ width: Int, _ height: Int) async throws -> CLIReply {
+    let response = try await call(.resize(tabId: tabId, width: width, height: height))
+    let tab = try response.decode(TabResult.self).tab
+
+    guard let frame = tab.windowFrame else { return CLIReply(ok: true, text: "resized window w\(tab.windowId); its new frame is unknown", data: response) }
+
+    let size = "\(Int(frame.width)) x \(Int(frame.height))"
+    let text = Int(frame.width) == width && Int(frame.height) == height ? "resized window w\(tab.windowId) to \(size)" : "asked for \(width) x \(height); window w\(tab.windowId) is \(size)"
+    return CLIReply(ok: true, text: text, data: response)
+  }
+
   /// Returns the PNG as base64 in data.png; the CLI writes it to a file and the MCP server returns it as image content.
-  private func screenshot(_ tabId: Int?) async throws -> CLIReply {
+  private func screenshot(_ tabId: Int?, _ region: PixelRect?, _ scale: Double) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let response = try await call(.screenshot(tabId: tab.id))
     let result = try response.decode(ScreenshotResult.self)
@@ -180,9 +201,14 @@ struct Commands {
       throw Failure(description: "screenshot response is not a base64 PNG data URL: \(result.dataUrl.prefix(40))")
     }
 
-    let base64 = String(result.dataUrl[result.dataUrl.index(after: comma)...])
-    let data: JSONValue = .object(["png": .string(base64), "tab": response["tab"] ?? .null])
-    return CLIReply(ok: true, text: "screenshot of tab \(result.tab.id) \(result.tab.url)", data: data)
+    guard let png = Data(base64Encoded: String(result.dataUrl[result.dataUrl.index(after: comma)...])) else { throw Failure(description: "screenshot data URL is not valid base64") }
+
+    let image = try ScreenshotImage.process(png, region: region, scale: scale)
+    let frame = "\(image.frameWidth) x \(image.frameHeight) px view"
+    let part = region.map { " region [\($0.x0), \($0.y0), \($0.x1), \($0.y1)] of its" } ?? ""
+    let size = region != nil || scale != 1 ? "; image is \(image.width) x \(image.height) px" : ""
+    let data: JSONValue = .object(["png": .string(image.png.base64EncodedString()), "tab": response["tab"] ?? .null])
+    return CLIReply(ok: true, text: "screenshot of tab \(result.tab.id) \(result.tab.url),\(part) \(frame)\(size)", data: data)
   }
 
   /// Locate, then refuse to act when the content script says the point would land on something else.

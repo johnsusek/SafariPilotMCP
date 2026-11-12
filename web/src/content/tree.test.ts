@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveRef } from "./refs";
-import { treeText } from "./tree";
+import { readPage, treeText } from "./tree";
 
 let render = (html: string, filter: "all" | "interactive" = "all") => {
   document.body.innerHTML = html;
@@ -112,5 +112,54 @@ describe("treeText", () => {
     expect(cut.truncated).toBe(true);
     expect(cut.text.split("\n")).toHaveLength(2);
     expect(cut.text.length).toBeLessThanOrEqual(secondEnd + 3);
+  });
+});
+
+describe("readPage", () => {
+  beforeEach(() => {
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: {
+        scale: 1,
+        offsetLeft: 0,
+        offsetTop: 0,
+        width: 1000,
+        height: 800,
+      },
+    });
+  });
+
+  let html =
+    '<nav id="menu"><ul><li><a href="/docs">Docs</a></li></ul></nav><h2>Title</h2>';
+
+  test("depth limits the levels shown", () => {
+    document.body.innerHTML = html;
+    let result = readPage("all", 10000, null, 2);
+    expect(result.ok && withoutRefs(result.text)).toBe(
+      ["navigation", "  list", 'heading "Title" level=2'].join("\n"),
+    );
+  });
+
+  test("ref limits the tree to that element", () => {
+    document.body.innerHTML = html;
+    let ref = Number(
+      treeText(document.body, "all", 10000).text.match(/\[ref=(\d+)\]/)![1],
+    );
+    let result = readPage("all", 10000, ref, null);
+    expect(result.ok && withoutRefs(result.text)).toBe(
+      [
+        "navigation",
+        "  list",
+        "    listitem",
+        '      link "Docs" href=/docs',
+      ].join("\n"),
+    );
+  });
+
+  test("unknown ref fails", () => {
+    expect(readPage("all", 10000, 99999, null)).toEqual({
+      ok: false,
+      error: "ref 99999 is unknown",
+    });
   });
 });

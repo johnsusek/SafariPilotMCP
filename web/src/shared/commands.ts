@@ -27,6 +27,8 @@ export type Command =
   // navigate and history answer once the tab has finished loading, or fail after a timeout.
   | { type: "navigate"; tabId: number | null; url: string }
   | { type: "history"; tabId: number | null; direction: "back" | "forward" }
+  // Resizes the tab's window to width x height points and answers with the tab's new window frame.
+  | { type: "resize"; tabId: number | null; width: number; height: number }
   // Fails when the tab is not the active tab of its window; the app selects it first.
   | { type: "screenshot"; tabId: number | null };
 

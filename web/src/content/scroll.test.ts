@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { refFor } from "./refs";
-import { scroll, scrollTarget } from "./scroll";
+import { scroll, scrollIntoView, scrollTarget } from "./scroll";
 
 let overflowing = (element: HTMLElement) => {
   Object.defineProperty(element, "scrollHeight", { value: 1000 });
@@ -58,6 +58,27 @@ describe("scroll", () => {
 
   test("unknown ref fails", () => {
     expect(scroll(99999, 0, 40)).toEqual({
+      ok: false,
+      error: "ref 99999 is unknown",
+    });
+  });
+});
+
+describe("scrollIntoView", () => {
+  test("centers the element and answers with the viewport", () => {
+    let button = document.querySelector("button")!;
+    let spy = vi.spyOn(button, "scrollIntoView");
+    let result = scrollIntoView(refFor(button));
+    expect(spy).toHaveBeenCalledWith({
+      block: "center",
+      inline: "center",
+      behavior: "instant",
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  test("unknown ref fails", () => {
+    expect(scrollIntoView(99999)).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
     });
