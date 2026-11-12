@@ -69,7 +69,8 @@ struct Commands {
   private func describe(_ element: ElementInfo) -> String {
     let offscreen = element.inViewport ? "" : " (offscreen)"
     let disabled = element.disabled == true ? " (disabled)" : ""
-    return "[\(element.ref)] \(element.role) \"\(element.name)\" <\(element.tag)>\(offscreen)\(disabled)"
+    let name = element.name.isEmpty ? "" : " \"\(element.name)\""
+    return "[\(element.ref)] \(element.role)\(name) <\(element.tag)>\(offscreen)\(disabled)"
   }
 
   private func status() -> CLIReply {

@@ -70,6 +70,7 @@ export let contentRoles = new Set([
   "option",
   "treeitem",
   "cell",
+  "gridcell",
   "columnheader",
   "rowheader",
   "checkbox",
@@ -77,6 +78,25 @@ export let contentRoles = new Set([
   "switch",
   "tooltip",
   "term",
+]);
+
+// Container roles that ARIA names only from the author, never from their content, even when focusable.
+export let authorRoles = new Set([
+  "alertdialog",
+  "dialog",
+  "form",
+  "grid",
+  "listbox",
+  "menu",
+  "menubar",
+  "radiogroup",
+  "region",
+  "tabpanel",
+  "table",
+  "tablist",
+  "toolbar",
+  "tree",
+  "treegrid",
 ]);
 
 let nameMax = 80;
@@ -172,10 +192,20 @@ export function roleOf(element: Element) {
   return "generic";
 }
 
+// Each referenced element counts by its own aria-label, else its rendered text; a hidden one (a common label source) by its raw text.
 function labelledByText(element: Element) {
   let ids = element.getAttribute("aria-labelledby")?.trim().split(/\s+/) ?? [];
   let root = element.getRootNode() as Document | ShadowRoot;
-  return ids.map((id) => root.getElementById(id)?.textContent ?? "").join(" ");
+  return ids
+    .map((id) => root.getElementById(id))
+    .filter((target) => target !== null)
+    .map(
+      (target) =>
+        target.getAttribute("aria-label")?.trim() ||
+        shownText(target) ||
+        collapse(target.textContent),
+    )
+    .join(" ");
 }
 
 // fromContent false skips text content, for containers whose text is rendered as their children.

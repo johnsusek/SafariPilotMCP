@@ -1,5 +1,6 @@
 import type { Failure, ReadPageResult } from "../shared/protocol";
 import {
+  authorRoles,
   collapse,
   contentRoles,
   isEditableRoot,
@@ -95,7 +96,7 @@ function add(items: Item[], child: Node, walk: Walk) {
   // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic or group wrapping other elements.
   let elements = children.filter((item) => "element" in item).length;
   let wraps = !contentRoles.has(role) && elements > 0;
-  let name = nameOf(child, interactive && !wraps);
+  let name = nameOf(child, interactive && !wraps && !authorRoles.has(role));
   // A nameless clickable wrapper around a single element adds nothing to it.
   let wrapsOne = collapsibleRoles.has(role) && !name && elements === 1;
   let shown = wrapsOne
@@ -146,15 +147,15 @@ function add(items: Item[], child: Node, walk: Walk) {
   )
     return;
 
-  // A clickable wrapper around a single widget of the same role and name (a custom element hosting a real button) shows as that widget.
+  // A widget around a single widget of the same name (a custom element hosting a real button, an option holding its link) shows as the inner one.
   let only = children.length === 1 ? children[0] : null;
 
   if (
     interactive &&
     only &&
     "element" in only &&
-    only.role === role &&
-    only.name === name
+    only.name === name &&
+    isInteractive(only.element)
   ) {
     items.push(only);
     return;

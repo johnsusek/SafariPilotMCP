@@ -163,6 +163,39 @@ describe("treeText", () => {
     expect(withoutRefs(text)).toBe(["listbox", '  option "Lisbon"'].join("\n"));
   });
 
+  test("an option holding a link of the same name shows as the link", () => {
+    let { text } = render(
+      '<ul role="listbox"><li role="option"><a href="/dune">Dune 2021</a></li></ul>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe(
+      ["listbox", '  link "Dune 2021" href=/dune'].join("\n"),
+    );
+  });
+
+  test("a gridcell holding one button of its text shows as the button", () => {
+    let { text } = render(
+      '<div role="grid"><div role="row"><div role="gridcell" style="cursor: pointer"><div role="button" tabindex="0">usb c cable</div></div></div></div>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe('button "usb c cable"');
+  });
+
+  test("a link around an image of the same name keeps the link", () => {
+    let { text } = render('<a href="/home"><img alt="Home" src="x.png"></a>');
+    expect(withoutRefs(text)).toBe(
+      ['link "Home" href=/home', '  img "Home"'].join("\n"),
+    );
+  });
+
+  test("a focusable container is not named by its content", () => {
+    let { text } = render(
+      '<div role="tabpanel" tabindex="0"><img alt="Godzilla"><b>Godzilla</b> <span>7.9</span></div>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe("tabpanel");
+  });
+
   test("a clickable label beside its shown control is left out", () => {
     let { text } = render(
       '<input type="checkbox" id="work"><label for="work" style="cursor: pointer">Work trip</label><input type="radio" id="gone" style="display: none"><label for="gone" style="cursor: pointer">Hidden radio</label>',

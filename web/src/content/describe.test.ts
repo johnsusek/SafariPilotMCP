@@ -39,6 +39,14 @@ describe("nameOf", () => {
     expect(nameOf(document.querySelector("button")!)).toBe("Hello there");
   });
 
+  test("aria-labelledby reads a target's aria-label, alt text and blocks", () => {
+    document.body.innerHTML =
+      '<button id="tab" aria-label="Godzilla details">x</button><div id="card"><img alt="Poster"><div>Godzilla</div><div>7.9</div></div><span id="gone" hidden>Hidden label</span><div role="tabpanel" aria-labelledby="tab card gone"></div>';
+    expect(nameOf(document.querySelector("[role=tabpanel]")!)).toBe(
+      "Godzilla details Poster Godzilla 7.9 Hidden label",
+    );
+  });
+
   test("aria-label beats text", () => {
     expect(nameOf(first('<button aria-label="Close">x</button>'))).toBe(
       "Close",

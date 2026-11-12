@@ -81,4 +81,15 @@ describe("find", () => {
       '<div onclick="1"><a href="#in">Zoom In</a><a href="#out">Zoom Out</a></div>';
     expect(names("zoom")).toEqual(["Zoom In", "Zoom Out"]);
   });
+
+  test("a widget around one widget of the same name is listed once, unless only it has the role", () => {
+    document.body.innerHTML =
+      '<div role="grid"><div role="row"><div role="gridcell"><div role="button" tabindex="0">usb c cable</div></div></div></div>';
+    let roles = (role: string) => {
+      let result = find("usb", role);
+      return result.ok ? result.matches.map((match) => match.role) : [];
+    };
+    expect(roles("")).toEqual(["button"]);
+    expect(roles("gridcell")).toEqual(["gridcell"]);
+  });
 });
