@@ -24,7 +24,7 @@ export let frameTimeoutMs = 2000;
 export let maxFrameDepth = 3;
 export let maxFrames = 20;
 // Smaller frames are tracking pixels, not content.
-let minFrameSize = 16;
+export let minFrameSize = 16;
 
 export type Send = (
   frameId: number,
@@ -51,7 +51,7 @@ export async function withTimeout(
 ): Promise<ContentResponse> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timeout = new Promise<Failure>((resolve) => {
-    timer = setTimeout(() => resolve({ ok: false, error }), ms);
+    timer = setTimeout(() => resolve({ ok: false, error, timeout: true }), ms);
   });
 
   try {

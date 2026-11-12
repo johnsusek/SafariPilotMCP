@@ -341,7 +341,18 @@ describe("iframes", () => {
     expect(lines[1]).toMatch(/^button "Go" \[ref=5:\d+\]$/);
     let ref = Number(lines[0].match(/ref=5:(\d+)/)![1]);
     expect(resolveRef(ref)).toBe(document.getElementById("live"));
-    expect(frames).toEqual([{ ref, frameId: 42, line: 0, depth: 0 }]);
+    expect(frames).toEqual([
+      { ref, frameId: 42, line: 0, depth: 0, width: 0, height: 0 },
+    ]);
+  });
+
+  test("an iframe with a frame stays under all even when its role is presentation", () => {
+    frameIds({ widget: 9 });
+    document.body.innerHTML =
+      '<div><iframe id="widget" role="presentation" title="Widget"></iframe></div>';
+    let { text, frames } = treeText(document.body, "all", 10000);
+    expect(text).toMatch(/\[ref=\d+\]/);
+    expect(frames).toMatchObject([{ frameId: 9 }]);
   });
 
   test("unloaded and sandboxed frames say so", () => {

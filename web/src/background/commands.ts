@@ -60,7 +60,12 @@ async function frameNode(
     return node;
   }
 
-  let logged = await send(frameId, { op: "events", clear: true, arm: false });
+  let logged = await send(frameId, {
+    op: "events",
+    clear: true,
+    arm: false,
+    watch: null,
+  });
   let events = logged.ok && "events" in logged ? logged.events : [];
   let trusted = (type: string) =>
     events

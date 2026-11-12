@@ -45,6 +45,8 @@ export type LoggedEvent = {
   detail: string;
   // Consecutive identical armed-type entries (same type, target and trust) merged into one; 1 otherwise.
   count: number;
+  // With an events watch: whether the target is the watched element, inside it, one of its labels, or an ancestor of it.
+  onTarget?: boolean;
 };
 
 export type ContentRequest =
@@ -52,8 +54,8 @@ export type ContentRequest =
   | { op: "snapshot" }
   // clip limits the points tried to that part of this frame (what its ancestors leave visible); scroll false skips centering the element.
   | { op: "locate"; ref: number; clip: Rect | null; scroll: boolean }
-  // arm turns on move and drag-over logging until the next events request.
-  | { op: "events"; clear: boolean; arm: boolean }
+  // arm turns on move and drag-over logging until the next events request; watch is a ref whose element sets each event's onTarget.
+  | { op: "events"; clear: boolean; arm: boolean; watch: number | null }
   | { op: "inspect"; ref: number }
   // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
   | {
@@ -74,7 +76,8 @@ export type ContentRequest =
   // Whether each point lands on the iframe itself, in this frame's coordinates.
   | { op: "hitFrame"; ref: number; points: Point[] };
 
-export type Failure = { ok: false; error: string };
+// timeout marks a frame that did not answer in time, as opposed to one that is gone.
+export type Failure = { ok: false; error: string; timeout?: true };
 
 // An iframe in this document: frameId is the id Safari gives its frame (-1 when it has none yet), box its content box,
 // clip the part of box this document shows (null when none), and transformed whether a CSS transform or zoom moves it,
@@ -163,12 +166,14 @@ export type InspectResult = {
 // readPage: an indented element tree as text, one node per line, with refs from the same
 // ref space as snapshot and locate. filter "interactive" keeps only actionable elements;
 // ref limits it to that element's subtree and depth to that many levels.
-// frames are the iframe lines whose frame has a content script to read: line is the index into the text's lines and depth that line's indent level.
+// frames are the iframe lines whose frame has a content script to read: line is the index into the text's lines, depth that line's indent level, width and height the iframe's client size.
 export type FramePlaceholder = {
   ref: number;
   frameId: number;
   line: number;
   depth: number;
+  width: number;
+  height: number;
 };
 export type ReadPageResult = {
   ok: true;

@@ -13,6 +13,7 @@ import type {
   EventsResult,
   Failure,
   FindResult,
+  FrameBoxResult,
   InspectResult,
   PageTextResult,
   ReadPageResult,
@@ -22,6 +23,7 @@ import {
   locatePath,
   maxFrameDepth,
   maxFrames,
+  minFrameSize,
   owner,
   parsePath,
   type Reached,
@@ -38,20 +40,28 @@ let minTextFrame = 50;
 let prefixed = (path: string, ref: number) =>
   path ? `${path}:${ref}` : `${ref}`;
 
-// Asks every reached frame at once; the top frame gets no timeout, since it answers for the page.
+// Asks each frame at once; the top frame gets no timeout, since it answers for the page.
+async function ask(
+  send: Send,
+  frames: Reached[],
+  request: (frame: Reached) => Parameters<Send>[1],
+) {
+  let replies = await Promise.all(
+    frames.map((frame) =>
+      frame.frameId === 0
+        ? send(0, request(frame))
+        : timed(send, frame.frameId, request(frame)),
+    ),
+  );
+  return frames.map((frame, index) => ({ frame, reply: replies[index] }));
+}
+
 async function fanOut(send: Send, request: Parameters<Send>[1]) {
   let frames = await reachFrames(send);
 
   if (!Array.isArray(frames)) return frames;
 
-  let replies = await Promise.all(
-    frames.map((frame) =>
-      frame.frameId === 0
-        ? send(0, request)
-        : timed(send, frame.frameId, request),
-    ),
-  );
-  return frames.map((frame, index) => ({ frame, reply: replies[index] }));
+  return await ask(send, frames, () => request);
 }
 
 let element = (info: ElementInfo, frame: Reached): PageElement => {
@@ -111,17 +121,44 @@ async function pageText(send: Send, maxChars: number) {
   return { ...page, text: whole.text, truncated };
 }
 
-async function events(send: Send, clear: boolean, arm: boolean) {
-  let answers = await fanOut(send, { op: "events", clear, arm });
+// The watched ref's frame is read even when the fan-out's caps leave it out, since an action there is verified by its events; a frame that is gone is left out.
+async function events(send: Send, request: PageRequest & { op: "events" }) {
+  let frames = await reachFrames(send);
 
-  if (!Array.isArray(answers)) return answers;
+  if (!Array.isArray(frames)) return frames;
+
+  let watch = request.watch === null ? null : parsePath(request.watch);
+  let watchFrame = watch?.frames.join(":") ?? null;
+
+  if (watch && !frames.some((frame) => frame.path === watchFrame)) {
+    let walk = await walkPath(send, watch.frames, false).catch(() => null);
+
+    if (walk)
+      frames.push({
+        path: watchFrame!,
+        frameId: walk.frameId,
+        view: walk.view,
+        label: "",
+        box: null,
+      });
+  }
+
+  let answers = await ask(send, frames, (frame) => ({
+    op: "events",
+    clear: request.clear,
+    arm: request.arm,
+    watch: frame.path === watchFrame ? watch!.local : null,
+  }));
 
   if (!answers[0].reply.ok) return answers[0].reply;
 
   let origins: Record<string, number> = {};
+  let busy: string[] = [];
   let logged: PageEvent[] = [];
 
   for (let { frame, reply } of answers) {
+    if (!reply.ok && reply.timeout) busy.push(frame.path);
+
     if (!reply.ok) continue;
 
     let result = reply as EventsResult;
@@ -136,7 +173,13 @@ async function events(send: Send, clear: boolean, arm: boolean) {
   }
 
   logged.sort((first, second) => first.time - second.time);
-  return { ok: true as const, events: logged, origin: origins[""], origins };
+  return {
+    ok: true as const,
+    events: logged,
+    origin: origins[""],
+    origins,
+    busy,
+  };
 }
 
 type ReadRequest = PageRequest & { op: "readPage" };
@@ -166,6 +209,9 @@ async function readFrame(
       request.depth === null ? null : request.depth - placeholder.depth - 1;
 
     if (depth !== null && depth < 1) return { placeholder, note: "" };
+
+    if (placeholder.width < minFrameSize || placeholder.height < minFrameSize)
+      return { placeholder, note: "" };
 
     if (frameDepth >= maxFrameDepth)
       return {
@@ -267,8 +313,7 @@ async function dispatch(
 
   if (request.op === "locate") return await locatePath(send, request.ref);
 
-  if (request.op === "events")
-    return await events(send, request.clear, request.arm);
+  if (request.op === "events") return await events(send, request);
 
   if (request.op === "readPage") return await readPage(send, request);
 
@@ -291,7 +336,26 @@ async function dispatch(
 
     if (!scrolled.ok || !("moved" in scrolled)) return inFrame(scrolled, path);
 
-    return { ...scrolled, moved: scrolled.moved || walk?.moved === true };
+    if (!walk) return scrolled;
+
+    // Report the page's scroll position, not the frame's; centering inside the frame may have scrolled the page too.
+    let top = await send(0, {
+      op: "frameBox",
+      ref: path.frames[0],
+      reveal: false,
+    });
+
+    if (!top.ok) return inFrame(top, path);
+
+    let { viewport } = top as FrameBoxResult;
+    let pageMoved =
+      viewport.scrollX !== walk.viewport.scrollX ||
+      viewport.scrollY !== walk.viewport.scrollY;
+    return {
+      ok: true,
+      moved: scrolled.moved || walk.moved || pageMoved,
+      viewport,
+    };
   }
 
   let { path, frameId } = await owner(send, request.ref!);

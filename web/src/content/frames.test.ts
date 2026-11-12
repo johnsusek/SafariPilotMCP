@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import { frameBox, frameEntry, hitFrame } from "./frames";
+import { frameBox, frameEntry, hitFrame, sourceOf } from "./frames";
 import { locate } from "./locate";
 import { refFor } from "./refs";
 
@@ -63,9 +63,40 @@ describe("frameEntry", () => {
     expect(frameEntry(scaled).transformed).toBe(true);
   });
 
+  test("identity transforms and whole-pixel offset sizes are not transformed", () => {
+    for (let style of ["translate: 0px", "scale: 1", "rotate: 0deg"])
+      expect(frameEntry(iframeAt(style)).transformed).toBe(false);
+
+    expect(frameEntry(iframeAt("translate: 0px 4px")).transformed).toBe(true);
+    let fractional = iframeAt();
+    layout(fractional, rect(100, 700, 20.5, 20.5), {
+      offsetWidth: 21,
+      offsetHeight: 21,
+    });
+    expect(frameEntry(fractional).transformed).toBe(false);
+  });
+
+  test("an iframe that cannot move is not reported as moved", () => {
+    let iframe = iframeAt();
+    layout(iframe, rect(0, -100, 1004, 1004));
+    iframe.scrollIntoView = vi.fn();
+    expect(frameBox(refFor(iframe), true)).toMatchObject({ moved: false });
+    expect(iframe.scrollIntoView).toHaveBeenCalled();
+  });
+
+  test("inline sources are named by their scheme", () => {
+    let iframe = iframeAt();
+    iframe.src = "data:text/html;base64,PGgxPmhpPC9oMT4=";
+    expect(sourceOf(iframe)).toBe("data:");
+    iframe.src = "https://a.test/page";
+    expect(sourceOf(iframe)).toBe("https://a.test/page");
+  });
+
   test("frameBox reveals a partly hidden iframe, hitFrame tests points against it", () => {
     let iframe = iframeAt();
-    iframe.scrollIntoView = vi.fn();
+    iframe.scrollIntoView = vi.fn(() =>
+      layout(iframe, rect(100, 400, 404, 304)),
+    );
     let ref = refFor(iframe);
     expect(frameBox(ref, true)).toMatchObject({ ok: true, moved: true });
     expect(iframe.scrollIntoView).toHaveBeenCalled();

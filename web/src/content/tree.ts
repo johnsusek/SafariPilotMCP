@@ -110,14 +110,15 @@ function add(items: Item[], child: Node, walk: Walk) {
   let wrapsOne = collapsibleRoles.has(role) && !name && elements === 1;
   let shown = wrapsOne
     ? false
-    : interactiveOnly
-      ? interactive || hostsFrame
-      : interactive ||
-        (role === "img"
-          ? name !== ""
-          : !collapsibleRoles.has(role) ||
-            child.hasAttribute("aria-label") ||
-            child.hasAttribute("aria-labelledby"));
+    : hostsFrame ||
+      (interactiveOnly
+        ? interactive
+        : interactive ||
+          (role === "img"
+            ? name !== ""
+            : !collapsibleRoles.has(role) ||
+              child.hasAttribute("aria-label") ||
+              child.hasAttribute("aria-labelledby")));
 
   // A label's text already names its control, a legend's its fieldset and a caption's its table.
   let control = (child as HTMLLabelElement).control;
@@ -321,6 +322,8 @@ function render(items: Item[], depth: number, output: Output): boolean {
         frameId,
         line: output.lines.length - 1,
         depth,
+        width: element.clientWidth,
+        height: element.clientHeight,
       });
 
     if (depth + 1 >= output.maxDepth) continue;

@@ -20,7 +20,8 @@ export type PageRequest =
   | { op: "ping" }
   | { op: "snapshot" }
   | { op: "locate"; ref: RefPath }
-  | { op: "events"; clear: boolean; arm: boolean }
+  // watch is the ref an action targets: its frame is always read, and its events carry onTarget.
+  | { op: "events"; clear: boolean; arm: boolean; watch: RefPath | null }
   | { op: "inspect"; ref: RefPath }
   | {
       op: "readPage";
@@ -46,12 +47,13 @@ export type PageLocateResult = Omit<LocateResult, "ref" | "candidates"> & {
   ref: RefPath;
   sandboxed: boolean;
 };
-// origin is the top frame's performance.timeOrigin and origins every answering frame's, keyed by frame path.
+// origin is the top frame's performance.timeOrigin and origins every answering frame's, keyed by frame path; busy lists frames that did not answer in time, which are not gone.
 export type PageEventsResult = {
   ok: true;
   events: PageEvent[];
   origin: number;
   origins: Record<RefPath, number>;
+  busy: RefPath[];
 };
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };

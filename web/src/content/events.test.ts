@@ -184,3 +184,39 @@ describe("inspect", () => {
     expect(inspect(byId("stamp"))).toMatchObject({ kind: "datetime-local" });
   });
 });
+
+describe("watch", () => {
+  installLogger();
+
+  test("marks events on the watched element, its labels and its ancestors", () => {
+    takeEvents(true, false);
+    document.body.innerHTML =
+      '<ul id="list"><li><button id="mine"><span id="inner">A</span></button></li><li><button id="other">B</button></li></ul><label for="box" id="label">Box</label><input id="box" type="checkbox">';
+    let click = (id: string) =>
+      document
+        .getElementById(id)!
+        .dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    click("inner");
+    click("list");
+    click("other");
+    let marks = takeEvents(
+      true,
+      false,
+      refFor(document.getElementById("mine")!),
+    )
+      .events.filter((event) => event.type === "click")
+      .map((event) => event.onTarget);
+    expect(marks).toEqual([true, true, false]);
+    click("label");
+    let boxed = takeEvents(true, false, refFor(document.getElementById("box")!))
+      .events.filter((event) => event.type === "click")
+      .map((event) => [event.target, event.onTarget]);
+    expect(boxed[0]).toEqual([expect.stringContaining("label"), true]);
+    click("other");
+    expect(
+      takeEvents(true, false, 999999).events.every(
+        (event) => event.onTarget === undefined,
+      ),
+    ).toBe(true);
+  });
+});

@@ -48,7 +48,7 @@ extension Commands {
     let postAccess = CGPreflightPostEventAccess()
     let points = matches.map(\.screenPoint)
 
-    _ = try await content(tab.id, .events(clear: true, arm: true))
+    _ = try await content(tab.id, .events(clear: true, arm: true, watch: nil))
     var poster = EventPoster(pid: pid, windowID: windowID)
 
     switch probe {
@@ -68,7 +68,7 @@ extension Commands {
     if case let .key(_, ref?) = probe { value = try await content(tab.id, .inspect(ref: ref)).decode(InspectResult.self).value }
 
     let frontAfter = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
-    let eventsResponse = try await content(tab.id, .events(clear: true, arm: false))
+    let eventsResponse = try await content(tab.id, .events(clear: true, arm: false, watch: nil))
     let events = try eventsResponse.decode(EventsResult.self).events
     let trusted = Set(events.filter(\.isTrusted).map(\.type))
     let untrusted = Set(events.filter { !$0.isTrusted }.map(\.type))

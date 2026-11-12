@@ -1,6 +1,7 @@
 import type { EventsResult, LoggedEvent } from "../shared/protocol";
 import { describe } from "./describe";
-import { existingRef } from "./refs";
+import { isWithin } from "./hit";
+import { existingRef, resolveRef } from "./refs";
 
 export let loggedTypes = [
   "pointerover",
@@ -47,6 +48,7 @@ export let armedTypes = [
 // A key press logs up to 5 entries plus 2 per modifier, so 100 presses with three modifiers each (the key tool's worst case) fit.
 let capacity = 1500;
 let buffer: LoggedEvent[] = [];
+let targets = new WeakMap<LoggedEvent, EventTarget>();
 let armed = false;
 
 export function record(entry: LoggedEvent) {
@@ -90,13 +92,40 @@ function setArmed(on: boolean) {
 
 // Every take disarms; arm re-arms after the take so a measurement starts from an empty, armed log.
 // document.open() erases a window's listeners (frames filled with document.write), so every take adds them again; duplicates are ignored.
-export function takeEvents(clear: boolean, arm: boolean): EventsResult {
+// watch marks each event onTarget when it hit that element, one of its labels or an ancestor pressed for it; an unknown watch marks nothing.
+export function takeEvents(
+  clear: boolean,
+  arm: boolean,
+  watch: number | null = null,
+): EventsResult {
   let events = clear ? buffer : buffer.slice();
+
   if (clear) buffer = [];
+
   installLogger();
   setArmed(false);
   setArmed(arm);
-  return { ok: true, events, origin: performance.timeOrigin };
+  let watched = watch === null ? null : resolveRef(watch);
+
+  if (!(watched instanceof Element))
+    return { ok: true, events, origin: performance.timeOrigin };
+
+  let owners = [
+    watched,
+    ...Array.from((watched as HTMLInputElement).labels ?? []),
+  ];
+  let marked = events.map((event) => {
+    let target = targets.get(event);
+    let onTarget =
+      target instanceof Node &&
+      owners.some(
+        (owner) =>
+          isWithin(owner, target) ||
+          (target instanceof Element && isWithin(target, owner)),
+      );
+    return { ...event, onTarget };
+  });
+  return { ok: true, events: marked, origin: performance.timeOrigin };
 }
 
 export function detailOf(event: Event) {
@@ -112,8 +141,10 @@ export function detailOf(event: Event) {
   return "";
 }
 
+let targetOf = (event: Event) => event.composedPath()[0] ?? event.target;
+
 export function toLogged(event: Event): LoggedEvent {
-  let target = event.composedPath()[0] ?? event.target;
+  let target = targetOf(event);
   return {
     type: event.type,
     isTrusted: event.isTrusted,
@@ -125,7 +156,14 @@ export function toLogged(event: Event): LoggedEvent {
   };
 }
 
-let logListener = (event: Event) => record(toLogged(event));
+function logListener(event: Event) {
+  let entry = toLogged(event);
+  let target = targetOf(event);
+
+  if (target) targets.set(entry, target);
+
+  record(entry);
+}
 
 export function installLogger() {
   for (let type of loggedTypes) {

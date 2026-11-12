@@ -29,11 +29,13 @@ struct ContractTests {
     #expect(try decode(PageTextResult.self, #"{"ok":true,"url":"u","title":"t","text":"hello","truncated":false}"#).text == "hello")
     #expect(try decode(ScrollResult.self, #"{"ok":true,"moved":false,"viewport":\#(viewport)}"#).viewport.scrollY == 40)
     #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","viewport":\#(viewport),"sandboxed":false}"#).point == CSSPoint(left: 2, top: 4))
-    let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3,"frame":""},{"type":"keydown","isTrusted":true,"ref":"5:7","target":"input","time":2,"detail":"","count":1,"frame":"5"}],"origin":1762900000123.4,"origins":{"":1762900000123.4,"5":1762900000200}}"#)
+    let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3,"frame":""},{"type":"keydown","isTrusted":true,"ref":"5:7","target":"input","time":2,"detail":"","count":1,"frame":"5","onTarget":true}],"origin":1762900000123.4,"origins":{"":1762900000123.4,"5":1762900000200},"busy":[]}"#)
     #expect(events.events[0].count == 3)
     #expect(events.events[1].ref == PageRef(frames: [5], local: 7))
     #expect(events.origin == 1762900000123.4)
     #expect(events.origins["5"] == 1762900000200)
+    #expect(events.events[0].onTarget == nil)
+    #expect(events.events[1].onTarget == true)
     #expect(throws: (any Error).self) { try decode(EventsResult.self, #"{"ok":true,"events":[]}"#) }
     #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"secure":false,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
     let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","secure":false,"kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
@@ -49,12 +51,22 @@ struct ContractTests {
     #expect(BackgroundCommand.content(tabId: 2, request: .scroll(ref: nil, left: 0, top: 300)).json == [
       "type": "content", "tabId": .number(2), "request": .object(["op": "scroll", "ref": .null, "left": .number(0), "top": .number(300)]),
     ])
-    #expect(ContentRequest.events(clear: true, arm: true).json == ["op": "events", "clear": .bool(true), "arm": .bool(true)])
+    #expect(ContentRequest.events(clear: true, arm: true, watch: nil).json == ["op": "events", "clear": .bool(true), "arm": .bool(true), "watch": .null])
+    #expect(ContentRequest.events(clear: true, arm: false, watch: PageRef(frames: [5], local: 7)).json == ["op": "events", "clear": .bool(true), "arm": .bool(false), "watch": "5:7"])
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
     #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])
     #expect(BackgroundCommand.resize(tabId: 4, width: 1200, height: 800).json == ["type": "resize", "tabId": .number(4), "width": .number(1200), "height": .number(800)])
+  }
+
+  @Test func aFrameIsReplacedWhenItsOriginChangesOrItIsGoneButNotWhenBusy() {
+    let before = EventsResult(events: [], origin: 1, origins: ["": 1, "5": 2, "6": 3], busy: [])
+    let after = EventsResult(events: [], origin: 1, origins: ["": 1, "5": 9], busy: ["7"])
+    #expect(!after.replaced("", since: before))
+    #expect(after.replaced("5", since: before))
+    #expect(after.replaced("6", since: before))
+    #expect(!after.replaced("7", since: EventsResult(events: [], origin: 1, origins: ["7": 4], busy: [])))
   }
 
   @Test func appCommandRoundTripsThroughCLIRequest() throws {

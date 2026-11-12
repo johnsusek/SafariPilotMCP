@@ -43,14 +43,24 @@ struct LoggedEvent: Codable, Sendable, Equatable {
   let count: Int
   /// Path of the frame that logged it, "" for the top frame.
   let frame: String
+  /// Set when events were read with a watch on this frame: whether the event hit the watched element, one of its labels or an ancestor of it.
+  let onTarget: Bool?
 }
 
 struct PingResult: Codable, Sendable { let url: String; let title: String }
 struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
 /// Rects are in top-frame CSS px; sandboxed means the element's frame is sandboxed without allow-scripts, so no page listener can confirm a click or key there.
 struct LocateResult: Codable, Sendable { let ref: PageRef; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let viewport: Viewport; let sandboxed: Bool }
-/// Events from every frame. origin is the top frame's performance.timeOrigin and origins each answering frame's, keyed by frame path; a different origin between two reads means that frame navigated or reloaded.
-struct EventsResult: Codable, Sendable { let events: [LoggedEvent]; let origin: Double; let origins: [String: Double] }
+/// Events from every frame. origin is the top frame's performance.timeOrigin and origins each answering frame's, keyed by frame path; a different origin between two reads means that frame navigated or reloaded. busy lists frames that did not answer in time, which are not gone.
+struct EventsResult: Codable, Sendable {
+  let events: [LoggedEvent]
+  let origin: Double
+  let origins: [String: Double]
+  let busy: [String]
+
+  /// Whether a frame answered with another document than in before, or is gone; a busy frame is neither.
+  func replaced(_ frame: String, since before: EventsResult) -> Bool { !busy.contains(frame) && origins[frame] != before.origins[frame] }
+}
 /// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; checked is set for checkbox and radio, selectedIndex and options for both select kinds.
 enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", other }
 struct SelectOption: Codable, Sendable, Equatable { let value: String; let label: String; let disabled: Bool }
@@ -80,7 +90,8 @@ enum ContentRequest: Equatable, Sendable {
   case ping
   case snapshot
   case locate(ref: PageRef)
-  case events(clear: Bool, arm: Bool)
+  /// watch is the ref an action targets: its frame is always read and its events carry onTarget.
+  case events(clear: Bool, arm: Bool, watch: PageRef?)
   case inspect(ref: PageRef)
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
@@ -93,7 +104,7 @@ enum ContentRequest: Equatable, Sendable {
     case .ping: ["op": "ping"]
     case .snapshot: ["op": "snapshot"]
     case let .locate(ref): ["op": "locate", "ref": .string(ref.description)]
-    case let .events(clear, arm): ["op": "events", "clear": .bool(clear), "arm": .bool(arm)]
+    case let .events(clear, arm, watch): ["op": "events", "clear": .bool(clear), "arm": .bool(arm), "watch": watch.map { .string($0.description) } ?? .null]
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]

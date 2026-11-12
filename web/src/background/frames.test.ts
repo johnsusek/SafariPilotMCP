@@ -354,7 +354,16 @@ describe("runPage reads", () => {
             viewport: viewport(),
             text: 'main\n  iframe "A" [ref=5]\nfooter',
             truncated: false,
-            frames: [{ ref: 5, frameId: 100, line: 1, depth: 1 }],
+            frames: [
+              {
+                ref: 5,
+                frameId: 100,
+                line: 1,
+                depth: 1,
+                width: 400,
+                height: 300,
+              },
+            ],
           }
         : undefined;
     documents[100].answer = (request) =>
@@ -366,7 +375,16 @@ describe("runPage reads", () => {
             viewport: viewport(),
             text: `button "Go" [ref=${request.prefix}2]\niframe [ref=${request.prefix}3]`,
             truncated: false,
-            frames: [{ ref: 3, frameId: 200, line: 1, depth: 0 }],
+            frames: [
+              {
+                ref: 3,
+                frameId: 200,
+                line: 1,
+                depth: 0,
+                width: 200,
+                height: 100,
+              },
+            ],
           }
         : undefined;
     documents[200].answer = (request) =>
@@ -533,17 +551,106 @@ describe("runPage reads", () => {
         ? { ok: true, events: [event(7, 9)], origin: 3 }
         : undefined;
     expect(
-      await runPage(send, { op: "events", clear: true, arm: false }),
+      await runPage(send, {
+        op: "events",
+        clear: true,
+        arm: false,
+        watch: null,
+      }),
     ).toEqual({
       ok: true,
       origin: 1,
       origins: { "": 1, "5": 2, "5:3": 3 },
+      busy: [],
       events: [
         { ...event(null, 2), frame: "5" },
         { ...event(null, 5), ref: "1", frame: "" },
         { ...event(null, 9), ref: "5:3:7", frame: "5:3" },
       ],
     });
+  });
+
+  test("events always read the watched frame, mark it, and list frames that timed out as busy", async () => {
+    // Iframe 3 is too small for the fan-out, so only the watch reaches frame 200.
+    documents[100].frames = [entry(3, 200, rect(20, 30, 10, 10))];
+    documents[0].answer = (request) =>
+      request.op === "events" ? { ok: true, events: [], origin: 1 } : undefined;
+    documents[100].answer = (request) =>
+      request.op === "events"
+        ? { ok: false, error: "no answer within 2000 ms", timeout: true }
+        : undefined;
+    documents[200].answer = (request) =>
+      request.op === "events" ? { ok: true, events: [], origin: 3 } : undefined;
+    expect(
+      await runPage(send, {
+        op: "events",
+        clear: true,
+        arm: false,
+        watch: "5:3:7",
+      }),
+    ).toMatchObject({ origins: { "": 1, "5:3": 3 }, busy: ["5"] });
+    let watched = calls.filter(([, request]) => request.op === "events");
+    expect(watched).toContainEqual([
+      200,
+      { op: "events", clear: true, arm: false, watch: 7 },
+    ]);
+    expect(watched).toContainEqual([
+      0,
+      { op: "events", clear: true, arm: false, watch: null },
+    ]);
+  });
+
+  test("read_page skips frames smaller than tracking-pixel size without spending the frame budget", async () => {
+    documents[0].answer = (request) =>
+      request.op === "readPage"
+        ? {
+            ok: true,
+            url: "u",
+            title: "t",
+            viewport: viewport(),
+            text: 'iframe [ref=4]\niframe "A" [ref=5]',
+            truncated: false,
+            frames: [
+              { ref: 4, frameId: 100, line: 0, depth: 0, width: 1, height: 1 },
+              {
+                ref: 5,
+                frameId: 200,
+                line: 1,
+                depth: 0,
+                width: 400,
+                height: 300,
+              },
+            ],
+          }
+        : undefined;
+    documents[200].answer = (request) =>
+      request.op === "readPage"
+        ? {
+            ok: true,
+            url: "u",
+            title: "t",
+            viewport: viewport(),
+            text: `link [ref=${request.prefix}9]`,
+            truncated: false,
+            frames: [],
+          }
+        : undefined;
+    expect(
+      await runPage(send, {
+        op: "readPage",
+        filter: "all",
+        maxChars: 1000,
+        ref: null,
+        depth: null,
+      }),
+    ).toMatchObject({
+      text: 'iframe [ref=4]\niframe "A" [ref=5]\n  link [ref=5:9]',
+    });
+    expect(
+      calls.some(
+        ([frameId, request]) => frameId === 100 && request.op === "readPage",
+      ),
+    ).toBe(false);
   });
 
   test("page text appends a labeled section per sizable frame", async () => {
@@ -603,9 +710,13 @@ describe("runPage reads", () => {
       200,
       { op: "scroll", ref: 4, left: 0, top: 100 },
     ]);
-    expect(
-      await runPage(send, { op: "scrollIntoView", ref: "5:3:4" }),
-    ).toMatchObject({ ok: true, moved: true });
+    documents[200].answer = (request) =>
+      request.op === "scrollIntoView"
+        ? { ok: true, moved: false, viewport: viewport(200, 100) }
+        : undefined;
+    expect(await runPage(send, { op: "scrollIntoView", ref: "5:3:4" })).toEqual(
+      { ok: true, moved: true, viewport: viewport() },
+    );
     expect(await runPage(send, { op: "inspect", ref: "5.4" })).toMatchObject({
       ok: false,
       error: expect.stringMatching(/must look like 12/),

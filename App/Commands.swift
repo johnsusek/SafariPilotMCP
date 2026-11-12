@@ -125,7 +125,7 @@ struct Commands {
   }
 
   private func events(_ tabId: Int?, _ clear: Bool) async throws -> CLIReply {
-    let response = try await content(tabId, .events(clear: clear, arm: false))
+    let response = try await content(tabId, .events(clear: clear, arm: false, watch: nil))
     let lines = try response.decode(EventsResult.self).events.map(describe)
     return CLIReply(ok: true, text: lines.isEmpty ? "no events" : lines.joined(separator: "\n"), data: response)
   }
@@ -266,27 +266,45 @@ struct Commands {
       return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data)
     }
 
-    let before = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
+    // The click is logged by the frame that owns the element; a link there may navigate or remove just that frame.
+    let frame = ref.frame
+    let before = try await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
+
+    guard before.origins[frame] != nil else {
+      let reason = before.busy.contains(frame) ? "did not answer within 2 s" : "could not be read"
+      throw Failure(description: "the frame of iframe \(frame) \(reason), so a click on ref \(ref) could not be verified; nothing was clicked")
+    }
+
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
     let pressed = try AXEngine.press(match)
     try await Task.sleep(for: .milliseconds(150))
-    let after = try? await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
-    // The click is logged by the frame that owns the element; a link there may navigate or remove just that frame.
-    let frame = ref.frame
-    let clicks = after?.events.filter { $0.type == "click" && $0.isTrusted && $0.frame == frame } ?? []
-    let pageNavigated = after != nil && after?.origin != before.origin
-    let frameNavigated = !frame.isEmpty && after != nil && after?.origins[frame] != before.origins[frame]
+    let after = try? await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
     var lines = ["pressed \(pressed.summary) via AXPress (\(pressed.depth) up from match) in tab \(tab.id)"]
 
-    if after == nil {
+    guard let after else {
       lines[0] += ", then the page stopped answering: it is navigating, or the click opened a dialog such as alert() that blocks it until dismissed"
       return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
     }
 
+    if after.busy.contains(frame) {
+      lines[0] += ", then the frame of iframe \(frame) did not answer within 2 s: it is busy, or the click opened a dialog such as alert() there"
+      return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
+    }
+
+    let clicks = after.events.filter { $0.type == "click" && $0.isTrusted && $0.frame == frame }
+    let pageNavigated = after.origin != before.origin
+    let frameNavigated = !frame.isEmpty && after.replaced(frame, since: before)
+
     // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
     if !pageNavigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
+      return CLIReply(ok: false, text: (lines + matched).joined(separator: "\n"), data: .null)
+    }
+
+    // WebKit can report a frame's elements at their old place for a while after it scrolls, so a press matched by frame can land on a neighbor.
+    if !frame.isEmpty, !pageNavigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
+      lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
       return CLIReply(ok: false, text: (lines + matched).joined(separator: "\n"), data: .null)
     }
 

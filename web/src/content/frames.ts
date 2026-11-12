@@ -31,16 +31,34 @@ export function frameIdOf(iframe: HTMLIFrameElement) {
 export let blocksScripts = (iframe: HTMLIFrameElement) =>
   iframe.hasAttribute("sandbox") && !iframe.sandbox.contains("allow-scripts");
 
+// Inline sources (data:, blob:, javascript:) are named by their scheme alone, since the URL can run to kilobytes.
+let inlineSchemes = ["data:", "blob:", "javascript:"];
+
 export function sourceOf(iframe: HTMLIFrameElement) {
   if (iframe.hasAttribute("srcdoc")) return "srcdoc";
 
-  return iframe.src || "about:blank";
+  if (!iframe.src) return "about:blank";
+
+  let scheme = URL.canParse(iframe.src) ? new URL(iframe.src).protocol : "";
+  return inlineSchemes.includes(scheme) ? scheme : iframe.src;
 }
 
+let tokens = (value: string) => value.trim().split(/\s+/);
+let amount = (token: string) =>
+  parseFloat(token) / (token.endsWith("%") ? 100 : 1);
+// Computed values that leave a box where it is, per property; "none" and "" also do.
+let stillValues: Record<string, (value: string) => boolean> = {
+  transform: (value) => identities.includes(value.replace(/\s+/g, "")),
+  translate: (value) => tokens(value).every((token) => amount(token) === 0),
+  scale: (value) => tokens(value).every((token) => amount(token) === 1),
+  rotate: (value) => amount(tokens(value).at(-1)!) === 0,
+};
+
 // AX lays a frame out as if no transform applied, so any transform on the iframe or around it, or a box scaled by CSS zoom, breaks frame matching.
+// offsetWidth and offsetHeight are whole pixels, so a box differing by up to 1 px is not scaled.
 function isTransformed(iframe: HTMLIFrameElement, bounds: DOMRect) {
   let scaled = (shown: number, laidOut: number) =>
-    laidOut > 0 && Math.abs(shown / laidOut - 1) > 0.01;
+    laidOut > 0 && Math.abs(shown - laidOut) > Math.max(1, laidOut * 0.01);
 
   if (
     scaled(bounds.width, iframe.offsetWidth) ||
@@ -50,12 +68,10 @@ function isTransformed(iframe: HTMLIFrameElement, bounds: DOMRect) {
 
   for (let node: Element | null = iframe; node; node = flatParent(node)) {
     let style = getComputedStyle(node);
-    let moves = [style.transform, style.scale, style.rotate, style.translate]
-      .map((value) => (value ?? "none").replace(/\s+/g, ""))
-      .some(
-        (value) =>
-          value !== "none" && value !== "" && !identities.includes(value),
-      );
+    let moves = Object.entries(stillValues).some(([property, still]) => {
+      let value = style.getPropertyValue(property);
+      return value !== "" && value !== "none" && !still(value);
+    });
 
     if (moves) return true;
   }
@@ -130,21 +146,28 @@ export function frameBox(
   if (!(iframe instanceof HTMLIFrameElement)) return iframe;
 
   let before = frameEntry(iframe);
-  let moved = false;
 
-  if (reveal && !inside(before.box, visibleArea(readViewport()))) {
-    iframe.scrollIntoView({
-      block: "nearest",
-      inline: "nearest",
-      behavior: "instant",
-    });
-    moved = true;
-  }
+  if (!reveal || inside(before.box, visibleArea(readViewport())))
+    return {
+      ok: true,
+      frame: before,
+      moved: false,
+      viewport: readViewport(),
+      origin: performance.timeOrigin,
+    };
 
+  // nearest leaves an iframe larger than the viewport where it is once it covers the view, so moved compares the boxes.
+  iframe.scrollIntoView({
+    block: "nearest",
+    inline: "nearest",
+    behavior: "instant",
+  });
+  let after = frameEntry(iframe);
   return {
     ok: true,
-    frame: moved ? frameEntry(iframe) : before,
-    moved,
+    frame: after,
+    moved:
+      after.box.left !== before.box.left || after.box.top !== before.box.top,
     viewport: readViewport(),
     origin: performance.timeOrigin,
   };

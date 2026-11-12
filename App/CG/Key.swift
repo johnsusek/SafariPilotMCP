@@ -26,7 +26,13 @@ extension Commands {
     try await requireKeyboardFocus(in: target, refocus: focusNode)
     var pid: pid_t = 0
     AXUIElementGetPid(target.app.element, &pid)
-    let before = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
+    let before = try await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
+
+    if let ref, before.origins[ref.frame] == nil {
+      let reason = before.busy.contains(ref.frame) ? "did not answer within 2 s" : "could not be read"
+      throw Failure(description: "the frame of iframe \(ref.frame) \(reason), so keys for ref \(ref) could not be counted; nothing was pressed")
+    }
+
     var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
 
@@ -45,8 +51,16 @@ extension Commands {
       "expected": .number(Double(expected)),
     ]
     var keydowns: [LoggedEvent] = []
-    // Keys land in whichever frame has focus, and Tab can move focus between frames, so keydowns are summed over every frame read both before and after; only the top frame or the ref's own frame navigating voids the count.
+    // Keys land in whichever frame has focus, and Tab can move focus between frames, so keydowns are summed over every frame read both before and after.
+    // The top frame or the ref's own frame navigating voids the count at once; any other frame navigating (Enter submitting a form in it) voids it only when keydowns are missing, since that frame's log went with its document.
     let watched = ref.map { ["", $0.frame] } ?? [""]
+    var replaced: Set<String> = []
+    var busy: [String] = []
+    let navigated = { (what: String, readError: String) in
+      data["navigated"] = .bool(true)
+      data["delivered"] = .null
+      return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); \(what) navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
+    }
     // WebKit hands the page each key only after it handled the last one, so a page busy rendering (an autocomplete) is still receiving keys well after they were posted.
     let deadline = ContinuousClock.now + .milliseconds(1500)
     try await Task.sleep(for: .milliseconds(150))
@@ -55,22 +69,22 @@ extension Commands {
       var after: JSONValue?
       var readError = ""
 
-      do { after = try await content(tab.id, .events(clear: true, arm: false)) } catch { readError = " (reading the log failed: \(error))" }
+      do { after = try await content(tab.id, .events(clear: true, arm: false, watch: ref)) } catch { readError = " (reading the log failed: \(error))" }
 
-      let events = try after?.decode(EventsResult.self)
+      guard let events = try after?.decode(EventsResult.self) else { return navigated("the page", readError) }
 
-      guard let events, watched.allSatisfy({ events.origins[$0] == before.origins[$0] }) else {
-        data["navigated"] = .bool(true)
-        data["delivered"] = .null
-        return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); the page navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
-      }
+      if let frame = watched.first(where: { events.replaced($0, since: before) }) { return navigated(frame.isEmpty ? "the page" : "the frame of iframe \(frame)", "") }
 
+      replaced.formUnion(before.origins.keys.filter { events.replaced($0, since: before) })
+      busy = events.busy
       keydowns += events.events.filter { $0.type == "keydown" && $0.isTrusted && events.origins[$0.frame] == before.origins[$0.frame] }
 
       if keydowns.count >= expected || ContinuousClock.now >= deadline { break }
 
       try await Task.sleep(for: .milliseconds(100))
     }
+
+    if keydowns.count < expected, let frame = replaced.sorted().first { return navigated("the frame of iframe \(frame)", "") }
 
     data["navigated"] = .bool(false)
     data["delivered"] = .number(Double(keydowns.count))
@@ -79,7 +93,7 @@ extension Commands {
 
     if keydowns.count < expected {
       let lines = [
-        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari, or a frame SafariPilot cannot read, took the rest",
+        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari, or a frame SafariPilot cannot read, took the rest\(busy.isEmpty ? "" : " (frames still busy: \(busy.joined(separator: ", ")))")",
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
       ] + (logged.isEmpty ? ["  none"] : logged)
