@@ -40,6 +40,13 @@ enum AXEngine {
 
     while true {
       let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init)
+      let roles = windows.map(\.role)
+
+      // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
+      guard roles.allSatisfy({ $0 == kAXWindowRole }) else {
+        throw Failure(description: "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
+      }
+
       let webAreas = windows.map { findWebAreas(in: $0) }
       let candidates = zip(windows, webAreas).map { window, areas in
         WindowCandidate(title: window.string(kAXTitleAttribute) ?? "", frame: window.frame, minimized: window.value(kAXMinimizedAttribute) as? Bool == true, urls: areas.map { $0.string("AXURL") ?? "?" })
@@ -65,10 +72,14 @@ enum AXEngine {
     var frontier: [(AXNode, Int)] = [(root, 0)]
 
     while let (node, depth) = frontier.popLast() {
-      if node.role == "AXWebArea" {
+      let role = node.role
+
+      if role == "AXWebArea" {
         found.append(node)
         continue
       }
+
+      if role == kAXMenuBarRole || role == kAXMenuRole { continue }
 
       if depth < 15 { frontier.append(contentsOf: node.children.reversed().map { ($0, depth + 1) }) }
     }

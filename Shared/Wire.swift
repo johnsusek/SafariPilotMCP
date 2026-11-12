@@ -98,6 +98,8 @@ enum Wire {
 
     while true {
       let count = read(descriptor, &buffer, buffer.count)
+      if count < 0, errno == EAGAIN { throw Failure(description: "SafariPilot.app sent no reply within \(timeoutSeconds) s; it is still busy with this or an earlier command") }
+
       guard count > 0 else { throw Failure(description: count == 0 ? "connection closed before reply" : "read failed: errno \(errno)") }
       reply.append(buffer, count: count)
 
