@@ -16,6 +16,10 @@ struct SafariPilotApp: App {
           .disabled(delegate.model.axTrusted)
         Button("Open Extension Settings") { Task { await delegate.model.openExtensionSettings() } }
         Divider()
+        Button("Add to Claude Desktop") { delegate.model.addToClaudeDesktop() }
+          .disabled(delegate.model.desktopAdded)
+        Button("Copy Claude Code Command") { delegate.model.copyClaudeCodeCommand() }
+        Divider()
         Button("Clear Log") { delegate.model.clearLog() }
           .keyboardShortcut("k")
           .disabled(delegate.model.log.isEmpty)

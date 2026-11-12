@@ -110,6 +110,7 @@ targets:
       - CLI/Tools.swift
       - CLI/TabSession.swift
       - CLI/CommandLineParsing.swift
+      - App/ClaudeSetup.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Tests

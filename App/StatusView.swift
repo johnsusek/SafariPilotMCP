@@ -25,6 +25,16 @@ struct StatusView: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
           LabeledContent("Background") { Text(backgroundState(now: context.date)) }
         }
+        LabeledContent("Claude Desktop") {
+          HStack {
+            Text(model.desktopAdded ? "Added" : "Not added")
+            if !model.desktopAdded { Button("Add") { model.addToClaudeDesktop() } }
+          }
+        }
+        LabeledContent("Claude Code") {
+          Button("Copy Command") { model.copyClaudeCodeCommand() }
+            .help(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath))
+        }
       }
       .formStyle(.grouped)
       .fixedSize(horizontal: false, vertical: true)
@@ -42,6 +52,11 @@ struct StatusView: View {
       }
     }
     .frame(minWidth: 520, minHeight: 360)
+    .alert(model.setupAlert?.title ?? "", isPresented: Binding(get: { model.setupAlert != nil }, set: { if !$0 { model.setupAlert = nil } })) {
+      Button("OK") {}
+    } message: {
+      Text(model.setupAlert?.message ?? "")
+    }
   }
 
   private func backgroundState(now: Date) -> String {
