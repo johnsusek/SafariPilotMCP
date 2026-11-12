@@ -11,7 +11,7 @@ import {
   nameOf,
   roleOf,
 } from "./describe";
-import { flatChildren, isPruned } from "./flat";
+import { flatChildren, isInvisible, isPruned, isShown } from "./flat";
 import { blocksScripts, frameIdOf, sourceOf } from "./frames";
 import { readViewport } from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
@@ -94,6 +94,15 @@ function add(items: Item[], child: Node, walk: Walk) {
 
   if (!(child instanceof Element) || isPruned(child)) return;
 
+  if (isInvisible(child)) {
+    for (let item of build(child, walk)) {
+      if ("text" in item) pushText(items, item.text);
+      else items.push(item);
+    }
+
+    return;
+  }
+
   let role = roleOf(child);
   let interactive = isInteractive(child);
   // An iframe whose frame can be read stays as the line its document hangs under.
@@ -123,7 +132,7 @@ function add(items: Item[], child: Node, walk: Walk) {
   // A label's text already names its control, a legend's its fieldset and a caption's its table.
   let control = (child as HTMLLabelElement).control;
 
-  if (control && !isPruned(control))
+  if (control && isShown(control))
     children = children.filter((item) => !("text" in item));
 
   let named = { legend: "fieldset", caption: "table" }[child.localName];
@@ -177,9 +186,17 @@ function add(items: Item[], child: Node, walk: Walk) {
 
 function build(node: Node, walk: Walk): Item[] {
   let items: Item[] = [];
+  // Text takes its parent's visibility.
+  let hidden: boolean | undefined;
 
   for (let child of flatChildren(node)) {
     if (walk.left <= 0) break;
+
+    if (child.nodeType === Node.TEXT_NODE) {
+      hidden ??= node instanceof Element && isInvisible(node);
+
+      if (hidden) continue;
+    }
 
     add(items, child, walk);
   }

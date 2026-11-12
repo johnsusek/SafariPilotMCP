@@ -27,20 +27,28 @@ export function flatChildren(node: Node): Node[] {
   return Array.from(node.childNodes);
 }
 
-// display:contents elements (slots by default) have no box, so checkVisibility is false for them though their children render.
+// Whether element's whole subtree is left out. display:contents elements (slots by default) have no box, so checkVisibility is false for them though their children render.
 export function isPruned(element: Element) {
   if (skippedTags.has(element.localName)) return true;
   if (element.getAttribute("aria-hidden") === "true") return true;
   if ((element as HTMLElement).hidden === true) return true;
-  if (element.checkVisibility({ visibilityProperty: true })) return false;
+  if (element.checkVisibility()) return false;
   return getComputedStyle(element).display !== "contents";
 }
+
+// visibility:hidden hides an element's own box and text but not a descendant that sets visibility:visible (Reddit's open menus), so the subtree is still walked.
+export let isInvisible = (element: Element) =>
+  /^(hidden|collapse)$/.test(getComputedStyle(element).visibility);
+
+export let isShown = (element: Element) =>
+  !isPruned(element) && !isInvisible(element);
 
 export function* flatElements(root: Node): Generator<Element> {
   for (let child of flatChildren(root)) {
     if (!(child instanceof Element) || isPruned(child)) continue;
 
-    yield child;
+    if (!isInvisible(child)) yield child;
+
     yield* flatElements(child);
   }
 }

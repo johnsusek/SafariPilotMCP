@@ -99,6 +99,12 @@ describe("nameOf", () => {
     ).toBe("Close dialog");
   });
 
+  test("visibility:hidden text is skipped, a visible child inside it is not", () => {
+    document.body.innerHTML =
+      '<button id="b">Sort <span style="visibility: hidden">gone <b style="visibility: visible">Top</b></span></button>';
+    expect(nameOf(document.getElementById("b")!, true)).toBe("Sort Top");
+  });
+
   test("svg title names an svg and the link around it", () => {
     let link = first(
       '<a href="/"><svg role="img"><title>MDN</title></svg></a>',

@@ -1,6 +1,6 @@
 import type { ElementInfo, Rect, SnapshotResult } from "../shared/protocol";
 import { isEditableRoot, nameOf, roleOf } from "./describe";
-import { flatElements, flatParent, isPruned } from "./flat";
+import { flatElements, flatParent, isShown } from "./flat";
 import { intersect, readViewport, toRect, visibleArea } from "./geometry";
 import { pruneRefs, refFor } from "./refs";
 
@@ -39,7 +39,7 @@ export function isInteractive(element: Element) {
   // A label is clicked through its control, which locate counts it as part of, unless the control is not rendered.
   let control = tag === "label" ? (element as HTMLLabelElement).control : null;
 
-  if (control && !isPruned(control)) return false;
+  if (control && isShown(control)) return false;
 
   // Listeners added with addEventListener are invisible, so treat the outermost cursor:pointer element as clickable, unless a widget around it already is.
   if (getComputedStyle(element).cursor !== "pointer") return false;

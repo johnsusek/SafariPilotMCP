@@ -1,4 +1,4 @@
-import { flatChildren, flatParent, isPruned } from "./flat";
+import { flatChildren, flatParent, isInvisible, isPruned } from "./flat";
 
 let inputRoles: Record<string, string> = {
   button: "button",
@@ -110,10 +110,16 @@ let formTags = new Set(["input", "select", "textarea"]);
 
 // Text an element shows, as accessible name from content: shadow trees and slots included, hidden subtrees skipped, and a descendant's aria-label or an image's alt standing in for its content.
 function contentText(node: Node, parts: string[], budget: { left: number }) {
+  let hidden: boolean | undefined;
+
   for (let child of flatChildren(node)) {
     if (budget.left <= 0) return;
 
     if (child.nodeType === Node.TEXT_NODE) {
+      hidden ??= node instanceof Element && isInvisible(node);
+
+      if (hidden) continue;
+
       let text = child.textContent ?? "";
       parts.push(text);
       budget.left -= text.length;
@@ -129,6 +135,11 @@ function contentText(node: Node, parts: string[], budget: { left: number }) {
     }
 
     if (isPruned(child) || formTags.has(child.localName)) continue;
+
+    if (isInvisible(child)) {
+      contentText(child, parts, budget);
+      continue;
+    }
 
     let label =
       child.getAttribute("aria-label")?.trim() ||

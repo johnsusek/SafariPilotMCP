@@ -147,8 +147,17 @@ site_frames() {
   close_tab
 }
 
+site_reddit() {
+  open_tab "https://www.reddit.com/r/swift/"
+  check "reddit: closed sort menu stays out" '^no matches' find "Rising"
+  check "reddit: sort menu opens" 'click on' click $(ref "Sort by" button)
+  sleep 1
+  check "reddit: items of a menu in a visibility:hidden list" 'link "Rising"' find "Rising"
+  close_tab
+}
+
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc frames)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc frames reddit)
 
 for site in $sites; do
   site_$site

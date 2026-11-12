@@ -53,6 +53,13 @@ describe("treeText", () => {
     expect(text).toBe('"kept"');
   });
 
+  test("visible children of a visibility:hidden parent are kept, its own text is not", () => {
+    let { text } = render(
+      '<ul role="menu" style="visibility: hidden">gone<li role="menuitem" style="visibility: visible">Top</li><li role="menuitem">Hidden</li></ul><div style="visibility: hidden"><button>Gone</button></div>',
+    );
+    expect(withoutRefs(text)).toBe('menuitem "Top"');
+  });
+
   test("states and values, never password values", () => {
     let { text } = render(
       '<input type="checkbox" checked aria-label="Agree"><button disabled>Send</button><input aria-label="Email" value="me@example.com" required><input type="password" aria-label="Password" value="hunter2"><select aria-label="Size"><option>S</option><option selected>M</option></select><button aria-expanded="false">More</button>',

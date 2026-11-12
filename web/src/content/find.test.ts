@@ -67,6 +67,13 @@ describe("find", () => {
     expect(names("go")).toEqual(["Go"]);
   });
 
+  test("finds a visible element inside a visibility:hidden one, but not the hidden one", () => {
+    document.body.innerHTML =
+      '<div role="menu" style="visibility: hidden"><button>Go</button><button style="visibility: visible">Go</button></div>';
+    expect(names("go")).toEqual(["Go"]);
+    expect(names("", "menu")).toEqual([]);
+  });
+
   test("caps results at 20", () => {
     document.body.innerHTML = "<button>x</button>".repeat(30);
     expect(names("", "button")).toHaveLength(20);
