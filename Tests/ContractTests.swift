@@ -28,10 +28,12 @@ struct ContractTests {
     #expect(try decode(FindResult.self, #"{"ok":true,"matches":[\#(element)]}"#).matches[0].disabled == nil)
     #expect(try decode(PageTextResult.self, #"{"ok":true,"url":"u","title":"t","text":"hello","truncated":false}"#).text == "hello")
     #expect(try decode(ScrollResult.self, #"{"ok":true,"moved":false,"viewport":\#(viewport)}"#).viewport.scrollY == 40)
-    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","viewport":\#(viewport)}"#).point == CSSPoint(left: 2, top: 4))
-    let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3}],"origin":1762900000123.4}"#)
+    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","viewport":\#(viewport),"sandboxed":false}"#).point == CSSPoint(left: 2, top: 4))
+    let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3,"frame":""},{"type":"keydown","isTrusted":true,"ref":"5:7","target":"input","time":2,"detail":"","count":1,"frame":"5"}],"origin":1762900000123.4,"origins":{"":1762900000123.4,"5":1762900000200}}"#)
     #expect(events.events[0].count == 3)
+    #expect(events.events[1].ref == PageRef(frames: [5], local: 7))
     #expect(events.origin == 1762900000123.4)
+    #expect(events.origins["5"] == 1762900000200)
     #expect(throws: (any Error).self) { try decode(EventsResult.self, #"{"ok":true,"events":[]}"#) }
     #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"secure":false,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
     let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","secure":false,"kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
@@ -48,9 +50,10 @@ struct ContractTests {
       "type": "content", "tabId": .number(2), "request": .object(["op": "scroll", "ref": .null, "left": .number(0), "top": .number(300)]),
     ])
     #expect(ContentRequest.events(clear: true, arm: true).json == ["op": "events", "clear": .bool(true), "arm": .bool(true)])
-    #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": .number(5)])
+    #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
+    #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
-    #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": .number(7)])
+    #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])
     #expect(BackgroundCommand.resize(tabId: 4, width: 1200, height: 800).json == ["type": "resize", "tabId": .number(4), "width": .number(1200), "height": .number(800)])
   }
 
@@ -66,5 +69,17 @@ struct ContractTests {
     let form = AppCommand.formInput(tabId: nil, ref: 2, value: .checked(false))
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(form)) == form)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
+  }
+
+  @Test func pageRefDecodesNumbersAndStringsAndEncodesStrings() throws {
+    let decoded = try JSONDecoder().decode([PageRef].self, from: Data(#"[12, "12", "5:12", "5:3:12"]"#.utf8))
+    #expect(decoded == [12, 12, PageRef(frames: [5], local: 12), PageRef(frames: [5, 3], local: 12)])
+    #expect(String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self) == #"["12","12","5:12","5:3:12"]"#)
+    #expect(decoded[2].frame == "5")
+    #expect(decoded[0].frame == "")
+
+    for bad in [#"[5.12]"#, #"["5.12"]"#, #"["1:2:3:4:5"]"#, #"["-1"]"#, #"[":5"]"#] {
+      #expect(throws: (any Error).self) { try JSONDecoder().decode([PageRef].self, from: Data(bad.utf8)) }
+    }
   }
 }

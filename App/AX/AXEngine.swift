@@ -104,14 +104,28 @@ enum AXEngine {
       throw Failure(description: "mapped point \(format(screenPoint)) is outside the viewport frame \(format(frame)); element is probably off screen")
     }
 
-    // Pruning by frame is fast but misses positioned elements that overflow a smaller parent (Leaflet's map controls sit in 10 px tall panes), so a miss walks again without it.
-    var (best, visited) = try bestMatch(under: target.webArea, for: screenRect, prune: true)
+    // WebKit moves a frame's AX elements a while after the frame scrolls (seen live: over a second), so an element inside a frame that matches nothing is searched again for up to 2 s.
+    let patience = ContinuousClock.now + .seconds(located.ref.frames.isEmpty ? 0 : 2)
+    var best: FrameMatching.Found<AXNode>?
+    var visited = 0
 
-    if (best?.score ?? 0) < FrameMatching.minimum {
-      let (unpruned, count) = try bestMatch(under: target.webArea, for: screenRect, prune: false)
+    while true {
+      // Pruning by frame is fast but misses positioned elements that overflow a smaller parent (Leaflet's map controls sit in 10 px tall panes), so a miss walks again without it.
+      var (found, count) = try bestMatch(under: target.webArea, for: screenRect, prune: true)
       visited += count
 
-      if (unpruned?.score ?? 0) > (best?.score ?? 0) { best = unpruned }
+      if (found?.score ?? 0) < FrameMatching.minimum {
+        let (unpruned, more) = try bestMatch(under: target.webArea, for: screenRect, prune: false)
+        visited += more
+
+        if (unpruned?.score ?? 0) > (found?.score ?? 0) { found = unpruned }
+      }
+
+      best = found
+
+      if (best?.score ?? 0) >= FrameMatching.minimum || ContinuousClock.now >= patience { break }
+
+      try await Task.sleep(for: .milliseconds(150))
     }
 
     guard let best, best.score >= FrameMatching.minimum else {
@@ -122,33 +136,8 @@ enum AXEngine {
     return Match(target: target, screenPoint: screenPoint, screenRect: screenRect, viewportFrame: frame, zoom: zoom, score: best.score, chain: best.lineage)
   }
 
-  /// Lineages run from a node up to, not including, the web area. With prune, subtrees whose frame misses the rect are skipped; empty or missing frames are still entered, since their children can lie outside them.
-  private static func bestMatch(under webArea: AXNode, for screenRect: CGRect, prune: Bool) throws -> (best: (lineage: [AXNode], score: Double)?, visited: Int) {
-    var best: (lineage: [AXNode], score: Double)?
-    var frontier: [[AXNode]] = webArea.children.map { [$0] }
-    var visited = 0
-    let limit = prune ? 5000 : 20000
-
-    while let lineage = frontier.popLast() {
-      visited += 1
-
-      guard visited <= limit else { throw Failure(description: "visited \(limit) AX elements under the web area without finishing; page is too large to resolve by frame") }
-
-      let node = lineage[0]
-      let nodeFrame = node.frame
-
-      if prune, let nodeFrame, !nodeFrame.isEmpty, !nodeFrame.intersects(screenRect) { continue }
-
-      if let nodeFrame {
-        let score = FrameMatching.score(nodeFrame, screenRect)
-
-        if FrameMatching.beats(score: score, depth: lineage.count, best: best.map { ($0.score, $0.lineage.count) }) { best = (lineage, score) }
-      }
-
-      frontier.append(contentsOf: node.children.reversed().map { [$0] + lineage })
-    }
-
-    return (best, visited)
+  private static func bestMatch(under webArea: AXNode, for screenRect: CGRect, prune: Bool) throws -> (best: FrameMatching.Found<AXNode>?, visited: Int) {
+    try FrameMatching.best(under: webArea.children, for: screenRect, prune: prune, limit: prune ? 5000 : 20000, children: \.children, frame: \.frame, role: \.role)
   }
 
   /// What was pressed, read before pressing since a press that navigates leaves the element unreadable.

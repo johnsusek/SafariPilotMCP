@@ -89,9 +89,12 @@ function setArmed(on: boolean) {
 }
 
 // Every take disarms; arm re-arms after the take so a measurement starts from an empty, armed log.
+// document.open() erases a window's listeners (frames filled with document.write), so every take adds them again; duplicates are ignored.
 export function takeEvents(clear: boolean, arm: boolean): EventsResult {
   let events = clear ? buffer : buffer.slice();
   if (clear) buffer = [];
+  installLogger();
+  setArmed(false);
   setArmed(arm);
   return { ok: true, events, origin: performance.timeOrigin };
 }
@@ -122,9 +125,11 @@ export function toLogged(event: Event): LoggedEvent {
   };
 }
 
+let logListener = (event: Event) => record(toLogged(event));
+
 export function installLogger() {
   for (let type of loggedTypes) {
-    window.addEventListener(type, (event) => record(toLogged(event)), {
+    window.addEventListener(type, logListener, {
       capture: true,
       passive: true,
     });

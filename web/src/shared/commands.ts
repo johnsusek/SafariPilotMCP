@@ -1,11 +1,75 @@
 // The app sends a Command through the background's poll; the background answers with a CommandResponse.
 // tabId null means the active tab of the last focused window.
 import type {
-  ContentRequest,
   ContentResponse,
+  ElementInfo,
   FrameEntry,
+  InspectResult,
+  LocateResult,
+  LoggedEvent,
   Rect,
+  Viewport,
 } from "./protocol";
+
+// A ref anywhere in the page: the refs of the iframes leading to the element's frame, then its ref in that frame, joined by colons.
+// "12" is a top-frame ref and "5:12" ref 12 in the frame of iframe 5; at most 3 frames deep.
+export type RefPath = string;
+
+// What the app asks of a page; the background routes each ref to the frame that owns it and fans reads out over every frame.
+export type PageRequest =
+  | { op: "ping" }
+  | { op: "snapshot" }
+  | { op: "locate"; ref: RefPath }
+  | { op: "events"; clear: boolean; arm: boolean }
+  | { op: "inspect"; ref: RefPath }
+  | {
+      op: "readPage";
+      filter: "interactive" | "all";
+      maxChars: number;
+      ref: RefPath | null;
+      depth: number | null;
+    }
+  | { op: "find"; name: string; role: string }
+  | { op: "pageText"; maxChars: number }
+  | { op: "scroll"; ref: RefPath | null; left: number; top: number }
+  | { op: "scrollIntoView"; ref: RefPath };
+
+// Page-wide results: refs are paths and rects are in top-frame CSS px.
+export type PageElement = Omit<ElementInfo, "ref"> & { ref: RefPath };
+// frame is the path of the frame that logged the event, "" for the top one.
+export type PageEvent = Omit<LoggedEvent, "ref"> & {
+  ref: RefPath | null;
+  frame: RefPath;
+};
+// sandboxed: the element's frame is sandboxed without allow-scripts, so the page's own listeners, which would confirm a click or key, never run.
+export type PageLocateResult = Omit<LocateResult, "ref" | "candidates"> & {
+  ref: RefPath;
+  sandboxed: boolean;
+};
+// origin is the top frame's performance.timeOrigin and origins every answering frame's, keyed by frame path.
+export type PageEventsResult = {
+  ok: true;
+  events: PageEvent[];
+  origin: number;
+  origins: Record<RefPath, number>;
+};
+export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
+export type PageFindResult = { ok: true; matches: PageElement[] };
+export type PageSnapshotResult = {
+  ok: true;
+  url: string;
+  title: string;
+  viewport: Viewport;
+  elements: PageElement[];
+};
+export type PageReadResult = {
+  ok: true;
+  url: string;
+  title: string;
+  viewport: Viewport;
+  text: string;
+  truncated: boolean;
+};
 
 // windowFrame is the tab's window in screen coordinates (browser.windows.get), null when unavailable.
 export type TabInfo = {
@@ -19,8 +83,8 @@ export type TabInfo = {
 };
 
 export type Command =
-  // Forwards the request to the tab's content script and returns its ContentResponse.
-  | { type: "content"; tabId: number | null; request: ContentRequest }
+  // Runs the request against the tab's frames.
+  | { type: "content"; tabId: number | null; request: PageRequest }
   | { type: "tabs" }
   // Resolves the target tab without side effects.
   | { type: "tab"; tabId: number | null }
@@ -57,6 +121,12 @@ export type FramesTree = { ok: true; tree: FrameNode };
 
 export type CommandResponse =
   | ContentResponse
+  | PageEventsResult
+  | PageLocateResult
+  | PageInspectResult
+  | PageFindResult
+  | PageSnapshotResult
+  | PageReadResult
   | TabsResult
   | TabResult
   | ClosedResult

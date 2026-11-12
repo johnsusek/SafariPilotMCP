@@ -1,4 +1,4 @@
-import type { Failure, LocateResult, Rect } from "../shared/protocol";
+import type { Failure, LocateResult, Point, Rect } from "../shared/protocol";
 import { describe } from "./describe";
 import {
   candidatePoints,
@@ -35,14 +35,22 @@ async function settledRect(element: Element) {
   return previous;
 }
 
-export async function locate(ref: number): Promise<LocateResult | Failure> {
+// clip, given for an element inside a frame, is the part of this frame its ancestors leave visible; candidates then lists the points that hit the element.
+export async function locate(
+  ref: number,
+  clip: Rect | null,
+  scroll: boolean,
+): Promise<LocateResult | Failure> {
   let element = resolveRef(ref);
   if (!(element instanceof Element)) return element;
-  element.scrollIntoView({
-    block: "center",
-    inline: "nearest",
-    behavior: "instant",
-  });
+
+  if (scroll)
+    element.scrollIntoView({
+      block: "center",
+      inline: "nearest",
+      behavior: "instant",
+    });
+
   let rect = await settledRect(element);
   let viewport = readViewport();
   let center = {
@@ -63,6 +71,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       rect,
     ),
     viewport,
+    candidates: [] as Point[],
   };
   if (rect.width <= 0 || rect.height <= 0)
     return {
@@ -72,8 +81,11 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       covered: false,
       hitDescription: "element has no box",
     };
-  let clip = intersect(rect, visibleArea(viewport));
-  if (!clip)
+  let area = clip
+    ? intersect(visibleArea(viewport), clip)
+    : visibleArea(viewport);
+  let shown = area && intersect(rect, area);
+  if (!shown)
     return {
       ...base,
       point: center,
@@ -86,19 +98,24 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
     element,
     ...Array.from((element as HTMLInputElement).labels ?? []),
   ];
-  let point = pickPoint(rect, clip, (candidate) => {
+  let hits = (candidate: Point) => {
     let hit = deepElementFromPoint(candidate);
     return owners.some((owner) => isWithin(owner, hit));
-  });
+  };
+  let candidates = clip
+    ? candidatePoints(rect, shown).filter(hits).slice(0, 8)
+    : [];
+  let point = clip ? (candidates[0] ?? null) : pickPoint(rect, shown, hits);
   if (point)
     return {
       ...base,
+      candidates,
       point,
       hitsTarget: true,
       covered: false,
       hitDescription: describe(deepElementFromPoint(point)),
     };
-  let fallback = candidatePoints(rect, clip)[0];
+  let fallback = candidatePoints(rect, shown)[0];
   return {
     ...base,
     point: fallback,

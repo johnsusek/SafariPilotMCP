@@ -24,7 +24,7 @@ struct TabInfo: Codable, Sendable, Equatable {
 }
 
 struct ElementInfo: Codable, Sendable, Equatable {
-  let ref: Int
+  let ref: PageRef
   let tag: String
   let role: String
   let name: String
@@ -36,23 +36,26 @@ struct ElementInfo: Codable, Sendable, Equatable {
 struct LoggedEvent: Codable, Sendable, Equatable {
   let type: String
   let isTrusted: Bool
-  let ref: Int?
+  let ref: PageRef?
   let target: String
   let time: Double
   let detail: String
   let count: Int
+  /// Path of the frame that logged it, "" for the top frame.
+  let frame: String
 }
 
 struct PingResult: Codable, Sendable { let url: String; let title: String }
 struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
-struct LocateResult: Codable, Sendable { let ref: Int; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let viewport: Viewport }
-/// origin is the page's performance.timeOrigin; a different origin between two reads means the page navigated or reloaded.
-struct EventsResult: Codable, Sendable { let events: [LoggedEvent]; let origin: Double }
+/// Rects are in top-frame CSS px; sandboxed means the element's frame is sandboxed without allow-scripts, so no page listener can confirm a click or key there.
+struct LocateResult: Codable, Sendable { let ref: PageRef; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let viewport: Viewport; let sandboxed: Bool }
+/// Events from every frame. origin is the top frame's performance.timeOrigin and origins each answering frame's, keyed by frame path; a different origin between two reads means that frame navigated or reloaded.
+struct EventsResult: Codable, Sendable { let events: [LoggedEvent]; let origin: Double; let origins: [String: Double] }
 /// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; checked is set for checkbox and radio, selectedIndex and options for both select kinds.
 enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", other }
 struct SelectOption: Codable, Sendable, Equatable { let value: String; let label: String; let disabled: Bool }
 struct InspectResult: Codable, Sendable {
-  let ref: Int
+  let ref: PageRef
   let hover: Bool
   let value: String?
   let secure: Bool
@@ -76,27 +79,27 @@ enum HistoryDirection: String, Codable, Sendable { case back, forward }
 enum ContentRequest: Equatable, Sendable {
   case ping
   case snapshot
-  case locate(ref: Int)
+  case locate(ref: PageRef)
   case events(clear: Bool, arm: Bool)
-  case inspect(ref: Int)
-  case readPage(filter: ReadFilter, maxChars: Int, ref: Int?, depth: Int?)
+  case inspect(ref: PageRef)
+  case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
   case pageText(maxChars: Int)
-  case scroll(ref: Int?, left: Double, top: Double)
-  case scrollIntoView(ref: Int)
+  case scroll(ref: PageRef?, left: Double, top: Double)
+  case scrollIntoView(ref: PageRef)
 
   var json: [String: JSONValue] {
     switch self {
     case .ping: ["op": "ping"]
     case .snapshot: ["op": "snapshot"]
-    case let .locate(ref): ["op": "locate", "ref": .number(Double(ref))]
+    case let .locate(ref): ["op": "locate", "ref": .string(ref.description)]
     case let .events(clear, arm): ["op": "events", "clear": .bool(clear), "arm": .bool(arm)]
-    case let .inspect(ref): ["op": "inspect", "ref": .number(Double(ref))]
-    case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .number(Double($0)) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
+    case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
+    case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
-    case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .number(Double($0)) } ?? .null, "left": .number(left), "top": .number(top)]
-    case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .number(Double(ref))]
+    case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .string($0.description) } ?? .null, "left": .number(left), "top": .number(top)]
+    case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .string(ref.description)]
     }
   }
 }

@@ -2,52 +2,49 @@ import type { CommandResponse, FrameNode } from "../shared/commands";
 import type {
   ContentRequest,
   ContentResponse,
-  Failure,
+  FramesResult,
 } from "../shared/protocol";
+import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
 import { loadAfter } from "./load";
 import type { NativeCommand } from "./native";
+import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
 
-let frameTimeoutMs = 2000;
-let maxFrameDepth = 3;
+// Longer than the slowest content op (locate settles for up to 3 s, read_page of a huge page takes seconds).
+let contentTimeoutMs = 15000;
 
 // frameId 0 is the top frame; with content scripts in every frame, a send without one would take whichever frame answers first.
 async function sendToContent(
-  tabId: number | null,
+  tab: chrome.tabs.Tab & { id: number },
   request: ContentRequest,
-  frameId = 0,
+  frameId: number,
 ): Promise<ContentResponse> {
-  let tab = await resolveTab(tabId);
   let where =
     frameId === 0 ? `tab ${tab.id}` : `frame ${frameId} of tab ${tab.id}`;
   let noScript = `no content script answered in ${where} (${tab.url ?? "unknown url"}); open the URL in a new tab (tabs from before the extension was installed or updated stay unreachable), or the page does not allow extensions`;
-  let response = await browser.tabs
+  let response = browser.tabs
     .sendMessage(tab.id, request, { frameId })
+    .then(
+      (answer) =>
+        (answer as ContentResponse | undefined) ?? {
+          ok: false as const,
+          error: noScript,
+        },
+    )
     .catch((error) => ({ ok: false as const, error: `${noScript}: ${error}` }));
-  return (
-    (response as ContentResponse | undefined) ?? {
-      ok: false,
-      error: noScript,
-    }
+  return await withTimeout(
+    response,
+    contentTimeoutMs,
+    `no answer from ${where} within ${contentTimeoutMs / 1000} s; a dialog such as alert() may be open in the page`,
   );
 }
 
 async function frameNode(
-  tabId: number,
+  send: Send,
   frameId: number,
   depth: number,
 ): Promise<FrameNode> {
-  let timeout = new Promise<Failure>((resolve) =>
-    setTimeout(
-      () =>
-        resolve({ ok: false, error: `no answer within ${frameTimeoutMs} ms` }),
-      frameTimeoutMs,
-    ),
-  );
-  let listed = await Promise.race([
-    sendToContent(tabId, { op: "frames" }, frameId),
-    timeout,
-  ]);
+  let listed = await timed(send, frameId, { op: "frames" });
   let node: FrameNode = {
     frameId,
     error: null,
@@ -58,31 +55,28 @@ async function frameNode(
     frames: [],
   };
 
-  if (!listed.ok || !("frames" in listed)) {
-    node.error = listed.ok ? "unexpected reply" : listed.error;
+  if (!listed.ok) {
+    node.error = listed.error;
     return node;
   }
 
-  let logged = await sendToContent(
-    tabId,
-    { op: "events", clear: true, arm: false },
-    frameId,
-  );
+  let logged = await send(frameId, { op: "events", clear: true, arm: false });
   let events = logged.ok && "events" in logged ? logged.events : [];
   let trusted = (type: string) =>
     events
       .filter((event) => event.type === type && event.isTrusted)
       .reduce((sum, event) => sum + event.count, 0);
-  node.url = listed.url;
-  node.title = listed.title;
+  let { url, title, frames } = listed as FramesResult;
+  node.url = url;
+  node.title = title;
   node.clicks = trusted("click");
   node.keydowns = trusted("keydown");
   node.frames = await Promise.all(
-    listed.frames.map(async (entry) => ({
+    frames.map(async (entry) => ({
       ...entry,
       frame:
         entry.frameId >= 0 && depth < maxFrameDepth
-          ? await frameNode(tabId, entry.frameId, depth + 1)
+          ? await frameNode(send, entry.frameId, depth + 1)
           : null,
     })),
   );
@@ -94,16 +88,22 @@ async function loadedTab(start: () => Promise<number>) {
   return { ok: true as const, tab: await tabInfo(await resolveTab(tabId)) };
 }
 
+async function sender(tabId: number | null): Promise<Send> {
+  let tab = await resolveTab(tabId);
+  return async (frameId, request) => await sendToContent(tab, request, frameId);
+}
+
 async function dispatch(command: NativeCommand): Promise<CommandResponse> {
   if (command.type === "content")
-    return await sendToContent(command.tabId, command.request);
+    return await runPage(await sender(command.tabId), command.request);
 
   if (command.type === "tabs") return { ok: true, tabs: await allTabs() };
 
-  if (command.type === "frames") {
-    let tab = await resolveTab(command.tabId);
-    return { ok: true, tree: await frameNode(tab.id, 0, 0) };
-  }
+  if (command.type === "frames")
+    return {
+      ok: true,
+      tree: await frameNode(await sender(command.tabId), 0, 0),
+    };
 
   if (command.type === "tab")
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };

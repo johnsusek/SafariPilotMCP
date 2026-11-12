@@ -3,13 +3,14 @@ import Foundation
 
 /// key: posts pid-targeted key presses at a tab's focused element without activating Safari, then counts the keydowns the page logged.
 extension Commands {
-  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: Int?, _ times: Int) async throws -> CLIReply {
+  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: PageRef?, _ times: Int) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let target: AXEngine.Target
     let focusNode: AXNode
 
     if let ref {
       let located = try await locateHittable(tab.id, ref, coveredOK: true)
+      try refuseSandboxed(located, "a key press")
       let match = try await AXEngine.resolve(located, tab: tab)
       let (focused, result) = try AXEngine.focus(match)
 
@@ -25,7 +26,7 @@ extension Commands {
     try await requireKeyboardFocus(in: target, refocus: focusNode)
     var pid: pid_t = 0
     AXUIElementGetPid(target.app.element, &pid)
-    let origin = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self).origin
+    let before = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
     var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
 
@@ -44,6 +45,8 @@ extension Commands {
       "expected": .number(Double(expected)),
     ]
     var keydowns: [LoggedEvent] = []
+    // Keys land in whichever frame has focus, and Tab can move focus between frames, so keydowns are summed over every frame read both before and after; only the top frame or the ref's own frame navigating voids the count.
+    let watched = ref.map { ["", $0.frame] } ?? [""]
     // WebKit hands the page each key only after it handled the last one, so a page busy rendering (an autocomplete) is still receiving keys well after they were posted.
     let deadline = ContinuousClock.now + .milliseconds(1500)
     try await Task.sleep(for: .milliseconds(150))
@@ -54,13 +57,15 @@ extension Commands {
 
       do { after = try await content(tab.id, .events(clear: true, arm: false)) } catch { readError = " (reading the log failed: \(error))" }
 
-      guard let after, after["origin"]?.number == origin else {
+      let events = try after?.decode(EventsResult.self)
+
+      guard let events, watched.allSatisfy({ events.origins[$0] == before.origins[$0] }) else {
         data["navigated"] = .bool(true)
         data["delivered"] = .null
         return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); the page navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
       }
 
-      keydowns += try after.decode(EventsResult.self).events.filter { $0.type == "keydown" && $0.isTrusted }
+      keydowns += events.events.filter { $0.type == "keydown" && $0.isTrusted && events.origins[$0.frame] == before.origins[$0.frame] }
 
       if keydowns.count >= expected || ContinuousClock.now >= deadline { break }
 
@@ -74,7 +79,7 @@ extension Commands {
 
     if keydowns.count < expected {
       let lines = [
-        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari or something outside the top frame (iframes are not logged) took the rest",
+        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari, or a frame SafariPilot cannot read, took the rest",
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
       ] + (logged.isEmpty ? ["  none"] : logged)
@@ -86,11 +91,20 @@ extension Commands {
     return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)", data: .object(data))
   }
 
-  /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area or inside it; untested live.
+  /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area, inside it, or inside one of its frames.
   private func requireKeyboardFocus(in target: AXEngine.Target, refocus: AXNode) async throws {
     let focused = { target.app.value(kAXFocusedUIElementAttribute).map { AXNode(element: $0 as! AXUIElement) } }
+    let inPage = { (node: AXNode?) in
+      guard let node else { return false }
 
-    if focused()?.chain(upTo: target.webArea) != nil { return }
+      if node.chain(upTo: target.webArea) != nil { return true }
+
+      let window = node.value(kAXWindowAttribute).map { CFEqual($0, target.window.element) } ?? false
+      let ancestors = sequence(first: node, next: \.parent).prefix(64).map { (role: $0.role, frame: $0.frame) }
+      return KeyboardFocus.inFrameOfPage(sameWindow: window, ancestors: ancestors, webArea: target.webArea.frame)
+    }
+
+    if inPage(focused()) { return }
 
     var steps: [String] = []
     let isMain = { target.window.value(kAXMainAttribute) as? Bool == true }
@@ -106,7 +120,7 @@ extension Commands {
 
     // Safari reports no focused element for a moment after focus first moves into a page, so poll before giving up.
     for _ in 0 ..< 20 {
-      if focused()?.chain(upTo: target.webArea) != nil { return }
+      if inPage(focused()) { return }
 
       try await Task.sleep(for: .milliseconds(50))
     }

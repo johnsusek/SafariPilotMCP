@@ -288,7 +288,7 @@ describe("readPage", () => {
 
   test("depth limits the levels shown", () => {
     document.body.innerHTML = html;
-    let result = readPage("all", 10000, null, 2);
+    let result = readPage("all", 10000, null, 2, "");
     expect(result.ok && withoutRefs(result.text)).toBe(
       ["navigation", "  list", 'heading "Title" level=2'].join("\n"),
     );
@@ -299,7 +299,7 @@ describe("readPage", () => {
     let ref = Number(
       treeText(document.body, "all", 10000).text.match(/\[ref=(\d+)\]/)![1],
     );
-    let result = readPage("all", 10000, ref, null);
+    let result = readPage("all", 10000, ref, null, "");
     expect(result.ok && withoutRefs(result.text)).toBe(
       [
         "navigation",
@@ -311,9 +311,51 @@ describe("readPage", () => {
   });
 
   test("unknown ref fails", () => {
-    expect(readPage("all", 10000, 99999, null)).toEqual({
+    expect(readPage("all", 10000, 99999, null, "")).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
     });
+  });
+});
+
+describe("iframes", () => {
+  let frameIds = (ids: Record<string, number>) =>
+    vi.stubGlobal("browser", {
+      runtime: { getFrameId: (target: Element) => ids[target.id] ?? -1 },
+    });
+
+  test("an iframe with a frame stays under interactive, prefixed, and marks its line", () => {
+    frameIds({ live: 42 });
+    document.body.innerHTML =
+      '<p>Text</p><iframe id="live" title="Live sample" srcdoc="x"></iframe><iframe id="cold" title="Cold"></iframe><button>Go</button>';
+    let { text, frames } = treeText(
+      document.body,
+      "interactive",
+      10000,
+      Infinity,
+      "5:",
+    );
+    let lines = text.split("\n");
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toMatch(/^iframe "Live sample" \[ref=5:(\d+)\] srcdoc$/);
+    expect(lines[1]).toMatch(/^button "Go" \[ref=5:\d+\]$/);
+    let ref = Number(lines[0].match(/ref=5:(\d+)/)![1]);
+    expect(resolveRef(ref)).toBe(document.getElementById("live"));
+    expect(frames).toEqual([{ ref, frameId: 42, line: 0, depth: 0 }]);
+  });
+
+  test("unloaded and sandboxed frames say so", () => {
+    frameIds({ boxed: 7 });
+    document.body.innerHTML =
+      '<main><iframe id="cold" title="Cold"></iframe><iframe id="boxed" title="Boxed" sandbox="allow-same-origin"></iframe></main>';
+    let { text, frames } = treeText(document.body, "all", 10000);
+    expect(withoutRefs(text)).toBe(
+      [
+        "main",
+        '  iframe "Cold" (frame not loaded)',
+        '  iframe "Boxed" sandboxed',
+      ].join("\n"),
+    );
+    expect(frames).toMatchObject([{ frameId: 7, line: 2, depth: 1 }]);
   });
 });

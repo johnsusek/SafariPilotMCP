@@ -120,7 +120,7 @@ extension Commands {
 }
 
 extension CGProbe {
-  var refs: [Int] {
+  var refs: [PageRef] {
     switch self {
     case let .key(_, ref): ref.map { [$0] } ?? []
     case let .click(ref), let .hover(ref): [ref]

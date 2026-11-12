@@ -90,6 +90,7 @@ targets:
       - Shared/CLIWire.swift
       - Shared/KeyChord.swift
       - Shared/Contract.swift
+      - Shared/PageRef.swift
       - Shared/ViewportMapping.swift
     dependencies:
       - package: MCP

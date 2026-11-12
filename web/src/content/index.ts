@@ -1,7 +1,7 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
-import { listFrames } from "./frames";
+import { frameBox, hitFrame, listFrames } from "./frames";
 import { inspect } from "./inspect";
 import { locate } from "./locate";
 import { pageText } from "./pageText";
@@ -16,7 +16,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "ping")
       return { ok: true, url: location.href, title: document.title };
     if (request.op === "snapshot") return snapshot();
-    if (request.op === "locate") return await locate(request.ref);
+    if (request.op === "locate")
+      return await locate(request.ref, request.clip, request.scroll);
     if (request.op === "events") return takeEvents(request.clear, request.arm);
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "readPage")
@@ -25,6 +26,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
         request.maxChars,
         request.ref,
         request.depth,
+        request.prefix,
       );
     if (request.op === "find") return find(request.name, request.role);
     if (request.op === "pageText") return pageText(request.maxChars);
@@ -32,6 +34,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       return scroll(request.ref, request.left, request.top);
     if (request.op === "scrollIntoView") return scrollIntoView(request.ref);
     if (request.op === "frames") return listFrames();
+    if (request.op === "frameBox") return frameBox(request.ref, request.reveal);
+    if (request.op === "hitFrame") return hitFrame(request.ref, request.points);
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

@@ -35,6 +35,25 @@ struct ToolMappingTests {
     #expect(schema["required"] == .array(["ref", "value"]))
   }
 
+  @Test func refsAreTopFrameNumbersOrFramePaths() throws {
+    #expect(try map("click", ["ref": .number(12)]) == .click(tabId: 20, ref: 12))
+    #expect(try map("click", ["ref": "12"]) == .click(tabId: 20, ref: 12))
+    #expect(try map("click", ["ref": "5:12"]) == .click(tabId: 20, ref: PageRef(frames: [5], local: 12)))
+    #expect(try map("scroll_to", ["ref": "5:3:12"]) == .scrollTo(tabId: 20, ref: PageRef(frames: [5, 3], local: 12)))
+    #expect(try map("read_page", ["ref_id": "5:2"]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: PageRef(frames: [5], local: 2), depth: nil))
+    #expect(throws: Failure.self) { try map("click", ["ref": .number(5.12)]) }
+    #expect(throws: Failure.self) { try map("click", ["ref": "5.12"]) }
+    #expect(throws: Failure.self) { try map("click", ["ref": "1:2:3:4:5"]) }
+    #expect(throws: Failure.self) { try map("click", ["ref": "5:"]) }
+    #expect(try CommandLineParsing.parse(["click", "5:3:12"]).command == .click(tabId: nil, ref: PageRef(frames: [5, 3], local: 12)))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["click", "5.12"]) }
+  }
+
+  @Test func refSchemaTakesIntegerOrString() {
+    let click = Tools.definitions.first { $0.name == "click" }!
+    #expect(click.properties["ref"]?["type"] == .array(["integer", "string"]))
+  }
+
   @Test func omittedTabIdUsesTheSessionTab() throws {
     #expect(try map("click", ["ref": .number(4)]) == .click(tabId: 20, ref: 4))
     #expect(try map("get_page_text") == .pageText(tabId: 20, maxChars: AppCommand.defaultMaxChars))

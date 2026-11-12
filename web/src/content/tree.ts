@@ -1,4 +1,8 @@
-import type { Failure, ReadPageResult } from "../shared/protocol";
+import type {
+  Failure,
+  FramePlaceholder,
+  ReadPageResult,
+} from "../shared/protocol";
 import {
   authorRoles,
   collapse,
@@ -8,6 +12,7 @@ import {
   roleOf,
 } from "./describe";
 import { flatChildren, isPruned } from "./flat";
+import { blocksScripts, frameIdOf, sourceOf } from "./frames";
 import { readViewport } from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
 import { isInteractive } from "./snapshot";
@@ -24,6 +29,8 @@ type Output = {
   length: number;
   maxChars: number;
   maxDepth: number;
+  prefix: string;
+  frames: FramePlaceholder[];
 };
 
 let leafTags = new Set([
@@ -89,6 +96,8 @@ function add(items: Item[], child: Node, walk: Walk) {
 
   let role = roleOf(child);
   let interactive = isInteractive(child);
+  // An iframe whose frame can be read stays as the line its document hangs under.
+  let hostsFrame = child instanceof HTMLIFrameElement && frameIdOf(child) >= 0;
   let children =
     leafTags.has(child.localName) || isEditableRoot(child)
       ? []
@@ -102,7 +111,7 @@ function add(items: Item[], child: Node, walk: Walk) {
   let shown = wrapsOne
     ? false
     : interactiveOnly
-      ? interactive
+      ? interactive || hostsFrame
       : interactive ||
         (role === "img"
           ? name !== ""
@@ -258,6 +267,18 @@ function statesOf(element: Element, role: string) {
   if (element instanceof HTMLAnchorElement && element.hasAttribute("href"))
     states.push(`href=${shortHref(element)}`);
 
+  if (element instanceof HTMLIFrameElement) {
+    let source = sourceOf(element);
+    let host = URL.canParse(source) ? new URL(source).host : "";
+    if (host) states.push(`host=${host}`);
+
+    if (source === "srcdoc") states.push(source);
+
+    if (blocksScripts(element)) states.push("sandboxed");
+
+    if (frameIdOf(element) < 0) states.push("(frame not loaded)");
+  }
+
   return states;
 }
 
@@ -286,9 +307,21 @@ function render(items: Item[], depth: number, output: Output): boolean {
     let { element, role, name, children } = item;
     let label = name ? ` ${JSON.stringify(name)}` : "";
     let states = statesOf(element, role).map((state) => ` ${state}`);
-    let line = `${indent}${role}${label} [ref=${refFor(element)}]${states.join("")}`;
+    let ref = refFor(element);
+    let line = `${indent}${role}${label} [ref=${output.prefix}${ref}]${states.join("")}`;
 
     if (!emit(output, line)) return false;
+
+    let frameId =
+      element instanceof HTMLIFrameElement ? frameIdOf(element) : -1;
+
+    if (frameId >= 0)
+      output.frames.push({
+        ref,
+        frameId,
+        line: output.lines.length - 1,
+        depth,
+      });
 
     if (depth + 1 >= output.maxDepth) continue;
 
@@ -308,12 +341,26 @@ let newWalk = (
   left: Number.isFinite(maxDepth) ? Infinity : maxChars * 3,
 });
 
-function textOf(items: Item[], walk: Walk, maxChars: number, maxDepth: number) {
-  let output: Output = { lines: [], length: 0, maxChars, maxDepth };
+function textOf(
+  items: Item[],
+  walk: Walk,
+  maxChars: number,
+  maxDepth: number,
+  prefix: string,
+) {
+  let output: Output = {
+    lines: [],
+    length: 0,
+    maxChars,
+    maxDepth,
+    prefix,
+    frames: [],
+  };
   let complete = render(items, 0, output);
   return {
     text: output.lines.join("\n"),
     truncated: !complete || walk.left <= 0,
+    frames: output.frames,
   };
 }
 
@@ -322,9 +369,10 @@ export function treeText(
   filter: "interactive" | "all",
   maxChars: number,
   maxDepth = Infinity,
+  prefix = "",
 ) {
   let walk = newWalk(filter, maxChars, maxDepth);
-  return textOf(build(root, walk), walk, maxChars, maxDepth);
+  return textOf(build(root, walk), walk, maxChars, maxDepth, prefix);
 }
 
 // ref limits the tree to that element and what is inside it; depth limits how many levels are shown.
@@ -333,6 +381,7 @@ export function readPage(
   maxChars: number,
   ref: number | null,
   depth: number | null,
+  prefix: string,
 ): ReadPageResult | Failure {
   pruneRefs();
   let walk = newWalk(filter, maxChars, depth ?? Infinity);
@@ -354,6 +403,6 @@ export function readPage(
     url: location.href,
     title: document.title,
     viewport: readViewport(),
-    ...textOf(items, walk, maxChars, depth ?? Infinity),
+    ...textOf(items, walk, maxChars, depth ?? Infinity, prefix),
   };
 }

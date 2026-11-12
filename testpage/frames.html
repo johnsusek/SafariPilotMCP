@@ -29,6 +29,8 @@
     <iframe title="Sandboxed" sandbox="" src="frame-child.html?name=sandboxed"></iframe>
     <iframe title="Nested" src="frame-child.html?name=outer&amp;nest=1"></iframe>
     <iframe title="Scaled" id="scaled" src="frame-child.html?name=scaled"></iframe>
+    <div style="height: 2000px"></div>
+    <iframe title="Lazy" loading="lazy" src="frame-child.html?name=lazy"></iframe>
     <script>
       let other = location.hostname === "localhost" ? "127.0.0.1" : "localhost";
       document.getElementById("cross").src = `${location.protocol}//${other}:${location.port}/frame-child.html?name=cross`;

@@ -1,5 +1,5 @@
-// Background sends a ContentRequest with browser.tabs.sendMessage; the content script answers with a ContentResponse.
-// All coordinates are CSS px relative to the top-level layout viewport.
+// Background sends a ContentRequest to one frame with browser.tabs.sendMessage; that frame's content script answers with a ContentResponse.
+// Refs here are that frame's own numbers, and coordinates are CSS px relative to that frame's layout viewport; the background composes them into top-frame ones.
 
 export type Rect = {
   left: number;
@@ -50,38 +50,64 @@ export type LoggedEvent = {
 export type ContentRequest =
   | { op: "ping" }
   | { op: "snapshot" }
-  | { op: "locate"; ref: number }
+  // clip limits the points tried to that part of this frame (what its ancestors leave visible); scroll false skips centering the element.
+  | { op: "locate"; ref: number; clip: Rect | null; scroll: boolean }
   // arm turns on move and drag-over logging until the next events request.
   | { op: "events"; clear: boolean; arm: boolean }
   | { op: "inspect"; ref: number }
+  // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
   | {
       op: "readPage";
       filter: "interactive" | "all";
       maxChars: number;
       ref: number | null;
       depth: number | null;
+      prefix: string;
     }
   | { op: "find"; name: string; role: string }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: number | null; left: number; top: number }
   | { op: "scrollIntoView"; ref: number }
-  | { op: "frames" };
+  | { op: "frames" }
+  // reveal scrolls the iframe into view when part of it is outside the viewport.
+  | { op: "frameBox"; ref: number; reveal: boolean }
+  // Whether each point lands on the iframe itself, in this frame's coordinates.
+  | { op: "hitFrame"; ref: number; points: Point[] };
 
 export type Failure = { ok: false; error: string };
 
-// frames: this document's iframes with the frameId Safari gives each (-1 when it has none yet).
+// An iframe in this document: frameId is the id Safari gives its frame (-1 when it has none yet), box its content box,
+// clip the part of box this document shows (null when none), and transformed whether a CSS transform or zoom moves it,
+// which Accessibility ignores. sandbox is the attribute's value, null when absent.
 export type FrameEntry = {
   ref: number;
   frameId: number;
   src: string;
   sandbox: string | null;
-  rect: Rect;
+  box: Rect;
+  clip: Rect | null;
+  transformed: boolean;
 };
 export type FramesResult = {
   ok: true;
   url: string;
   title: string;
+  viewport: Viewport;
   frames: FrameEntry[];
+};
+// origin is this frame's performance.timeOrigin; moved is whether reveal scrolled.
+export type FrameBoxResult = {
+  ok: true;
+  frame: FrameEntry;
+  moved: boolean;
+  viewport: Viewport;
+  origin: number;
+};
+// hitDescription describes what the first point lands on.
+export type HitFrameResult = {
+  ok: true;
+  hits: boolean[];
+  hitDescription: string;
 };
 export type PingResult = { ok: true; url: string; title: string };
 export type SnapshotResult = {
@@ -101,6 +127,8 @@ export type LocateResult = {
   covered: boolean;
   hitDescription: string;
   viewport: Viewport;
+  // With a clip: up to 8 points on the element, best first, for the background to test against the ancestor frames.
+  candidates: Point[];
 };
 // origin is performance.timeOrigin, which changes when the page navigates or reloads.
 export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
@@ -135,6 +163,13 @@ export type InspectResult = {
 // readPage: an indented element tree as text, one node per line, with refs from the same
 // ref space as snapshot and locate. filter "interactive" keeps only actionable elements;
 // ref limits it to that element's subtree and depth to that many levels.
+// frames are the iframe lines whose frame has a content script to read: line is the index into the text's lines and depth that line's indent level.
+export type FramePlaceholder = {
+  ref: number;
+  frameId: number;
+  line: number;
+  depth: number;
+};
 export type ReadPageResult = {
   ok: true;
   url: string;
@@ -142,6 +177,7 @@ export type ReadPageResult = {
   viewport: Viewport;
   text: string;
   truncated: boolean;
+  frames: FramePlaceholder[];
 };
 
 // find: up to 20 visible elements whose name contains name and whose role equals role, case-insensitively; an empty field matches all.
@@ -172,4 +208,6 @@ export type ContentResponse =
   | FindResult
   | PageTextResult
   | ScrollResult
-  | FramesResult;
+  | FramesResult
+  | FrameBoxResult
+  | HitFrameResult;

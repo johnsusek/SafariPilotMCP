@@ -3,7 +3,7 @@ import Foundation
 
 /// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, then reads the control back from the page.
 extension Commands {
-  func formInput(_ tabId: Int?, _ ref: Int, _ value: FormValue) async throws -> CLIReply {
+  func formInput(_ tabId: Int?, _ ref: PageRef, _ value: FormValue) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let control = try await inspect(tab.id, ref)
 
@@ -23,12 +23,12 @@ extension Commands {
     }
   }
 
-  private func inspect(_ tabId: Int, _ ref: Int) async throws -> InspectResult {
+  private func inspect(_ tabId: Int, _ ref: PageRef) async throws -> InspectResult {
     try await content(tabId, .inspect(ref: ref)).decode(InspectResult.self)
   }
 
   /// The page applies an AX action asynchronously, so the control is re-read for up to 500 ms until it shows the change.
-  private func settled(_ tabId: Int, _ ref: Int, until done: (InspectResult) -> Bool) async throws -> InspectResult {
+  private func settled(_ tabId: Int, _ ref: PageRef, until done: (InspectResult) -> Bool) async throws -> InspectResult {
     var control = try await inspect(tabId, ref)
 
     for _ in 0 ..< 5 where !done(control) {
@@ -40,7 +40,7 @@ extension Commands {
   }
 
   /// Reads the value back from the page rather than the AX element, which WebKit may replace mid-call when focus changes the field's role (YouTube's search box).
-  private func setText(_ tab: TabInfo, _ ref: Int, _ secure: Bool, _ text: String) async throws -> CLIReply {
+  private func setText(_ tab: TabInfo, _ ref: PageRef, _ secure: Bool, _ text: String) async throws -> CLIReply {
     let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
     let outcome = try AXEngine.type(text, into: match)
@@ -54,7 +54,7 @@ extension Commands {
     ] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
-      "ref": .number(Double(ref)),
+      "ref": .string(ref.description),
       "focusedRole": .string(outcome.focused.role),
       "focusResult": .string(outcome.focusResult.name),
       "valueRole": .string(outcome.valueNode.role),
@@ -64,7 +64,7 @@ extension Commands {
     return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)
   }
 
-  private func setChecked(_ tab: TabInfo, _ ref: Int, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
+  private func setChecked(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
     let kind = control.kind.rawValue
     let wanted: Bool
 
@@ -76,7 +76,7 @@ extension Commands {
     }
 
     let state = { (checked: Bool?) in checked == true ? "checked" : "unchecked" }
-    var data: [String: JSONValue] = ["tabId": .number(Double(tab.id)), "ref": .number(Double(ref)), "kind": .string(kind), "checked": .bool(wanted)]
+    var data: [String: JSONValue] = ["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string(kind), "checked": .bool(wanted)]
 
     if control.checked == wanted { return CLIReply(ok: true, text: "\(kind) ref \(ref) is already \(state(wanted)); nothing pressed", data: .object(data)) }
 
@@ -97,7 +97,7 @@ extension Commands {
     return CLIReply(ok: true, text: "\(state(wanted)) \(kind) ref \(ref) by pressing \(pressed.summary)", data: .object(data))
   }
 
-  private func select(_ tab: TabInfo, _ ref: Int, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
+  private func select(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
     guard case let .text(wanted) = value else { throw Failure(description: "ref \(ref) is a select, so value must be an option's value or label") }
 
     let options = control.options ?? []
@@ -108,7 +108,7 @@ extension Commands {
     }
 
     let option = options[index]
-    var data: [String: JSONValue] = ["tabId": .number(Double(tab.id)), "ref": .number(Double(ref)), "index": .number(Double(index)), "value": .string(option.value), "label": .string(option.label)]
+    var data: [String: JSONValue] = ["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "index": .number(Double(index)), "value": .string(option.value), "label": .string(option.label)]
 
     if control.selectedIndex == index { return CLIReply(ok: true, text: "select ref \(ref) already shows \"\(option.label)\"; nothing changed", data: .object(data)) }
 
@@ -131,7 +131,7 @@ extension Commands {
   }
 
   /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.
-  private func setDateTime(_ tab: TabInfo, _ ref: Int, _ kind: ControlKind, _ value: String) async throws -> CLIReply {
+  private func setDateTime(_ tab: TabInfo, _ ref: PageRef, _ kind: ControlKind, _ value: String) async throws -> CLIReply {
     let parts = try dateTimeParts(kind, value, ref)
     let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
@@ -181,12 +181,12 @@ extension Commands {
       "typed \(typed.joined(separator: ", ")) into \(kind.rawValue) ref \(ref)",
       "read back: \"\(after.value ?? "")\" \(matched ? "(matches)" : "(DIFFERS)")",
     ] + matchLines(located, match)
-    let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .number(Double(ref)), "kind": .string(kind.rawValue), "readBack": .string(after.value ?? "")])
+    let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string(kind.rawValue), "readBack": .string(after.value ?? "")])
     return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)
   }
 
   /// Splits an input value (YYYY-MM-DD, HH:MM[:SS[.mmm]], or both joined by T) into parts keyed by WebKit's field titles, hour in 24 h.
-  private func dateTimeParts(_ kind: ControlKind, _ value: String, _ ref: Int) throws -> [String: String] {
+  private func dateTimeParts(_ kind: ControlKind, _ value: String, _ ref: PageRef) throws -> [String: String] {
     let formats: [ControlKind: String] = [.date: "YYYY-MM-DD", .time: "HH:MM or HH:MM:SS", .dateTimeLocal: "YYYY-MM-DDTHH:MM"]
     let bad = Failure(description: "ref \(ref) is a \(kind.rawValue) input, so value must look like \(formats[kind] ?? "?"), not \"\(value)\"")
     let pieces = value.split(separator: "T", omittingEmptySubsequences: false)

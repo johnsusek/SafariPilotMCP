@@ -146,7 +146,7 @@ struct Commands {
     return try CLIReply(ok: true, text: "closed tab \(response.decode(ClosedResult.self).closed)", data: response)
   }
 
-  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int, _ ref: Int?, _ depth: Int?) async throws -> CLIReply {
+  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int, _ ref: PageRef?, _ depth: Int?) async throws -> CLIReply {
     let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars, ref: ref, depth: depth))
     let result = try response.decode(ReadPageResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
@@ -173,7 +173,7 @@ struct Commands {
     return CLIReply(ok: true, text: "\(result.title) | \(result.url)\n\(result.text)\(truncated)", data: response)
   }
 
-  private func scroll(_ tabId: Int?, _ ref: Int?, _ left: Double, _ top: Double) async throws -> CLIReply {
+  private func scroll(_ tabId: Int?, _ ref: PageRef?, _ left: Double, _ top: Double) async throws -> CLIReply {
     let response = try await content(tabId, .scroll(ref: ref, left: left, top: top))
     let result = try response.decode(ScrollResult.self)
     let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
@@ -181,7 +181,7 @@ struct Commands {
     return CLIReply(ok: true, text: text, data: response)
   }
 
-  private func scrollTo(_ tabId: Int?, _ ref: Int) async throws -> CLIReply {
+  private func scrollTo(_ tabId: Int?, _ ref: PageRef) async throws -> CLIReply {
     let response = try await content(tabId, .scrollIntoView(ref: ref))
     let result = try response.decode(ScrollResult.self)
     let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
@@ -228,7 +228,7 @@ struct Commands {
 
   /// Locate, then refuse to act when the content script says the point would land on something else.
   /// Pressing needs the element on top, as a person would; focusing and typing reach a covered field too (npm's search box sits under an invisible button once typed in).
-  func locateHittable(_ tabId: Int, _ ref: Int, coveredOK: Bool = false) async throws -> LocateResult {
+  func locateHittable(_ tabId: Int, _ ref: PageRef, coveredOK: Bool = false) async throws -> LocateResult {
     let located = try await content(tabId, .locate(ref: ref)).decode(LocateResult.self)
 
     if !located.hitsTarget, !(coveredOK && located.covered) {
@@ -239,6 +239,13 @@ struct Commands {
     return located
   }
 
+  /// Listeners never run in a frame sandboxed without allow-scripts, so a click or key there could not be confirmed.
+  func refuseSandboxed(_ located: LocateResult, _ action: String) throws {
+    guard located.sandboxed else { return }
+
+    throw Failure(description: "ref \(located.ref) is inside a frame sandboxed without allow-scripts, where the page's listeners never run, so \(action) there cannot be verified; nothing was sent")
+  }
+
   func matchLines(_ locate: LocateResult, _ match: AXEngine.Match) -> [String] {
     [
       "locate: hitsTarget=\(locate.hitsTarget) \(locate.hitDescription)",
@@ -247,9 +254,10 @@ struct Commands {
     ]
   }
 
-  private func click(_ tabId: Int?, _ ref: Int) async throws -> CLIReply {
+  private func click(_ tabId: Int?, _ ref: PageRef) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
+    try refuseSandboxed(located, "a click")
     let match = try await AXEngine.resolve(located, tab: tab)
 
     // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter, as from the keyboard.
@@ -258,27 +266,36 @@ struct Commands {
       return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data)
     }
 
-    let origin = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self).origin
+    let before = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
     let pressed = try AXEngine.press(match)
     try await Task.sleep(for: .milliseconds(150))
     let after = try? await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
-    let clicks = after?.events.filter { $0.type == "click" && $0.isTrusted } ?? []
-    let navigated = after?.origin != origin
+    // The click is logged by the frame that owns the element; a link there may navigate or remove just that frame.
+    let frame = ref.frame
+    let clicks = after?.events.filter { $0.type == "click" && $0.isTrusted && $0.frame == frame } ?? []
+    let pageNavigated = after != nil && after?.origin != before.origin
+    let frameNavigated = !frame.isEmpty && after != nil && after?.origins[frame] != before.origins[frame]
     var lines = ["pressed \(pressed.summary) via AXPress (\(pressed.depth) up from match) in tab \(tab.id)"]
 
+    if after == nil {
+      lines[0] += ", then the page stopped answering: it is navigating, or the click opened a dialog such as alert() that blocks it until dismissed"
+      return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
+    }
+
     // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
-    if !navigated, clicks.isEmpty {
+    if !pageNavigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
       return CLIReply(ok: false, text: (lines + matched).joined(separator: "\n"), data: .null)
     }
 
-    lines[0] += navigated ? "; the page navigated" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
+    let outcome = pageNavigated ? "; the page navigated" : frameNavigated ? "; the frame of iframe \(frame) navigated or closed" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
+    lines[0] += outcome
     lines += matched
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
-      "ref": .number(Double(ref)),
+      "ref": .string(ref.description),
       "pressedRole": .string(pressed.role),
       "pressedLabel": .string(pressed.label),
       "action": .string(kAXPressAction),
@@ -291,7 +308,7 @@ struct Commands {
   }
 
   /// Dumps the AX windows and frames next to the content script's viewport so window matching and mapping can be calibrated in one run.
-  private func debugAX(_ tabId: Int?, _ ref: Int?) async throws -> CLIReply {
+  private func debugAX(_ tabId: Int?, _ ref: PageRef?) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let snapshot = try await content(tab.id, .snapshot).decode(SnapshotResult.self)
     let viewport = snapshot.viewport
@@ -371,7 +388,7 @@ struct Commands {
       lines.append("\(indent)frame \(id) \(node["url"]?.string ?? "?") \"\(node["title"]?.string ?? "")\" clicks \(Int(node["clicks"]?.number ?? 0)) keydowns \(Int(node["keydowns"]?.number ?? 0))")
 
       for entry in node["frames"]?.array ?? [] {
-        let rect = entry["rect"]
+        let rect = entry["box"]
         let box = [rect?["left"], rect?["top"], rect?["width"], rect?["height"]].map { String(format: "%.0f", $0?.number ?? -1) }
         let sandbox = entry["sandbox"]?.string.map { " sandbox=\"\($0)\"" } ?? ""
         lines.append("\(indent)  iframe [\(Int(entry["ref"]?.number ?? -1))] frameId \(Int(entry["frameId"]?.number ?? -1)) \(entry["src"]?.string ?? "?")\(sandbox) (\(box[0]), \(box[1]), \(box[2]) x \(box[3]))")

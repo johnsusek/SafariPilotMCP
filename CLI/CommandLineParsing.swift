@@ -11,7 +11,7 @@ enum CommandLineParsing {
     status                          app, extension and background state
     ping                            title and URL of the tab
     snapshot                        interactive elements with refs
-    click REF                       locate REF, then AXPress it
+    click REF                       locate REF, then AXPress it; REF is 12, or 5:12 inside iframe 5's frame
     form-input REF VALUE            set a text field, checkbox or radio (true|false), or select option
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     key [--ref REF] --text TEXT     type TEXT one key per character
@@ -54,17 +54,17 @@ enum CommandLineParsing {
     case "status": invocation = Invocation(command: .status)
     case "ping": invocation = Invocation(command: .ping(tabId: tabId))
     case "snapshot": invocation = Invocation(command: .snapshot(tabId: tabId))
-    case "click": invocation = try Invocation(command: .click(tabId: tabId, ref: integer(rest.first, "REF")))
+    case "click": invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF")))
     case "events": invocation = Invocation(command: .events(tabId: tabId, clear: flag("--clear", &rest)))
     case "tabs": invocation = Invocation(command: .tabs)
     case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first, windowId: nil))
     case "tab-select": invocation = try Invocation(command: .tabSelect(tabId: integer(rest.first, "ID")))
     case "tab-close": invocation = try Invocation(command: .tabClose(tabId: integer(rest.first, "ID")))
     case "read-page":
-      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let depth = try option("--depth", &rest).map { try integer($0, "--depth") }
       invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth))
-    case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, ref: integer(rest.first, "REF")))
+    case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, ref: ref(rest.first, "REF")))
     case "resize":
       guard rest.count == 2 else { throw Failure(description: "resize needs WIDTH and HEIGHT") }
 
@@ -83,10 +83,10 @@ enum CommandLineParsing {
       }
       invocation = try Invocation(command: .screenshot(tabId: tabId, corners: region, scale: scale), outputPath: rest.first)
     case "debug-frames": invocation = Invocation(command: .debugFrames(tabId: tabId))
-    case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try integer($0, "REF") }))
+    case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try Self.ref($0, "REF") }))
     case "debug-cg":
       let windowFields = !flag("--no-window-fields", &rest)
-      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let probe = try probe(rest, ref: ref)
 
       if !windowFields, probe.isKey { throw Failure(description: "--no-window-fields applies only to mouse actions") }
@@ -96,7 +96,7 @@ enum CommandLineParsing {
       guard rest.count >= 2 else { throw Failure(description: "form-input needs REF and VALUE") }
 
       // Free text is taken verbatim, so it skips the stray option check below.
-      return try Invocation(command: .formInput(tabId: tabId, ref: integer(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
+      return try Invocation(command: .formInput(tabId: tabId, ref: ref(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
     case "find":
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")
@@ -116,12 +116,12 @@ enum CommandLineParsing {
 
       if let textStart { rest.removeSubrange(textStart...) }
 
-      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let times = try option("--repeat", &rest).map { try integer($0, "--repeat") } ?? 1
       let keys = text != nil && rest.isEmpty ? nil : rest.joined(separator: " ")
       invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, ref: ref, times: times))
     case "scroll":
-      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
 
       guard let direction = rest.first else { throw Failure(description: "scroll needs a direction: up, down, left or right") }
 
@@ -139,7 +139,7 @@ enum CommandLineParsing {
     return invocation
   }
 
-  private static func probe(_ words: [String], ref: Int?) throws -> CGProbe {
+  private static func probe(_ words: [String], ref: PageRef?) throws -> CGProbe {
     let action = words.first ?? "missing"
     let arguments = Array(words.dropFirst())
     let arity = ["key": 1, "click": 1, "hover": 1, "drag": 2]
@@ -151,9 +151,9 @@ enum CommandLineParsing {
 
     switch action {
     case "key": return try .key(KeyChord.parse(arguments[0]), ref: ref)
-    case "click": return try .click(ref: integer(arguments[0], "REF"))
-    case "hover": return try .hover(ref: integer(arguments[0], "REF"))
-    default: return try .drag(from: integer(arguments[0], "FROM"), to: integer(arguments[1], "TO"))
+    case "click": return try .click(ref: Self.ref(arguments[0], "REF"))
+    case "hover": return try .hover(ref: Self.ref(arguments[0], "REF"))
+    default: return try .drag(from: Self.ref(arguments[0], "FROM"), to: Self.ref(arguments[1], "TO"))
     }
   }
 
@@ -172,6 +172,11 @@ enum CommandLineParsing {
 
     words.remove(at: index)
     return true
+  }
+
+  private static func ref(_ text: String?, _ name: String) throws -> PageRef {
+    guard let text else { throw Failure(description: "\(name) is missing") }
+    return try PageRef(parsing: text)
   }
 
   private static func integer(_ text: String?, _ name: String) throws -> Int {

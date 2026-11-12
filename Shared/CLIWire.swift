@@ -19,8 +19,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case status
   case ping(tabId: Int?)
   case snapshot(tabId: Int?)
-  case click(tabId: Int?, ref: Int)
-  case formInput(tabId: Int?, ref: Int, value: FormValue)
+  case click(tabId: Int?, ref: PageRef)
+  case formInput(tabId: Int?, ref: PageRef, value: FormValue)
   case events(tabId: Int?, clear: Bool)
   case tabs
   /// Opens the tab in windowId, or in a new window when it is nil or closed.
@@ -30,17 +30,17 @@ enum AppCommand: Codable, Sendable, Equatable {
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
   /// ref limits the tree to that element's subtree and depth to that many levels.
-  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: Int?, depth: Int?)
+  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(tabId: Int?, name: String, role: String)
   case pageText(tabId: Int?, maxChars: Int)
-  case scroll(tabId: Int?, ref: Int?, left: Double, top: Double)
-  case scrollTo(tabId: Int?, ref: Int)
+  case scroll(tabId: Int?, ref: PageRef?, left: Double, top: Double)
+  case scrollTo(tabId: Int?, ref: PageRef)
   /// Presses chords in order, the whole sequence `times` times, after focusing ref when given.
-  case key(tabId: Int?, chords: [KeyChord], ref: Int?, times: Int)
+  case key(tabId: Int?, chords: [KeyChord], ref: PageRef?, times: Int)
   /// region is in the full screenshot's pixels; scale shrinks the result.
   case screenshot(tabId: Int?, region: PixelRect?, scale: Double)
   case resizeWindow(tabId: Int?, width: Int, height: Int)
-  case debugAX(tabId: Int?, ref: Int?)
+  case debugAX(tabId: Int?, ref: PageRef?)
   /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call.
   case debugFrames(tabId: Int?)
   /// windowFields sets the window-under-pointer fields on mouse posts.
@@ -71,7 +71,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     return .resizeWindow(tabId: tabId, width: width, height: height)
   }
 
-  static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: Int?, depth: Int?) throws -> AppCommand {
+  static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: PageRef?, depth: Int?) throws -> AppCommand {
     if let depth, depth < 1 { throw Failure(description: "depth must be at least 1, not \(depth)") }
 
     return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth)
@@ -93,7 +93,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   }
 
   /// Scrolls `amount` steps of `scrollStep` CSS px.
-  static func scroll(tabId: Int?, ref: Int?, direction: String, amount: Double) throws -> AppCommand {
+  static func scroll(tabId: Int?, ref: PageRef?, direction: String, amount: Double) throws -> AppCommand {
     let distance = amount * scrollStep
 
     switch direction {
@@ -106,7 +106,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   }
 
   /// Chords come from keys split on whitespace or from text one character each; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
-  static func key(tabId: Int?, keys: String?, text: String?, ref: Int?, times: Int) throws -> AppCommand {
+  static func key(tabId: Int?, keys: String?, text: String?, ref: PageRef?, times: Int) throws -> AppCommand {
     let chords: [KeyChord]
 
     switch (keys, text) {
@@ -146,10 +146,10 @@ enum FormValue: Codable, Sendable, Equatable {
 
 /// The Quartz input debug-cg posts; refs are page element refs.
 enum CGProbe: Codable, Sendable, Equatable {
-  case key(KeyChord, ref: Int?)
-  case click(ref: Int)
-  case hover(ref: Int)
-  case drag(from: Int, to: Int)
+  case key(KeyChord, ref: PageRef?)
+  case click(ref: PageRef)
+  case hover(ref: PageRef)
+  case drag(from: PageRef, to: PageRef)
 
   var isKey: Bool { if case .key = self { true } else { false } }
 }
