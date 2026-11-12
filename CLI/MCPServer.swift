@@ -34,21 +34,39 @@ enum MCPServer {
     }
   }
 
-  /// Runs actions in order, labeling each one's output, and stops at the first failure.
+  /// Runs actions in order, labeling each one's output, and stops at the first failure. Text between images is merged into one block joined by line breaks, since clients concatenate blocks with no separator.
   static func batch(_ actions: [(name: String, input: [String: JSONValue])]) async -> CallTool.Result {
     var content: [Tool.Content] = []
+    var lines: [String] = []
+
+    func flush() {
+      if !lines.isEmpty { content.append(text(lines.joined(separator: "\n"))) }
+
+      lines = []
+    }
 
     for (index, action) in actions.enumerated() {
       let outcome = await run(action.name, action.input)
-      content.append(text("\(index + 1)/\(actions.count) \(action.name)\(outcome.ok ? "" : " failed"):"))
-      content += outcome.content
+      lines.append("\(index + 1)/\(actions.count) \(action.name)\(outcome.ok ? "" : " failed"):")
+
+      for item in outcome.content {
+        if case let .text(body, _, _) = item {
+          lines.append(body)
+          continue
+        }
+
+        flush()
+        content.append(item)
+      }
 
       if !outcome.ok {
-        content.append(text("stopped after \(index + 1) of \(actions.count) actions"))
+        lines.append("stopped after \(index + 1) of \(actions.count) actions")
+        flush()
         return .init(content: content, isError: true)
       }
     }
 
+    flush()
     return .init(content: content, isError: false)
   }
 
