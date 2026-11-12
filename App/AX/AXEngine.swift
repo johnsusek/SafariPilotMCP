@@ -125,17 +125,26 @@ enum AXEngine {
     return Match(target: target, screenPoint: screenPoint, screenRect: screenRect, viewportFrame: frame, zoom: zoom, score: best.score, chain: best.lineage)
   }
 
-  static func press(_ match: Match) throws -> (pressed: AXNode, depth: Int) {
+  /// What was pressed, read before pressing since a press that navigates leaves the element unreadable.
+  struct Pressed {
+    let summary: String
+    let role: String
+    let label: String
+    let depth: Int
+  }
+
+  static func press(_ match: Match) throws -> Pressed {
     guard let depth = match.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else {
       throw Failure(description: "no element from the match up to the web area supports AXPress:\n\(describe(match.chain))")
     }
 
-    let pressed = match.chain[depth]
-    let error = AXUIElementPerformAction(pressed.element, kAXPressAction as CFString)
+    let node = match.chain[depth]
+    let pressed = Pressed(summary: node.summary, role: node.role, label: node.label, depth: depth)
+    let error = AXUIElementPerformAction(node.element, kAXPressAction as CFString)
 
     guard error == .success else { throw Failure(description: "AXPress on \(pressed.summary) failed: \(error.name)") }
 
-    return (pressed, depth)
+    return pressed
   }
 
   struct TypeOutcome {
