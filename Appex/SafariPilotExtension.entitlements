@@ -6,5 +6,9 @@
 	<true/>
 	<key>com.apple.security.network.client</key>
 	<true/>
+	<key>com.apple.security.application-groups</key>
+	<array>
+		<string>WX2UGCD2SK.net.johnsolo.SafariPilot</string>
+	</array>
 </dict>
 </plist>

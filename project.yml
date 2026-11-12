@@ -41,6 +41,8 @@ targets:
       path: App/SafariPilot.entitlements
       properties:
         com.apple.security.app-sandbox: false
+        com.apple.security.application-groups:
+          - WX2UGCD2SK.net.johnsolo.SafariPilot
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot
@@ -72,6 +74,8 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+        com.apple.security.application-groups:
+          - WX2UGCD2SK.net.johnsolo.SafariPilot
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Extension
