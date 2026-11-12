@@ -41,7 +41,7 @@ enum Tools {
       "region": .object(["type": "array", "items": .object(["type": "number"]), "minItems": .number(4), "maxItems": .number(4), "description": "[x0, y0, x1, y1] in the pixels of a full screenshot, whose size every screenshot reports, to capture just that rectangle."]),
       "scale": property("number", "Factor from 0.1 to 1 to shrink the image by; defaults to 1."),
     ]),
-    ToolDefinition(name: "resize_window", description: "Resizes the Safari window that holds a tab to a width and height in points.", properties: ["tabId": tabId, "width": property("integer", "Window width in points."), "height": property("integer", "Window height in points.")], required: ["width", "height"]),
+    ToolDefinition(name: "resize_window", description: "Resizes the Safari window that holds a tab to a width and height in points that fit its screen.", properties: ["tabId": tabId, "width": property("integer", "Window width in points."), "height": property("integer", "Window height in points.")], required: ["width", "height"]),
     ToolDefinition(name: "wait", description: "Waits a number of seconds, up to \(Int(maxWait)), for the page to change.", properties: ["seconds": property("number", "Seconds to wait, up to \(Int(maxWait)).")], required: ["seconds"]),
     ToolDefinition(name: "browser_batch", description: "Runs several tool calls in order in one round trip and returns each one's output, stopping at the first failure.", properties: ["actions": .object([
       "type": "array",

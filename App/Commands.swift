@@ -1,3 +1,4 @@
+import AppKit
 import ApplicationServices
 import Foundation
 
@@ -180,8 +181,14 @@ struct Commands {
   }
 
   /// Safari may clamp the size to the screen, so the reply reports the frame it actually got.
+  /// Sizes past the window's screen are refused, since Safari keeps an oversized width and leaves the window partly off screen.
   private func resizeWindow(_ tabId: Int?, _ width: Int, _ height: Int) async throws -> CLIReply {
-    let response = try await call(.resize(tabId: tabId, width: width, height: height))
+    let current = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let room = try ScreenFit.room(for: current.windowFrame, screens: NSScreen.screens.map { ($0.frame, $0.visibleFrame) })
+
+    guard Double(width) <= room.width, Double(height) <= room.height else { throw Failure(description: "\(width) x \(height) does not fit the \(Int(room.width)) x \(Int(room.height)) points free on the window's screen") }
+
+    let response = try await call(.resize(tabId: current.id, width: width, height: height))
     let tab = try response.decode(TabResult.self).tab
 
     guard let frame = tab.windowFrame else { return CLIReply(ok: true, text: "resized window w\(tab.windowId); its new frame is unknown", data: response) }
