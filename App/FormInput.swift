@@ -84,7 +84,7 @@ extension Commands {
 
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
-    let (pressed, _) = try AXEngine.press(match)
+    let pressed = try AXEngine.press(match)
     let after = try await settled(tab.id, ref) { $0.checked == wanted }
     data["pressedRole"] = .string(pressed.role)
 
@@ -215,19 +215,22 @@ extension Commands {
     return parts
   }
 
-  /// Safari moves AX focus asynchronously, so keys wait up to 1 s until the field itself is focused.
+  /// Safari moves AX focus asynchronously, so keys wait up to 1 s until the field itself is focused. Keys go to Safari's main window, so the field's window is made main first.
   private func awaitFocus(_ field: AXNode, in target: AXEngine.Target) async throws {
     let focused = { target.app.value(kAXFocusedUIElementAttribute).map { AXNode(element: $0 as! AXUIElement) } }
+    let isMain = { target.window.value(kAXMainAttribute) as? Bool == true }
+
+    if !isMain() { AXUIElementSetAttributeValue(target.window.element, kAXMainAttribute as CFString, kCFBooleanTrue) }
 
     for _ in 0 ..< 20 {
       if let node = focused(), CFEqual(node.element, field.element) { return }
 
+      // A window opened unfocused in the background never reports a focused element though keys still reach the field; the read-back catches a miss.
+      if focused() == nil, isMain() { return }
+
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    // A window opened unfocused in the background never reports a focused element though keys still reach the field; the read-back catches a miss.
-    if focused() == nil, target.window.value(kAXMainAttribute) as? Bool == true { return }
-
-    throw Failure(description: "set AXFocused on \(field.summary) but Safari reports focus on \(focused()?.summary ?? "nothing"); no keys were posted to it")
+    throw Failure(description: "set AXFocused on \(field.summary) but Safari reports focus on \(focused()?.summary ?? "nothing") in \(isMain() ? "the main window" : "a window that is not main"); no keys were posted to it")
   }
 }
