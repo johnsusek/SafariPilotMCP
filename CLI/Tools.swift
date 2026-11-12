@@ -28,7 +28,7 @@ enum Tools {
     ToolDefinition(name: "tab_close", description: "Closes a tab.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "navigate", description: "Loads a URL in a tab, or goes back or forward in its history when url is \"back\" or \"forward\", and waits for the page to load.", properties: ["tabId": tabId, "url": property("string", "URL to load, or \"back\" or \"forward\".")], required: ["url"]),
     ToolDefinition(name: "read_page", description: "Returns the page as an indented element tree whose refs work with click, type, key and scroll, limited to actionable elements when filter is \"interactive\".", properties: ["tabId": tabId, "filter": property("string", "\"all\" (default) or \"interactive\".", oneOf: ["all", "interactive"]), "max_chars": maxChars]),
-    ToolDefinition(name: "find", description: "Finds up to 20 visible elements whose role, name or text contains the query, case-insensitively, and returns them with refs.", properties: ["tabId": tabId, "query": property("string", "Text to look for.")], required: ["query"]),
+    ToolDefinition(name: "find", description: "Finds up to 20 visible elements whose accessible name contains name and whose role equals role, case-insensitively, and returns them with refs.", properties: ["tabId": tabId, "name": property("string", "Text the element's accessible name must contain."), "role": property("string", "Exact ARIA role, such as button, link, textbox, searchbox or combobox.")]),
     ToolDefinition(name: "get_page_text", description: "Returns the readable text of the page, preferring its main or article content.", properties: ["tabId": tabId, "max_chars": maxChars]),
     ToolDefinition(name: "click", description: "Clicks an element by ref with the macOS Accessibility press action, which fires trusted mousedown, mouseup and click but no pointer events, so elements that listen only for pointer events will not respond, and there is no hover, drag or right click.", properties: ["tabId": tabId, "ref": ref], required: ["ref"]),
     ToolDefinition(name: "type", description: "Replaces the whole value of a text field by ref through Accessibility, firing trusted beforeinput and input but no keystrokes; use key to append text or press keys such as Enter or Tab.", properties: ["tabId": tabId, "ref": ref, "text": property("string", "The field's new value.")], required: ["ref", "text"]),
@@ -74,7 +74,7 @@ enum Tools {
     case "tab_select": return try .tabSelect(tabId: arguments.require(tabId, "tabId"))
     case "tab_close": return try .tabClose(tabId: arguments.require(tabId, "tabId"))
     case "navigate": return try .navigation(tabId: page(), target: arguments.require(arguments.string("url"), "url"))
-    case "find": return try .find(tabId: page(), query: arguments.require(arguments.string("query"), "query"))
+    case "find": return try .find(tabId: page(), name: arguments.string("name") ?? "", role: arguments.string("role") ?? "")
     case "get_page_text": return try .pageText(tabId: page(), maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars)
     case "click": return try .click(tabId: page(), ref: arguments.require(arguments.integer("ref"), "ref"))
     case "type": return try .type(tabId: page(), ref: arguments.require(arguments.integer("ref"), "ref"), text: arguments.require(arguments.string("text"), "text"))

@@ -65,7 +65,7 @@ enum ContentRequest: Equatable, Sendable {
   case events(clear: Bool, arm: Bool)
   case inspect(ref: Int)
   case readPage(filter: ReadFilter, maxChars: Int)
-  case find(query: String)
+  case find(name: String, role: String)
   case pageText(maxChars: Int)
   case scroll(ref: Int?, left: Double, top: Double)
 
@@ -77,7 +77,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .events(clear, arm): ["op": "events", "clear": .bool(clear), "arm": .bool(arm)]
     case let .inspect(ref): ["op": "inspect", "ref": .number(Double(ref))]
     case let .readPage(filter, maxChars): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars))]
-    case let .find(query): ["op": "find", "query": .string(query)]
+    case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .number(Double($0)) } ?? .null, "left": .number(left), "top": .number(top)]
     }

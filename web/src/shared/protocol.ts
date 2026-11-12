@@ -55,7 +55,7 @@ export type ContentRequest =
   | { op: "events"; clear: boolean; arm: boolean }
   | { op: "inspect"; ref: number }
   | { op: "readPage"; filter: "interactive" | "all"; maxChars: number }
-  | { op: "find"; query: string }
+  | { op: "find"; name: string; role: string }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: number | null; left: number; top: number };
 
@@ -99,7 +99,7 @@ export type ReadPageResult = {
   truncated: boolean;
 };
 
-// find: up to 20 visible elements whose role, name or text contains the query, case-insensitively.
+// find: up to 20 visible elements whose name contains name and whose role equals role, case-insensitively; an empty field matches all.
 // Matches get refs even when they are not interactive.
 export type FindResult = { ok: true; matches: ElementInfo[] };
 

@@ -22,7 +22,7 @@ struct Commands {
     case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))
     case let .history(tabId, direction): try await tabReply("went \(direction.rawValue) to", call(.history(tabId: tabId, direction: direction)))
     case let .readPage(tabId, filter, maxChars): try await readPage(tabId, filter, maxChars)
-    case let .find(tabId, query): try await find(tabId, query)
+    case let .find(tabId, name, role): try await find(tabId, name, role)
     case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
@@ -149,10 +149,11 @@ struct Commands {
     return CLIReply(ok: true, text: result.text + truncated, data: response)
   }
 
-  private func find(_ tabId: Int?, _ query: String) async throws -> CLIReply {
-    let response = try await content(tabId, .find(query: query))
+  private func find(_ tabId: Int?, _ name: String, _ role: String) async throws -> CLIReply {
+    let response = try await content(tabId, .find(name: name, role: role))
     let lines = try response.decode(FindResult.self).matches.map(describe)
-    return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \"\(query)\"" : lines.joined(separator: "\n"), data: response)
+    let wanted = [role, name.isEmpty ? "" : "\"\(name)\""].filter { !$0.isEmpty }.joined(separator: " ")
+    return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \(wanted)" : lines.joined(separator: "\n"), data: response)
   }
 
   private func pageText(_ tabId: Int?, _ maxChars: Int) async throws -> CLIReply {

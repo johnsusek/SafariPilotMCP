@@ -17,34 +17,48 @@ beforeEach(() => {
   );
 });
 
-let names = (query: string) => {
-  let result = find(query);
+let names = (name: string, role = "") => {
+  let result = find(name, role);
   return result.ok ? result.matches.map((match) => match.name) : result.error;
 };
 
 describe("find", () => {
-  test("matches name, text and placeholder case-insensitively", () => {
+  test("matches accessible names case-insensitively, not text inside plain containers", () => {
     document.body.innerHTML =
       '<button>Save Draft</button><p>Draft saved at noon</p><input placeholder="Draft title"><span>Other</span>';
-    expect(names("DRAFT")).toEqual(["Save Draft", "", "Draft title"]);
+    expect(names("DRAFT")).toEqual(["Save Draft", "Draft title"]);
   });
 
-  test("non-interactive matches get refs that resolve", () => {
-    document.body.innerHTML = "<p>Shipping costs</p>";
-    let result = find("shipping");
+  test("a field inside a matching landmark is returned", () => {
+    document.body.innerHTML =
+      '<form role="search" aria-label="Search the web"><input type="search" aria-label="Search Wikipedia"></form>';
+    expect(names("search")).toEqual(["Search the web", "Search Wikipedia"]);
+  });
+
+  test("role filters exactly and works without a name", () => {
+    document.body.innerHTML =
+      '<div role="search"><input type="search" aria-label="Query"></div><a href="#">Search help</a><textarea role="combobox" aria-label="Ask"></textarea>';
+    expect(names("", "searchbox")).toEqual(["Query"]);
+    expect(names("search", "link")).toEqual(["Search help"]);
+    expect(names("", "COMBOBOX")).toEqual(["Ask"]);
+    expect(names("search", "button")).toEqual([]);
+  });
+
+  test("role text alone does not match a name", () => {
+    document.body.innerHTML = "<button>Go</button>";
+    expect(names("button")).toEqual([]);
+  });
+
+  test("named matches get refs that resolve", () => {
+    document.body.innerHTML = "<h2>Shipping costs</h2>";
+    let result = find("shipping", "");
     expect(result.ok).toBe(true);
 
     if (!result.ok) return;
 
-    expect(resolveRef(result.matches[0].ref)).toBe(document.querySelector("p"));
-  });
-
-  test("an outer match hides matches inside it", () => {
-    document.body.innerHTML = '<a href="#"><span>Docs</span></a>';
-    let result = find("docs");
-    expect(result.ok && result.matches.map((match) => match.tag)).toEqual([
-      "a",
-    ]);
+    expect(resolveRef(result.matches[0].ref)).toBe(
+      document.querySelector("h2"),
+    );
   });
 
   test("skips boxless, hidden and aria-hidden elements", () => {
@@ -53,12 +67,12 @@ describe("find", () => {
     expect(names("go")).toEqual(["Go"]);
   });
 
-  test("matches role and caps results at 20", () => {
+  test("caps results at 20", () => {
     document.body.innerHTML = "<button>x</button>".repeat(30);
-    expect(names("button")).toHaveLength(20);
+    expect(names("", "button")).toHaveLength(20);
   });
 
-  test("empty query fails", () => {
-    expect(names("  ")).toBe("find needs a non-empty query");
+  test("needs a name or a role", () => {
+    expect(names("  ")).toBe("find needs a name or a role");
   });
 });

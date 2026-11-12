@@ -29,7 +29,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
   case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int)
-  case find(tabId: Int?, query: String)
+  case find(tabId: Int?, name: String, role: String)
   case pageText(tabId: Int?, maxChars: Int)
   case scroll(tabId: Int?, ref: Int?, left: Double, top: Double)
   /// Presses chords in order, the whole sequence `times` times, after focusing ref when given.

@@ -20,7 +20,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "readPage")
       return readPage(request.filter, request.maxChars);
-    if (request.op === "find") return find(request.query);
+    if (request.op === "find") return find(request.name, request.role);
     if (request.op === "pageText") return pageText(request.maxChars);
     if (request.op === "scroll")
       return scroll(request.ref, request.left, request.top);

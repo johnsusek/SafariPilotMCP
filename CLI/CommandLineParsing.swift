@@ -21,7 +21,7 @@ enum CommandLineParsing {
     tab-close ID                    close a tab
     navigate URL|back|forward       load a URL or walk history
     read-page [--all] [--max-chars N]  element tree with refs
-    find QUERY                      visible elements matching QUERY
+    find [NAME] [--role ROLE]       visible elements whose name contains NAME and role is ROLE
     text [--max-chars N]            readable page text
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
     screenshot [PATH]               save the tab as PNG
@@ -74,9 +74,13 @@ enum CommandLineParsing {
       // Free text is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .type(tabId: tabId, ref: integer(rest[0], "REF"), text: rest.dropFirst().joined(separator: " ")))
     case "find":
-      guard !rest.isEmpty else { throw Failure(description: "find needs a QUERY") }
+      let role = try option("--role", &rest) ?? ""
+      let name = rest.joined(separator: " ")
 
-      return Invocation(command: .find(tabId: tabId, query: rest.joined(separator: " ")))
+      guard !name.isEmpty || !role.isEmpty else { throw Failure(description: "find needs a NAME or --role") }
+
+      // NAME is free text, so it skips the stray option check below.
+      return Invocation(command: .find(tabId: tabId, name: name, role: role))
     case "navigate":
       guard let target = rest.first else { throw Failure(description: "navigate needs a URL, back or forward") }
 

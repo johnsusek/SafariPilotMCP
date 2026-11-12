@@ -5,7 +5,7 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, sessionTab: session) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "query": "Sign in", "ref": .number(3), "text": "hello", "direction": "down", "keys": "Enter"]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "text": "hello", "direction": "down", "keys": "Enter"]
 
     for tool in Tools.definitions {
       let arguments = samples.filter { tool.required.contains($0.key) }
@@ -40,6 +40,11 @@ struct ToolMappingTests {
     #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20))
   }
 
+  @Test func findTakesNameAndRole() throws {
+    #expect(try map("find", ["name": "Search", "role": "searchbox"]) == .find(tabId: 20, name: "Search", role: "searchbox"))
+    #expect(try map("find", ["role": "link"]) == .find(tabId: 20, name: "", role: "link"))
+  }
+
   @Test func explicitTabIdWins() throws {
     #expect(try map("click", ["ref": .number(4), "tabId": .number(3)]) == .click(tabId: 3, ref: 4))
     #expect(try map("click", ["ref": .number(4), "tabId": .number(3)], session: nil) == .click(tabId: 3, ref: 4))
@@ -48,7 +53,7 @@ struct ToolMappingTests {
   @Test func pageToolsWithoutAnyTabFail() throws {
     for name in ["click", "type", "key", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
       #expect("\(name)") {
-        try map(name, ["ref": .number(1), "text": "x", "keys": "Enter", "query": "q", "direction": "down", "url": "back"], session: nil)
+        try map(name, ["ref": .number(1), "text": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back"], session: nil)
       } throws: { error in
         (error as? Failure)?.description == Tools.noSessionTab
       }
@@ -153,7 +158,9 @@ struct CommandLineParsingTests {
 
   @Test func freeTextIsJoined() throws {
     #expect(try parse("type 3 hello world").command == .type(tabId: nil, ref: 3, text: "hello world"))
-    #expect(try parse("find Sign in").command == .find(tabId: nil, query: "Sign in"))
+    #expect(try parse("find Sign in").command == .find(tabId: nil, name: "Sign in", role: ""))
+    #expect(try parse("find Sign in --role button").command == .find(tabId: nil, name: "Sign in", role: "button"))
+    #expect(try parse("find --role searchbox").command == .find(tabId: nil, name: "", role: "searchbox"))
   }
 
   @Test func optionsAndDefaults() throws {
