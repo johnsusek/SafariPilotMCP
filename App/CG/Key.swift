@@ -35,7 +35,6 @@ extension Commands {
       try await poster.key(chord)
     }
 
-    try await Task.sleep(for: .milliseconds(150))
     let pressed = chords.map(\.name).joined(separator: " ") + (times > 1 ? " x\(times)" : "")
     let expected = times * chords.reduce(0) { $0 + $1.modifiers.count + 1 }
     var data: [String: JSONValue] = [
@@ -44,18 +43,30 @@ extension Commands {
       "repeat": .number(Double(times)),
       "expected": .number(Double(expected)),
     ]
-    var after: JSONValue?
-    var readError = ""
+    var keydowns: [LoggedEvent] = []
+    // WebKit hands the page each key only after it handled the last one, so a page busy rendering (an autocomplete) is still receiving keys well after they were posted.
+    let deadline = ContinuousClock.now + .milliseconds(1500)
+    try await Task.sleep(for: .milliseconds(150))
 
-    do { after = try await content(tab.id, .events(clear: true, arm: false)) } catch { readError = " (reading the log failed: \(error))" }
+    while true {
+      var after: JSONValue?
+      var readError = ""
 
-    guard let after, after["origin"]?.number == origin else {
-      data["navigated"] = .bool(true)
-      data["delivered"] = .null
-      return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); the page navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
+      do { after = try await content(tab.id, .events(clear: true, arm: false)) } catch { readError = " (reading the log failed: \(error))" }
+
+      guard let after, after["origin"]?.number == origin else {
+        data["navigated"] = .bool(true)
+        data["delivered"] = .null
+        return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); the page navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
+      }
+
+      keydowns += try after.decode(EventsResult.self).events.filter { $0.type == "keydown" && $0.isTrusted }
+
+      if keydowns.count >= expected || ContinuousClock.now >= deadline { break }
+
+      try await Task.sleep(for: .milliseconds(100))
     }
 
-    let keydowns = try after.decode(EventsResult.self).events.filter { $0.type == "keydown" && $0.isTrusted }
     data["navigated"] = .bool(false)
     data["delivered"] = .number(Double(keydowns.count))
     data["keydowns"] = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(keydowns))
@@ -63,7 +74,7 @@ extension Commands {
 
     if keydowns.count < expected {
       let lines = [
-        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page, so Safari or something outside the top frame (iframes are not logged) took the rest",
+        "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari or something outside the top frame (iframes are not logged) took the rest",
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
       ] + (logged.isEmpty ? ["  none"] : logged)
