@@ -92,18 +92,22 @@ function add(items: Item[], child: Node, walk: Walk) {
     leafTags.has(child.localName) || isEditableRoot(child)
       ? []
       : build(child, walk);
-  // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic wrapping other elements.
-  let wraps =
-    collapsibleRoles.has(role) && children.some((item) => "element" in item);
+  // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic or group wrapping other elements.
+  let elements = children.filter((item) => "element" in item).length;
+  let wraps = !contentRoles.has(role) && elements > 0;
   let name = nameOf(child, interactive && !wraps);
-  let shown = interactiveOnly
-    ? interactive
-    : interactive ||
-      (role === "img"
-        ? name !== ""
-        : !collapsibleRoles.has(role) ||
-          child.hasAttribute("aria-label") ||
-          child.hasAttribute("aria-labelledby"));
+  // A nameless clickable wrapper around a single element adds nothing to it.
+  let wrapsOne = collapsibleRoles.has(role) && !name && elements === 1;
+  let shown = wrapsOne
+    ? false
+    : interactiveOnly
+      ? interactive
+      : interactive ||
+        (role === "img"
+          ? name !== ""
+          : !collapsibleRoles.has(role) ||
+            child.hasAttribute("aria-label") ||
+            child.hasAttribute("aria-labelledby"));
 
   // A label's text already names its control, a legend's its fieldset and a caption's its table.
   let control = (child as HTMLLabelElement).control;

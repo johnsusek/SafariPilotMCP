@@ -126,11 +126,50 @@ describe("treeText", () => {
 
   test("a focusable generic wrapping elements takes no name from them", () => {
     let { text } = render(
-      '<div tabindex="0">Repo <a href="/star">Star</a></div>',
+      '<div tabindex="0">Repo <a href="/star">Star</a><a href="/fork">Fork</a></div>',
       "interactive",
     );
     expect(withoutRefs(text)).toBe(
-      ["generic", '  link "Star" href=/star'].join("\n"),
+      ["generic", '  link "Star" href=/star', '  link "Fork" href=/fork'].join(
+        "\n",
+      ),
+    );
+  });
+
+  test("a clickable group takes no name from the widgets it wraps", () => {
+    let { text } = render(
+      '<div role="group" tabindex="0"><img alt="Dune" src="x.png"><a href="/dune">Dune</a></div>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe(
+      ["group", '  link "Dune" href=/dune'].join("\n"),
+    );
+  });
+
+  test("a nameless clickable wrapper around one element gives it up", () => {
+    let { text } = render(
+      '<div tabindex="0">Select occupancy <button>2 adults</button></div>',
+    );
+    expect(withoutRefs(text)).toBe(
+      ['"Select occupancy"', 'button "2 adults"'].join("\n"),
+    );
+  });
+
+  test("a pointer-cursor element inside a widget is not a second target", () => {
+    let { text } = render(
+      '<ul role="listbox"><li role="option"><div style="cursor: pointer">Lisbon</div></li></ul>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe(["listbox", '  option "Lisbon"'].join("\n"));
+  });
+
+  test("a clickable label beside its shown control is left out", () => {
+    let { text } = render(
+      '<input type="checkbox" id="work"><label for="work" style="cursor: pointer">Work trip</label><input type="radio" id="gone" style="display: none"><label for="gone" style="cursor: pointer">Hidden radio</label>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe(
+      ['checkbox "Work trip"', 'generic "Hidden radio"'].join("\n"),
     );
   });
 

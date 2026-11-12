@@ -26,10 +26,10 @@ export function find(name: string, role: string): FindResult | Failure {
     if (wantedRole && elementRole.toLowerCase() !== wantedRole) continue;
 
     let interactive = isInteractive(element);
-    // As in read_page, a clickable generic wrapping other widgets is not named by their text.
+    // As in read_page, a clickable generic or group wrapping other widgets is not named by their text.
     let wraps =
       interactive &&
-      elementRole === "generic" &&
+      !contentRoles.has(elementRole) &&
       [...flatElements(element)].some(isInteractive);
     let elementName = nameOf(
       element,

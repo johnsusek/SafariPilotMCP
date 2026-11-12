@@ -11,9 +11,8 @@ let skippedTags = new Set([
 
 export function flatParent(element: Element) {
   let parent = element.assignedSlot ?? element.parentNode;
-  return parent instanceof ShadowRoot
-    ? parent.host
-    : (parent as Element | null);
+  if (parent instanceof ShadowRoot) return parent.host;
+  return parent instanceof Element ? parent : null;
 }
 
 export function flatChildren(node: Node): Node[] {

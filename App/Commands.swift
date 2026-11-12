@@ -148,6 +148,12 @@ struct Commands {
     let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars, ref: ref, depth: depth))
     let result = try response.decode(ReadPageResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
+
+    if result.text.isEmpty {
+      let shown = filter == .interactive ? "no visible actionable elements" : "no visible elements"
+      return CLIReply(ok: true, text: "\(shown) on \(result.title) | \(result.url)", data: response)
+    }
+
     return CLIReply(ok: true, text: result.text + truncated, data: response)
   }
 
