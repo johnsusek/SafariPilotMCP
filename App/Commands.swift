@@ -219,10 +219,11 @@ struct Commands {
   }
 
   /// Locate, then refuse to act when the content script says the point would land on something else.
-  func locateHittable(_ tabId: Int, _ ref: Int) async throws -> LocateResult {
+  /// Pressing needs the element on top, as a person would; focusing and typing reach a covered field too (npm's search box sits under an invisible button once typed in).
+  func locateHittable(_ tabId: Int, _ ref: Int, coveredOK: Bool = false) async throws -> LocateResult {
     let located = try await content(tabId, .locate(ref: ref)).decode(LocateResult.self)
 
-    if !located.hitsTarget { throw Failure(description: "ref \(ref) is not hittable: \(located.hitDescription)") }
+    if !located.hitsTarget, !(coveredOK && located.covered) { throw Failure(description: "ref \(ref) is not hittable: \(located.hitDescription)") }
 
     return located
   }

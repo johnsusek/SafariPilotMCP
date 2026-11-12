@@ -41,7 +41,7 @@ extension Commands {
 
   /// Reads the value back from the page rather than the AX element, which WebKit may replace mid-call when focus changes the field's role (YouTube's search box).
   private func setText(_ tab: TabInfo, _ ref: Int, _ secure: Bool, _ text: String) async throws -> CLIReply {
-    let located = try await locateHittable(tab.id, ref)
+    let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
     let outcome = try AXEngine.type(text, into: match)
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
@@ -133,7 +133,7 @@ extension Commands {
   /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.
   private func setDateTime(_ tab: TabInfo, _ ref: Int, _ kind: ControlKind, _ value: String) async throws -> CLIReply {
     let parts = try dateTimeParts(kind, value, ref)
-    let located = try await locateHittable(tab.id, ref)
+    let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
     let fields = try AXEngine.dateTimeFields(in: match)
     let titles = fields.map { $0.string(kAXTitleAttribute) ?? "" }

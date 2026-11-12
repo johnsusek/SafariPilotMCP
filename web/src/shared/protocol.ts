@@ -81,6 +81,8 @@ export type LocateResult = {
   rect: Rect;
   point: Point;
   hitsTarget: boolean;
+  // In view but under another element; focus-based actions still work then.
+  covered: boolean;
   hitDescription: string;
   viewport: Viewport;
 };

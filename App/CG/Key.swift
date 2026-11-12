@@ -9,7 +9,7 @@ extension Commands {
     let focusNode: AXNode
 
     if let ref {
-      let located = try await locateHittable(tab.id, ref)
+      let located = try await locateHittable(tab.id, ref, coveredOK: true)
       let match = try await AXEngine.resolve(located, tab: tab)
       let (focused, result) = try AXEngine.focus(match)
 

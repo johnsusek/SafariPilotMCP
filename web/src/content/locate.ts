@@ -69,6 +69,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       ...base,
       point: center,
       hitsTarget: false,
+      covered: false,
       hitDescription: "element has no box",
     };
   let clip = intersect(rect, visibleArea(viewport));
@@ -77,6 +78,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       ...base,
       point: center,
       hitsTarget: false,
+      covered: false,
       hitDescription: "element is outside the viewport",
     };
   // A custom checkbox or radio often sits under its own label, and a hit on the label reaches it.
@@ -93,6 +95,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       ...base,
       point,
       hitsTarget: true,
+      covered: false,
       hitDescription: describe(deepElementFromPoint(point)),
     };
   let fallback = candidatePoints(rect, clip)[0];
@@ -100,6 +103,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
     ...base,
     point: fallback,
     hitsTarget: false,
+    covered: true,
     hitDescription: `covered by ${describe(deepElementFromPoint(fallback))}`,
   };
 }

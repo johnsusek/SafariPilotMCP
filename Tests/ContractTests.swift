@@ -28,13 +28,13 @@ struct ContractTests {
     #expect(try decode(FindResult.self, #"{"ok":true,"matches":[\#(element)]}"#).matches[0].disabled == nil)
     #expect(try decode(PageTextResult.self, #"{"ok":true,"url":"u","title":"t","text":"hello","truncated":false}"#).text == "hello")
     #expect(try decode(ScrollResult.self, #"{"ok":true,"moved":false,"viewport":\#(viewport)}"#).viewport.scrollY == 40)
-    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"hitDescription":"button","viewport":\#(viewport)}"#).point == CSSPoint(left: 2, top: 4))
+    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","viewport":\#(viewport)}"#).point == CSSPoint(left: 2, top: 4))
     let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3}],"origin":1762900000123.4}"#)
     #expect(events.events[0].count == 3)
     #expect(events.origin == 1762900000123.4)
     #expect(throws: (any Error).self) { try decode(EventsResult.self, #"{"ok":true,"events":[]}"#) }
-    #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
-    let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
+    #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"secure":false,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
+    let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","secure":false,"kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
     #expect(select.kind == .select)
     #expect(select.options == [SelectOption(value: "1", label: "One", disabled: false)])
   }
