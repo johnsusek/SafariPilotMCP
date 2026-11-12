@@ -48,7 +48,18 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
     left: rect.left + rect.width / 2,
     top: rect.top + rect.height / 2,
   };
-  let base = { ok: true as const, ref, rect, viewport };
+  // WebKit gives a checkbox or radio inside a label the label's AX frame, so report that rect for frame matching.
+  let label =
+    element instanceof HTMLInputElement &&
+    (element.type === "checkbox" || element.type === "radio")
+      ? element.closest("label")
+      : null;
+  let base = {
+    ok: true as const,
+    ref,
+    rect: label ? toRect(label.getBoundingClientRect()) : rect,
+    viewport,
+  };
   if (rect.width <= 0 || rect.height <= 0)
     return {
       ...base,
