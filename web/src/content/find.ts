@@ -15,9 +15,11 @@ export function find(name: string, role: string): FindResult | Failure {
 
   let visible = visibleArea(readViewport());
   let matches: ElementInfo[] = [];
+  let onScreen = 0;
 
+  // On-screen matches come first, so a scrolled page's offscreen matches higher up never crowd them out of the cap.
   for (let element of flatElements(document)) {
-    if (matches.length >= limit) break;
+    if (onScreen >= limit) break;
 
     if (!hasBox(element)) continue;
 
@@ -51,8 +53,15 @@ export function find(name: string, role: string): FindResult | Failure {
 
     if (needle && !elementName.toLowerCase().includes(needle)) continue;
 
-    matches.push(elementInfo(element, visible, elementName));
+    let info = elementInfo(element, visible, elementName);
+    matches.push(info);
+
+    if (info.inViewport) onScreen++;
   }
 
-  return { ok: true, matches };
+  let ordered = [
+    ...matches.filter((match) => match.inViewport),
+    ...matches.filter((match) => !match.inViewport),
+  ];
+  return { ok: true, matches: ordered.slice(0, limit) };
 }

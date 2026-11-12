@@ -88,7 +88,12 @@ async function find(send: Send, request: PageRequest & { op: "find" }) {
       ? (reply as FindResult).matches.map((info) => element(info, frame))
       : [],
   );
-  return { ok: true as const, matches: matches.slice(0, findLimit) };
+  // As in each frame, on-screen matches come before offscreen ones in the cap.
+  let ordered = [
+    ...matches.filter((match) => match.inViewport),
+    ...matches.filter((match) => !match.inViewport),
+  ];
+  return { ok: true as const, matches: ordered.slice(0, findLimit) };
 }
 
 async function pageText(send: Send, maxChars: number) {

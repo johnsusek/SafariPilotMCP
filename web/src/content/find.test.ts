@@ -12,7 +12,8 @@ beforeEach(() => {
   vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
     function (this: Element) {
       let width = (this as HTMLElement).dataset.empty ? 0 : 100;
-      return new DOMRect(10, 10, width, 20);
+      let top = Number((this as HTMLElement).dataset.top ?? 10);
+      return new DOMRect(10, top, width, 20);
     },
   );
 });
@@ -77,6 +78,17 @@ describe("find", () => {
   test("caps results at 20", () => {
     document.body.innerHTML = "<button>x</button>".repeat(30);
     expect(names("", "button")).toHaveLength(20);
+  });
+
+  test("on-screen matches fill the cap before offscreen ones above them", () => {
+    document.body.innerHTML =
+      '<button data-top="-5000">above</button>'.repeat(25) +
+      "<button>here</button>".repeat(3) +
+      '<button data-top="5000">below</button>';
+    let result = names("", "button");
+    expect(result).toHaveLength(20);
+    expect(result.slice(0, 4)).toEqual(["here", "here", "here", "above"]);
+    expect(result).not.toContain("below");
   });
 
   test("needs a name or a role", () => {

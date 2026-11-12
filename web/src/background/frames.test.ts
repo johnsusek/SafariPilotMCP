@@ -477,7 +477,7 @@ describe("runPage reads", () => {
     ).toMatchObject({ text: "button [ref=5:2]" });
   });
 
-  test("find merges frames in order, prefixes refs and maps rects to the top frame", async () => {
+  test("find merges frames on-screen first, prefixes refs and maps rects to the top frame", async () => {
     let match = (ref: number, top: number) => ({
       ref,
       tag: "a",
@@ -523,9 +523,11 @@ describe("runPage reads", () => {
     ).toEqual([
       ["15", 0, true],
       ["5:2", 600, true],
-      ["5:4", 850, false],
       ["5:3:1", 630, true],
+      ["5:3:2", 630, true],
     ]);
+    // 5:4 is below the frame's clip, so the 26 on-screen matches leave it out.
+    expect(matches.map((each) => each.ref)).not.toContain("5:4");
   });
 
   test("events carry the frame they came from and every frame's origin", async () => {
