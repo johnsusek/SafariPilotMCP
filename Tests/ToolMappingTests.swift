@@ -5,10 +5,11 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, sessionTab: session) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "text": "hello", "direction": "down", "keys": "Enter"]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down"]
 
-    for tool in Tools.definitions {
-      let arguments = samples.filter { tool.required.contains($0.key) }
+    // key needs keys or text but neither is required by itself; browser_batch runs in MCPServer, not through command.
+    for tool in Tools.definitions where tool.name != "browser_batch" {
+      let arguments = samples.filter { tool.required.contains($0.key) }.merging(tool.name == "key" ? ["keys": "Enter"] : [:]) { $1 }
       #expect(throws: Never.self) { try map(tool.name, arguments) }
     }
   }
@@ -21,7 +22,7 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsAcceptTabId() {
-    let tabless: Set = ["tabs_list", "tab_create"]
+    let tabless: Set = ["tabs_list", "tab_create", "browser_batch"]
 
     for tool in Tools.definitions where !tabless.contains(tool.name) {
       #expect(tool.properties["tabId"] != nil, "\(tool.name)")
@@ -29,9 +30,9 @@ struct ToolMappingTests {
   }
 
   @Test func schemaListsRequiredKeys() {
-    let schema = Tools.definitions.first { $0.name == "type" }!.inputSchema
+    let schema = Tools.definitions.first { $0.name == "form_input" }!.inputSchema
     #expect(schema["type"] == "object")
-    #expect(schema["required"] == .array(["ref", "text"]))
+    #expect(schema["required"] == .array(["ref", "value"]))
   }
 
   @Test func omittedTabIdUsesTheSessionTab() throws {
@@ -51,9 +52,9 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsWithoutAnyTabFail() throws {
-    for name in ["click", "type", "key", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
+    for name in ["click", "form_input", "key", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
       #expect("\(name)") {
-        try map(name, ["ref": .number(1), "text": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back"], session: nil)
+        try map(name, ["ref": .number(1), "value": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back"], session: nil)
       } throws: { error in
         (error as? Failure)?.description == Tools.noSessionTab
       }
@@ -76,7 +77,7 @@ struct ToolMappingTests {
   }
 
   @Test func integersAcceptDigitStrings() throws {
-    #expect(try map("type", ["tabId": "12", "ref": .number(5), "text": "abc"]) == .type(tabId: 12, ref: 5, text: "abc"))
+    #expect(try map("form_input", ["tabId": "12", "ref": .number(5), "value": "abc"]) == .formInput(tabId: 12, ref: 5, value: .text("abc")))
   }
 
   @Test func wrongTypesFailLoudly() {
@@ -87,8 +88,37 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try map("read_page", ["filter": "visible"]) }
   }
 
+  @Test func formInputValueTypes() throws {
+    #expect(try map("form_input", ["ref": .number(5), "value": .bool(true)]) == .formInput(tabId: 20, ref: 5, value: .checked(true)))
+    #expect(try map("form_input", ["ref": .number(5), "value": .number(42)]) == .formInput(tabId: 20, ref: 5, value: .text("42")))
+    #expect(try map("form_input", ["ref": .number(5), "value": .number(1.5)]) == .formInput(tabId: 20, ref: 5, value: .text("1.5")))
+    #expect(try map("form_input", ["ref": .number(5), "value": ""]) == .formInput(tabId: 20, ref: 5, value: .text("")))
+    #expect(throws: Failure.self) { try map("form_input", ["ref": .number(5)]) }
+    #expect(throws: Failure.self) { try map("form_input", ["ref": .number(5), "value": .array([])]) }
+  }
+
+  @Test func batchActionsParse() throws {
+    let actions = try Tools.batchActions(["actions": .array([
+      .object(["name": "click", "input": .object(["ref": .number(3)])]),
+      .object(["name": "tabs_list"]),
+    ])])
+    #expect(actions.map(\.name) == ["click", "tabs_list"])
+    #expect(actions[0].input == ["ref": .number(3)])
+    #expect(actions[1].input == [:])
+
+    for bad: [String: JSONValue] in [[:], ["actions": .array([])], ["actions": "click"], ["actions": .array([.object(["input": .object([:])])])], ["actions": .array([.object(["name": "click", "input": "ref 3"])])]] {
+      #expect(throws: Failure.self, "\(bad)") { try Tools.batchActions(bad) }
+    }
+
+    #expect {
+      try Tools.batchActions(["actions": .array([.object(["name": "browser_batch"])])])
+    } throws: { error in
+      (error as? Failure)?.description == "action 1: browser_batch cannot be nested"
+    }
+  }
+
   @Test func removedToolsAreUnknown() {
-    for name in ["hover", "drag", "right_click"] {
+    for name in ["hover", "drag", "right_click", "type"] {
       #expect("\(name)") { try map(name, ["ref": .number(1), "from": .number(1), "to": .number(2)]) } throws: { error in
         (error as? Failure)?.description == "unknown tool \(name)"
       }
@@ -118,6 +148,16 @@ struct ToolMappingTests {
     #expect(try map("key", ["keys": "Backspace  shift+Tab a"]) == .key(tabId: 20, chords: chords, ref: nil, times: 1))
     #expect(try map("key", ["keys": "Enter", "ref": .number(6), "repeat": "3", "tabId": .number(2)]) == .key(tabId: 2, chords: [KeyChord.parse("Enter")], ref: 6, times: 3))
     #expect(try map("key", ["keys": "Tab", "repeat": .number(100)]) == .key(tabId: 20, chords: [KeyChord.parse("Tab")], ref: nil, times: 100))
+  }
+
+  @Test func keyTypesText() throws {
+    let chords = try ["H", "i", " ", "!", "Enter", "Tab"].map(KeyChord.parse)
+    #expect(try map("key", ["text": "Hi !\n\t", "ref": .number(4)]) == .key(tabId: 20, chords: chords, ref: 4, times: 1))
+    #expect(try map("key", ["text": .string(String(repeating: "a", count: 100))]) == .key(tabId: 20, chords: Array(repeating: KeyChord.parse("a"), count: 100), ref: nil, times: 1))
+
+    for arguments: [String: JSONValue] in [["text": ""], ["text": "caf\u{E9}"], ["text": .string(String(repeating: "a", count: 101))], ["text": "a", "keys": "Enter"], [:]] {
+      #expect(throws: Failure.self, "\(arguments)") { try map("key", arguments) }
+    }
   }
 
   @Test func keyRejectsBadInput() {
@@ -157,7 +197,7 @@ struct CommandLineParsingTests {
   }
 
   @Test func freeTextIsJoined() throws {
-    #expect(try parse("type 3 hello world").command == .type(tabId: nil, ref: 3, text: "hello world"))
+    #expect(try parse("form-input 3 hello world").command == .formInput(tabId: nil, ref: 3, value: .text("hello world")))
     #expect(try parse("find Sign in").command == .find(tabId: nil, name: "Sign in", role: ""))
     #expect(try parse("find Sign in --role button").command == .find(tabId: nil, name: "Sign in", role: "button"))
     #expect(try parse("find --role searchbox").command == .find(tabId: nil, name: "", role: "searchbox"))
@@ -183,6 +223,13 @@ struct CommandLineParsingTests {
     #expect(try parse("key Backspace Backspace Enter").command == expected)
     #expect(try CommandLineParsing.parse(["key", "Backspace Backspace Enter"]).command == expected)
     #expect(try parse("--tab 4 key shift+Tab --ref 9 --repeat 2").command == .key(tabId: 4, chords: [KeyChord.parse("shift+Tab")], ref: 9, times: 2))
+  }
+
+  @Test func keyTextIsVerbatim() throws {
+    let chords = try "a --ref b".map(KeyChord.typing)
+    #expect(try parse("key --ref 9 --text a --ref b").command == .key(tabId: nil, chords: chords, ref: 9, times: 1))
+    #expect(throws: Failure.self) { try parse("key Enter --text a") }
+    #expect(throws: Failure.self) { try parse("key --text") }
   }
 
   @Test func keyRejectsBadInputButDebugCGTakesCmd() throws {

@@ -134,7 +134,46 @@ describe("inspect", () => {
       value: "typed",
     });
     expect(inspect(byId("edit"))).toMatchObject({ value: "Edit me" });
-    expect(inspect(byId("plain"))).toMatchObject({ value: null });
+    expect(inspect(byId("plain"))).toMatchObject({
+      value: null,
+      kind: "other",
+    });
     expect(inspect(99999)).toMatchObject({ ok: false });
+  });
+
+  test("reports the control kind, checked state and select options", () => {
+    document.body.innerHTML = [
+      '<input id="email" type="email"><input id="go" type="submit"><textarea id="area"></textarea>',
+      '<input id="box" type="checkbox" checked><input id="dot" type="radio">',
+      '<div id="aria" role="switch" aria-checked="true"></div>',
+      '<select id="pick"><option value="1">One</option><option disabled>Two</option></select>',
+      '<select id="many" multiple><option>A</option></select>',
+    ].join("");
+    let byId = (id: string) => refFor(document.getElementById(id)!);
+    expect(inspect(byId("email"))).toMatchObject({ kind: "text" });
+    expect(inspect(byId("go"))).toMatchObject({ kind: "other" });
+    expect(inspect(byId("area"))).toMatchObject({ kind: "text" });
+    expect(inspect(byId("box"))).toMatchObject({
+      kind: "checkbox",
+      checked: true,
+    });
+    expect(inspect(byId("dot"))).toMatchObject({
+      kind: "radio",
+      checked: false,
+    });
+    expect(inspect(byId("aria"))).toMatchObject({
+      kind: "checkbox",
+      checked: true,
+    });
+    expect(inspect(byId("pick"))).toMatchObject({
+      kind: "select",
+      value: "1",
+      selectedIndex: 0,
+      options: [
+        { value: "1", label: "One", disabled: false },
+        { value: "Two", label: "Two", disabled: true },
+      ],
+    });
+    expect(inspect(byId("many"))).toMatchObject({ kind: "listbox" });
   });
 });

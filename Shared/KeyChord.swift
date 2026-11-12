@@ -40,6 +40,18 @@ struct KeyChord: Codable, Sendable, Equatable {
 
   static let accepted = "accepted keys: \(namedKeys.map(\.name).joined(separator: ", ")) or one printable ASCII character, optionally prefixed by cmd+, shift+, alt+ or ctrl+"
 
+  /// The chord that types one character of free text; line breaks press Enter and tabs press Tab.
+  static func typing(_ character: Character) throws -> KeyChord {
+    if character.isNewline { return try parse("Enter") }
+    if character == "\t" { return try parse("Tab") }
+
+    guard character.isASCII, let chord = try? parse(String(character)) else {
+      throw Failure(description: "cannot type \"\(character)\": text takes printable ASCII characters, line breaks and tabs")
+    }
+
+    return chord
+  }
+
   static func parse(_ text: String) throws -> KeyChord {
     var rest = Substring(text)
     var modifiers: [Modifier] = []

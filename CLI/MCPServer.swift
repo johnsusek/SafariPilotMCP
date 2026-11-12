@@ -21,22 +21,55 @@ enum MCPServer {
   static func call(_ params: CallTool.Parameters) async -> CallTool.Result {
     do {
       let arguments = try JSONDecoder().decode([String: JSONValue].self, from: JSONEncoder().encode(params.arguments ?? [:]))
-      let command = try Tools.command(name: params.name, arguments: arguments, sessionTab: sessionTab.withLock { $0 })
+
+      guard params.name == "browser_batch" else {
+        let outcome = await run(params.name, arguments)
+        return .init(content: outcome.content, isError: !outcome.ok)
+      }
+
+      return try await batch(Tools.batchActions(arguments))
+    } catch {
+      log("\(params.name) failed: \(error)")
+      return .init(content: [text("\(error)")], isError: true)
+    }
+  }
+
+  /// Runs actions in order, labeling each one's output, and stops at the first failure.
+  static func batch(_ actions: [(name: String, input: [String: JSONValue])]) async -> CallTool.Result {
+    var content: [Tool.Content] = []
+
+    for (index, action) in actions.enumerated() {
+      let outcome = await run(action.name, action.input)
+      content.append(text("\(index + 1)/\(actions.count) \(action.name)\(outcome.ok ? "" : " failed"):"))
+      content += outcome.content
+
+      if !outcome.ok {
+        content.append(text("stopped after \(index + 1) of \(actions.count) actions"))
+        return .init(content: content, isError: true)
+      }
+    }
+
+    return .init(content: content, isError: false)
+  }
+
+  static func run(_ name: String, _ arguments: [String: JSONValue]) async -> (content: [Tool.Content], ok: Bool) {
+    do {
+      let command = try Tools.command(name: name, arguments: arguments, sessionTab: sessionTab.withLock { $0 })
       let reply = try await exchange(command)
       sessionTab.withLock { $0 = Tools.session(after: command, reply: reply, current: $0) }
 
-      let text = Tool.Content.text(text: reply.text, annotations: nil, _meta: nil)
+      if !reply.ok { log("\(name) failed: \(reply.text.prefix(200))") }
 
-      if !reply.ok { log("\(params.name) failed: \(reply.text.prefix(200))") }
+      if reply.ok, let png = reply.data["png"]?.string { return ([.image(data: png, mimeType: "image/png", annotations: nil, _meta: nil), text(reply.text)], true) }
 
-      if reply.ok, let png = reply.data["png"]?.string { return .init(content: [.image(data: png, mimeType: "image/png", annotations: nil, _meta: nil), text], isError: false) }
-
-      return .init(content: [text], isError: !reply.ok)
+      return ([text(reply.text)], reply.ok)
     } catch {
-      log("\(params.name) failed: \(error)")
-      return .init(content: [.text(text: "\(error)", annotations: nil, _meta: nil)], isError: true)
+      log("\(name) failed: \(error)")
+      return ([text("\(error)")], false)
     }
   }
+
+  static func text(_ text: String) -> Tool.Content { .text(text: text, annotations: nil, _meta: nil) }
 
   /// Wire.exchange blocks for up to the whole timeout, so it runs on a dispatch thread instead of the cooperative pool.
   private static func exchange(_ command: AppCommand) async throws -> CLIReply {

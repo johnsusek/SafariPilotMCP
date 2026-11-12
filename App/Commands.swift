@@ -13,7 +13,7 @@ struct Commands {
     case let .ping(tabId): try await ping(tabId)
     case let .snapshot(tabId): try await snapshot(tabId)
     case let .click(tabId, ref): try await click(tabId, ref)
-    case let .type(tabId, ref, text): try await type(tabId, ref, text)
+    case let .formInput(tabId, ref, value): try await formInput(tabId, ref, value)
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
     case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url)))
@@ -221,32 +221,6 @@ struct Commands {
       "hitDescription": .string(located.hitDescription),
     ])
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
-  }
-
-  private func type(_ tabId: Int?, _ ref: Int, _ text: String) async throws -> CLIReply {
-    let tab = try await frontTab(tabId)
-    let located = try await locateHittable(tab.id, ref)
-    let match = try await AXEngine.resolve(located, tab: tab)
-    let outcome = try AXEngine.type(text, into: match)
-    // Secure fields read back one bullet per character.
-    let expected = outcome.valueNode.subrole == kAXSecureTextFieldSubrole ? String(repeating: "\u{2022}", count: text.count) : text
-    let matched = outcome.readBack == expected
-    let lines = [
-      "AXFocused=true on \(outcome.focused.summary): \(outcome.focusResult.name)",
-      "AXValue on \(outcome.valueNode.summary): \(outcome.valueResult.name)",
-      "read back: \(outcome.readBack.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
-    ] + matchLines(located, match)
-    let data: JSONValue = .object([
-      "tabId": .number(Double(tab.id)),
-      "ref": .number(Double(ref)),
-      "focusedRole": .string(outcome.focused.role),
-      "focusResult": .string(outcome.focusResult.name),
-      "valueRole": .string(outcome.valueNode.role),
-      "valueResult": .string(outcome.valueResult.name),
-      "readBack": outcome.readBack.map { .string($0) } ?? .null,
-    ])
-    let ok = outcome.focusResult == .success && outcome.valueResult == .success && matched
-    return CLIReply(ok: ok, text: lines.joined(separator: "\n"), data: data)
   }
 
   /// Dumps the AX windows and frames next to the content script's viewport so window matching and mapping can be calibrated in one run.

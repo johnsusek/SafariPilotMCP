@@ -45,7 +45,18 @@ struct SnapshotResult: Codable, Sendable { let url: String; let title: String; l
 struct LocateResult: Codable, Sendable { let ref: Int; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let hitDescription: String; let viewport: Viewport }
 /// origin is the page's performance.timeOrigin; a different origin between two reads means the page navigated or reloaded.
 struct EventsResult: Codable, Sendable { let events: [LoggedEvent]; let origin: Double }
-struct InspectResult: Codable, Sendable { let ref: Int; let hover: Bool; let value: String? }
+/// listbox is a select shown as a list (multiple or size over 1); checked is set for checkbox and radio, selectedIndex and options for both select kinds.
+enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, other }
+struct SelectOption: Codable, Sendable, Equatable { let value: String; let label: String; let disabled: Bool }
+struct InspectResult: Codable, Sendable {
+  let ref: Int
+  let hover: Bool
+  let value: String?
+  let kind: ControlKind
+  let checked: Bool?
+  let selectedIndex: Int?
+  let options: [SelectOption]?
+}
 struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }

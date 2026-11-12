@@ -1,6 +1,20 @@
 import Testing
 
 struct KeyChordTests {
+  @Test func typingMapsTextCharacters() throws {
+    #expect(try KeyChord.typing("a") == KeyChord.parse("a"))
+    #expect(try KeyChord.typing("Q") == KeyChord.parse("Q"))
+    #expect(try KeyChord.typing(" ") == KeyChord.parse(" "))
+    #expect(try KeyChord.typing("+") == KeyChord.parse("+"))
+    #expect(try KeyChord.typing("\n") == KeyChord.parse("Enter"))
+    #expect(try KeyChord.typing("\r\n") == KeyChord.parse("Enter"))
+    #expect(try KeyChord.typing("\t") == KeyChord.parse("Tab"))
+
+    for character: Character in ["\u{E9}", "\u{7}", "\u{1F600}"] {
+      #expect(throws: Failure.self, "\(character)") { try KeyChord.typing(character) }
+    }
+  }
+
   @Test func namedKeysAreCaseInsensitive() throws {
     #expect(try KeyChord.parse("Enter") == KeyChord(key: "Enter", keyCode: 36, modifiers: [], character: nil))
     #expect(try KeyChord.parse("arrowup").keyCode == 126)

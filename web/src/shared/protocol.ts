@@ -80,12 +80,21 @@ export type LocateResult = {
 // origin is performance.timeOrigin, which changes when the page navigates or reloads.
 export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
 
-// inspect: whether ref matches :hover and its form value (textContent for contenteditable), null when it has none.
+// inspect: whether ref matches :hover, its form value (textContent for contenteditable, null when it has none),
+// and what kind of control it is. listbox is a select shown as a list (multiple or size over 1).
+// checked is set for checkbox and radio (native or ARIA); selectedIndex and options for both select kinds.
+export type ControlKind =
+  "text" | "checkbox" | "radio" | "select" | "listbox" | "other";
+export type SelectOption = { value: string; label: string; disabled: boolean };
 export type InspectResult = {
   ok: true;
   ref: number;
   hover: boolean;
   value: string | null;
+  kind: ControlKind;
+  checked: boolean | null;
+  selectedIndex: number | null;
+  options: SelectOption[] | null;
 };
 
 // readPage: an indented element tree as text, one node per line, with refs from the same

@@ -20,7 +20,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   case ping(tabId: Int?)
   case snapshot(tabId: Int?)
   case click(tabId: Int?, ref: Int)
-  case type(tabId: Int?, ref: Int, text: String)
+  case formInput(tabId: Int?, ref: Int, value: FormValue)
   case events(tabId: Int?, clear: Bool)
   case tabs
   case tabCreate(url: String?)
@@ -62,12 +62,19 @@ enum AppCommand: Codable, Sendable, Equatable {
     }
   }
 
-  /// Splits keys on whitespace into chords; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
-  static func key(tabId: Int?, keys: String, ref: Int?, times: Int) throws -> AppCommand {
-    let chords = try keys.split(whereSeparator: \.isWhitespace).map { try KeyChord.parse(String($0)) }
+  /// Chords come from keys split on whitespace or from text one character each; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
+  static func key(tabId: Int?, keys: String?, text: String?, ref: Int?, times: Int) throws -> AppCommand {
+    let chords: [KeyChord]
+
+    switch (keys, text) {
+    case let (keys?, nil): chords = try keys.split(whereSeparator: \.isWhitespace).map { try KeyChord.parse(String($0)) }
+    case let (nil, text?): chords = try text.map(KeyChord.typing)
+    default: throw Failure(description: "key takes either keys or text, not \(keys == nil ? "neither" : "both")")
+    }
+
     let presses = chords.count * times
 
-    guard !chords.isEmpty else { throw Failure(description: "key needs at least one key, such as Enter or shift+Tab") }
+    guard !chords.isEmpty else { throw Failure(description: "key needs at least one key, such as Enter or shift+Tab, or some text") }
 
     if let chord = chords.first(where: { $0.modifiers.contains(.cmd) }) {
       throw Failure(description: "\(chord.name) refused: Safari acts on its own shortcuts such as cmd+t and cmd+w before the page sees them, so cmd chords are not sent")
@@ -78,6 +85,12 @@ enum AppCommand: Codable, Sendable, Equatable {
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
+}
+
+/// What form_input sets: text for a text field or a select's option value or label, checked for a checkbox or radio, which also accepts the text "true" or "false".
+enum FormValue: Codable, Sendable, Equatable {
+  case text(String)
+  case checked(Bool)
 }
 
 /// The Quartz input debug-cg posts; refs are page element refs.

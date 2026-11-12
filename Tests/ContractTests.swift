@@ -32,7 +32,10 @@ struct ContractTests {
     #expect(events.events[0].count == 3)
     #expect(events.origin == 1762900000123.4)
     #expect(throws: (any Error).self) { try decode(EventsResult.self, #"{"ok":true,"events":[]}"#) }
-    #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null}"#).hover)
+    #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
+    let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
+    #expect(select.kind == .select)
+    #expect(select.options == [SelectOption(value: "1", label: "One", disabled: false)])
   }
 
   @Test func commandsEncodeTheContractShapes() {
@@ -55,7 +58,10 @@ struct ContractTests {
     #expect(decoded.kind == "cli")
     let probe = AppCommand.debugCG(tabId: 2, probe: .key(try KeyChord.parse("cmd+a"), ref: 4), windowFields: true)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(probe)) == probe)
-    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", ref: 7, times: 3)
+    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", text: nil, ref: 7, times: 3)
+    #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
+    let form = AppCommand.formInput(tabId: nil, ref: 2, value: .checked(false))
+    #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(form)) == form)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
   }
 }

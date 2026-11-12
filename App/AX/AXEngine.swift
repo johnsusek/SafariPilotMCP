@@ -166,6 +166,27 @@ enum AXEngine {
     return TypeOutcome(focused: focused, focusResult: focusResult, valueNode: valueNode, valueResult: valueResult, readBack: valueNode.string(kAXValueAttribute))
   }
 
+  /// Sets AXSelected on option `index` of a popup select; WebKit keeps a closed popup's options in the tree as AXMenuItems under an AXMenu, one per option element.
+  static func selectOption(_ index: Int, label: String, in match: Match) throws -> (item: AXNode, result: AXError) {
+    guard let popup = match.chain.first(where: { $0.role == kAXPopUpButtonRole }) else {
+      throw Failure(description: "no AXPopUpButton from the match up to the web area:\n\(describe(match.chain))")
+    }
+
+    let items = popup.children.flatMap { $0.role == kAXMenuRole ? $0.children : [$0] }.filter { $0.role == kAXMenuItemRole }
+
+    guard index < items.count else {
+      throw Failure(description: "\(popup.summary) exposes \(items.count) AXMenuItems, too few for option \(index); children: \(popup.children.map(\.summary).joined(separator: ", "))")
+    }
+
+    let item = items[index]
+
+    guard item.label.trimmingCharacters(in: .whitespaces) == label.trimmingCharacters(in: .whitespaces) else {
+      throw Failure(description: "AXMenuItem \(index) of \(popup.summary) is \(item.summary), not option \"\(label)\"; the AX items do not line up with the options")
+    }
+
+    return (item, AXUIElementSetAttributeValue(item.element, kAXSelectedAttribute as CFString, kCFBooleanTrue))
+  }
+
   static func describe(_ chain: [AXNode]) -> String {
     chain.map { "  \($0.summary) actions=[\($0.actions.joined(separator: ","))]" }.joined(separator: "\n")
   }

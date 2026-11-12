@@ -12,8 +12,9 @@ enum CommandLineParsing {
     ping                            title and URL of the tab
     snapshot                        interactive elements with refs
     click REF                       locate REF, then AXPress it
-    type REF TEXT                   locate REF, then AXFocused + AXValue
+    form-input REF VALUE            set a text field, checkbox or radio (true|false), or select option
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
+    key [--ref REF] --text TEXT     type TEXT one key per character
     events [--clear]                events logged by the page
     tabs                            all Safari tabs
     tab-create [URL]                open a tab in the last focused window
@@ -68,11 +69,11 @@ enum CommandLineParsing {
       if !windowFields, probe.isKey { throw Failure(description: "--no-window-fields applies only to mouse actions") }
 
       invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, windowFields: windowFields))
-    case "type":
-      guard rest.count >= 2 else { throw Failure(description: "type needs REF and TEXT") }
+    case "form-input":
+      guard rest.count >= 2 else { throw Failure(description: "form-input needs REF and VALUE") }
 
       // Free text is taken verbatim, so it skips the stray option check below.
-      return try Invocation(command: .type(tabId: tabId, ref: integer(rest[0], "REF"), text: rest.dropFirst().joined(separator: " ")))
+      return try Invocation(command: .formInput(tabId: tabId, ref: integer(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
     case "find":
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")
@@ -86,9 +87,16 @@ enum CommandLineParsing {
 
       invocation = Invocation(command: .navigation(tabId: tabId, target: target))
     case "key":
+      // --text takes every word after it verbatim, so it is split off before the options are read.
+      let textStart = rest.firstIndex(of: "--text")
+      let text = textStart.map { rest[($0 + 1)...].joined(separator: " ") }
+
+      if let textStart { rest.removeSubrange(textStart...) }
+
       let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
       let times = try option("--repeat", &rest).map { try integer($0, "--repeat") } ?? 1
-      invocation = try Invocation(command: .key(tabId: tabId, keys: rest.joined(separator: " "), ref: ref, times: times))
+      let keys = text != nil && rest.isEmpty ? nil : rest.joined(separator: " ")
+      invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, ref: ref, times: times))
     case "scroll":
       let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
 
