@@ -155,6 +155,12 @@ enum AXEngine {
 
     let node = match.chain[depth]
     let pressed = Pressed(summary: node.summary, role: node.role, label: node.label, depth: depth)
+
+    // WebKit dispatches AXPress at the element's center, so a delegating ancestor (Booking's calendar month) would click whatever sits there instead.
+    if let frame = node.frame, !match.screenRect.insetBy(dx: -1, dy: -1).contains(CGPoint(x: frame.midX, y: frame.midY)) {
+      throw Failure(description: "the nearest element supporting AXPress is \(pressed.summary) \(format(frame)), \(depth) up from the match, and pressing it would click its center, outside the element at \(format(match.screenRect)); key Enter or Space with this ref may reach it from the keyboard:\n\(describe(match.chain))")
+    }
+
     let error = AXUIElementPerformAction(node.element, kAXPressAction as CFString)
 
     guard error == .success else { throw Failure(description: "AXPress on \(pressed.summary) failed: \(error.name)") }
