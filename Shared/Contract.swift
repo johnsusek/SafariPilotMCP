@@ -1,0 +1,111 @@
+/// Mirrors of web/src/shared/commands.ts and protocol.ts. Result structs omit `ok`; Commands checks it before decoding.
+struct CSSRect: Codable, Sendable, Equatable {
+  let left: Double
+  let top: Double
+  let width: Double
+  let height: Double
+}
+
+struct CSSPoint: Codable, Sendable, Equatable {
+  let left: Double
+  let top: Double
+}
+
+struct TabInfo: Codable, Sendable, Equatable {
+  let id: Int
+  let windowId: Int
+  let active: Bool
+  let url: String
+  let title: String
+  let windowFrame: CSSRect?
+}
+
+struct ElementInfo: Codable, Sendable, Equatable {
+  let ref: Int
+  let tag: String
+  let role: String
+  let name: String
+  let rect: CSSRect
+  let inViewport: Bool
+  let disabled: Bool?
+}
+
+struct LoggedEvent: Codable, Sendable, Equatable {
+  let type: String
+  let isTrusted: Bool
+  let ref: Int?
+  let target: String
+  let time: Double
+  let detail: String
+}
+
+struct PingResult: Codable, Sendable { let url: String; let title: String }
+struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
+struct LocateResult: Codable, Sendable { let ref: Int; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let hitDescription: String; let viewport: Viewport }
+struct EventsResult: Codable, Sendable { let events: [LoggedEvent] }
+struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
+struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
+struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
+struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
+struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
+struct TabResult: Codable, Sendable { let tab: TabInfo }
+struct ClosedResult: Codable, Sendable { let closed: Int }
+struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
+
+enum ReadFilter: String, Codable, Sendable { case interactive, all }
+enum HistoryDirection: String, Codable, Sendable { case back, forward }
+
+enum ContentRequest: Equatable, Sendable {
+  case ping
+  case snapshot
+  case locate(ref: Int)
+  case events(clear: Bool)
+  case readPage(filter: ReadFilter, maxChars: Int)
+  case find(query: String)
+  case pageText(maxChars: Int)
+  case scroll(ref: Int?, left: Double, top: Double)
+
+  var json: [String: JSONValue] {
+    switch self {
+    case .ping: ["op": "ping"]
+    case .snapshot: ["op": "snapshot"]
+    case let .locate(ref): ["op": "locate", "ref": .number(Double(ref))]
+    case let .events(clear): ["op": "events", "clear": .bool(clear)]
+    case let .readPage(filter, maxChars): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars))]
+    case let .find(query): ["op": "find", "query": .string(query)]
+    case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
+    case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .number(Double($0)) } ?? .null, "left": .number(left), "top": .number(top)]
+    }
+  }
+}
+
+/// App to background; a nil tabId is sent as null, meaning the active tab of the last focused window.
+enum BackgroundCommand: Equatable, Sendable {
+  case content(tabId: Int?, request: ContentRequest)
+  case tabs
+  case tab(tabId: Int?)
+  case tabCreate(url: String?)
+  case tabSelect(tabId: Int)
+  case tabClose(tabId: Int)
+  case navigate(tabId: Int?, url: String)
+  case history(tabId: Int?, direction: HistoryDirection)
+  case screenshot(tabId: Int?)
+
+  var json: [String: JSONValue] {
+    let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
+
+    switch self {
+    case let .content(tabId, request): return ["type": "content", "tabId": id(tabId), "request": .object(request.json)]
+    case .tabs: return ["type": "tabs"]
+    case let .tab(tabId): return ["type": "tab", "tabId": id(tabId)]
+    case let .tabCreate(url): return ["type": "tabCreate", "url": url.map { .string($0) } ?? .null]
+    case let .tabSelect(tabId): return ["type": "tabSelect", "tabId": id(tabId)]
+    case let .tabClose(tabId): return ["type": "tabClose", "tabId": id(tabId)]
+    case let .navigate(tabId, url): return ["type": "navigate", "tabId": id(tabId), "url": .string(url)]
+    case let .history(tabId, direction): return ["type": "history", "tabId": id(tabId), "direction": .string(direction.rawValue)]
+    case let .screenshot(tabId): return ["type": "screenshot", "tabId": id(tabId)]
+    }
+  }
+
+  var type: String { json["type"]?.string ?? "?" }
+}

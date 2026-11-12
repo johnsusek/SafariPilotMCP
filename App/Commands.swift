@@ -1,55 +1,66 @@
 import ApplicationServices
 import Foundation
 
-/// Mirrors of the parts of protocol.ts the app reads.
-struct CSSPoint: Codable { let left: Double; let top: Double }
-struct LocateResult: Codable {
-  let ref: Int
-  let point: CSSPoint
-  let hitsTarget: Bool
-  let hitDescription: String
-  let viewport: Viewport
-}
-
-/// Runs one CLI command and renders it as text plus data.
+/// Runs one app command against the background and AX, and renders it as text plus data.
 @MainActor
 struct Commands {
   let model: AppModel
-  let timeout: Duration
+  let deadline: ContinuousClock.Instant
 
-  static let names = ["status", "ping", "snapshot", "click", "type", "events", "tabs", "navigate", "screenshot", "debug-ax"]
-
-  func run(_ command: String, _ args: [String]) async throws -> CLIReply {
+  func run(_ command: AppCommand) async throws -> CLIReply {
     switch command {
-    case "status": return status()
-    case "ping": return try await ping()
-    case "snapshot": return try await snapshot()
-    case "click": return try await click(ref(args))
-    case "type": return try await type(ref(args), args.dropFirst().joined(separator: " "))
-    case "events": return try await events(clear: args.contains("--clear"))
-    case "tabs": return try await tabs()
-    case "navigate": return try await navigate(args.first)
-    case "screenshot": return try await screenshot(args.first)
-    case "debug-ax": return try await debugAX(args.first.flatMap(Int.init))
-    default: throw Failure(description: "unknown command \(command); commands: \(Self.names.joined(separator: ", "))")
+    case .status: status()
+    case let .ping(tabId): try await ping(tabId)
+    case let .snapshot(tabId): try await snapshot(tabId)
+    case let .click(tabId, ref): try await click(tabId, ref)
+    case let .type(tabId, ref, text): try await type(tabId, ref, text)
+    case let .events(tabId, clear): try await events(tabId, clear)
+    case .tabs: try await tabs()
+    case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url)))
+    case let .tabSelect(tabId): try await tabReply("selected", call(.tabSelect(tabId: tabId)))
+    case let .tabClose(tabId): try await tabClose(tabId)
+    case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))
+    case let .history(tabId, direction): try await tabReply("went \(direction.rawValue) to", call(.history(tabId: tabId, direction: direction)))
+    case let .readPage(tabId, filter, maxChars): try await readPage(tabId, filter, maxChars)
+    case let .find(tabId, query): try await find(tabId, query)
+    case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
+    case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
+    case let .screenshot(tabId): try await screenshot(tabId)
+    case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
     }
   }
 
-  private func ref(_ args: [String]) throws -> Int {
-    guard let ref = args.first.flatMap(Int.init) else { throw Failure(description: "expected a numeric ref from snapshot") }
-    return ref
-  }
+  private func call(_ command: BackgroundCommand) async throws -> JSONValue {
+    let remaining = deadline - .now
 
-  private func call(_ command: [String: JSONValue]) async throws -> JSONValue {
-    let response = try await model.transport.send(command, timeout: timeout)
+    guard remaining > .zero else { throw Failure(description: "timed out before sending \(command.type)") }
 
-    if response["ok"]?.bool != true { throw Failure(description: "extension: \(response["error"]?.string ?? "malformed response \(response)")") }
+    let response = try await model.transport.send(command.json, timeout: remaining)
+
+    if response["ok"]?.bool != true { throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")") }
 
     return response
   }
 
-  private func content(_ request: [String: JSONValue]) async throws -> JSONValue {
-    try await call(["type": "content", "request": .object(request)])
+  private func content(_ tabId: Int?, _ request: ContentRequest) async throws -> JSONValue {
+    try await call(.content(tabId: tabId, request: request))
+  }
+
+  /// Resolves the tab and makes it the active tab of its window, since AX and captureVisibleTab only see a window's visible tab.
+  private func frontTab(_ tabId: Int?) async throws -> TabInfo {
+    let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+
+    if tab.active { return tab }
+
+    return try await call(.tabSelect(tabId: tab.id)).decode(TabResult.self).tab
+  }
+
+  private func describe(_ tab: TabInfo) -> String { "\(tab.active ? "*" : " ") \(tab.id) w\(tab.windowId) \(tab.url) \(tab.title)" }
+
+  private func describe(_ element: ElementInfo) -> String {
+    let offscreen = element.inViewport ? "" : " (offscreen)"
+    let disabled = element.disabled == true ? " (disabled)" : ""
+    return "[\(element.ref)] \(element.role) \"\(element.name)\" <\(element.tag)>\(offscreen)\(disabled)"
   }
 
   private func status() -> CLIReply {
@@ -89,72 +100,89 @@ struct Commands {
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
   }
 
-  private func ping() async throws -> CLIReply {
-    let response = try await content(["op": "ping"])
-    return CLIReply(ok: true, text: "\(response["title"]?.string ?? "")\n\(response["url"]?.string ?? "")", data: response)
+  private func ping(_ tabId: Int?) async throws -> CLIReply {
+    let response = try await content(tabId, .ping)
+    let result = try response.decode(PingResult.self)
+    return CLIReply(ok: true, text: "\(result.title)\n\(result.url)", data: response)
   }
 
-  private func snapshot() async throws -> CLIReply {
-    let response = try await content(["op": "snapshot"])
-    var lines = ["\(response["title"]?.string ?? "") | \(response["url"]?.string ?? "")"]
-
-    for element in response["elements"]?.array ?? [] {
-      let ref = Int(element["ref"]?.number ?? -1)
-      let offscreen = element["inViewport"]?.bool == true ? "" : " (offscreen)"
-      lines.append("[\(ref)] \(element["role"]?.string ?? "") \"\(element["name"]?.string ?? "")\" <\(element["tag"]?.string ?? "")>\(offscreen)")
-    }
-
+  private func snapshot(_ tabId: Int?) async throws -> CLIReply {
+    let response = try await content(tabId, .snapshot)
+    let result = try response.decode(SnapshotResult.self)
+    let lines = ["\(result.title) | \(result.url)"] + result.elements.map(describe)
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: response)
   }
 
-  private func events(clear: Bool) async throws -> CLIReply {
-    let response = try await content(["op": "events", "clear": .bool(clear)])
-    var lines: [String] = []
-
-    for event in response["events"]?.array ?? [] {
-      let trusted = event["isTrusted"]?.bool == true ? "trusted" : "UNTRUSTED"
-      let ref = event["ref"]?.number.map { "[\(Int($0))]" } ?? ""
-      lines.append("\(event["type"]?.string ?? "") \(trusted) \(ref)\(event["target"]?.string ?? "") \(event["detail"]?.string ?? "")")
+  private func events(_ tabId: Int?, _ clear: Bool) async throws -> CLIReply {
+    let response = try await content(tabId, .events(clear: clear))
+    let lines = try response.decode(EventsResult.self).events.map { event in
+      "\(event.type) \(event.isTrusted ? "trusted" : "UNTRUSTED") \(event.ref.map { "[\($0)]" } ?? "")\(event.target) \(event.detail)"
     }
-
     return CLIReply(ok: true, text: lines.isEmpty ? "no events" : lines.joined(separator: "\n"), data: response)
   }
 
   private func tabs() async throws -> CLIReply {
-    let response = try await call(["type": "tabs"])
-    var lines: [String] = []
-
-    for tab in response["tabs"]?.array ?? [] {
-      let marker = tab["active"]?.bool == true ? "*" : " "
-      lines.append("\(marker) \(Int(tab["id"]?.number ?? -1)) w\(Int(tab["windowId"]?.number ?? -1)) \(tab["url"]?.string ?? "") \(tab["title"]?.string ?? "")")
-    }
-
-    return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: response)
+    let response = try await call(.tabs)
+    let lines = try response.decode(TabsResult.self).tabs.map(describe)
+    return CLIReply(ok: true, text: lines.isEmpty ? "no tabs" : lines.joined(separator: "\n"), data: response)
   }
 
-  private func navigate(_ url: String?) async throws -> CLIReply {
-    guard let url else { throw Failure(description: "expected a URL") }
-
-    let response = try await call(["type": "navigate", "url": .string(url)])
-    return CLIReply(ok: true, text: "navigating tab \(Int(response["tabId"]?.number ?? -1)) to \(url)", data: response)
+  private func tabReply(_ verb: String, _ response: JSONValue) throws -> CLIReply {
+    let tab = try response.decode(TabResult.self).tab
+    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)", data: response)
   }
 
-  private func screenshot(_ path: String?) async throws -> CLIReply {
-    guard let path else { throw Failure(description: "expected an output path") }
+  private func tabClose(_ tabId: Int) async throws -> CLIReply {
+    let response = try await call(.tabClose(tabId: tabId))
+    return try CLIReply(ok: true, text: "closed tab \(response.decode(ClosedResult.self).closed)", data: response)
+  }
 
-    let response = try await call(["type": "screenshot"])
+  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int) async throws -> CLIReply {
+    let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars))
+    let result = try response.decode(ReadPageResult.self)
+    let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
+    return CLIReply(ok: true, text: result.text + truncated, data: response)
+  }
 
-    guard let dataUrl = response["dataUrl"]?.string, let comma = dataUrl.firstIndex(of: ","), let png = Data(base64Encoded: String(dataUrl[dataUrl.index(after: comma)...])) else {
-      throw Failure(description: "screenshot response had no base64 data URL")
+  private func find(_ tabId: Int?, _ query: String) async throws -> CLIReply {
+    let response = try await content(tabId, .find(query: query))
+    let lines = try response.decode(FindResult.self).matches.map(describe)
+    return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \"\(query)\"" : lines.joined(separator: "\n"), data: response)
+  }
+
+  private func pageText(_ tabId: Int?, _ maxChars: Int) async throws -> CLIReply {
+    let response = try await content(tabId, .pageText(maxChars: maxChars))
+    let result = try response.decode(PageTextResult.self)
+    let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
+    return CLIReply(ok: true, text: "\(result.title) | \(result.url)\n\(result.text)\(truncated)", data: response)
+  }
+
+  private func scroll(_ tabId: Int?, _ ref: Int?, _ left: Double, _ top: Double) async throws -> CLIReply {
+    let response = try await content(tabId, .scroll(ref: ref, left: left, top: top))
+    let result = try response.decode(ScrollResult.self)
+    let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
+    let text = result.moved ? "scrolled by (\(Int(left)), \(Int(top))); \(position)" : "nothing moved: already at the edge or not scrollable; \(position)"
+    return CLIReply(ok: true, text: text, data: response)
+  }
+
+  /// Returns the PNG as base64 in data.png; the CLI writes it to a file and the MCP server returns it as image content.
+  private func screenshot(_ tabId: Int?) async throws -> CLIReply {
+    let tab = try await frontTab(tabId)
+    let response = try await call(.screenshot(tabId: tab.id))
+    let result = try response.decode(ScreenshotResult.self)
+
+    guard result.dataUrl.hasPrefix("data:image/png;base64,"), let comma = result.dataUrl.firstIndex(of: ",") else {
+      throw Failure(description: "screenshot response is not a base64 PNG data URL: \(result.dataUrl.prefix(40))")
     }
 
-    try png.write(to: URL(filePath: path))
-    return CLIReply(ok: true, text: "saved \(path) (\(png.count) bytes)", data: .object(["path": .string(path), "bytes": .number(Double(png.count))]))
+    let base64 = String(result.dataUrl[result.dataUrl.index(after: comma)...])
+    let data: JSONValue = .object(["png": .string(base64), "tab": response["tab"] ?? .null])
+    return CLIReply(ok: true, text: "screenshot of tab \(result.tab.id) \(result.tab.url)", data: data)
   }
 
   /// Locate, then refuse to act when the content script says the point would land on something else.
-  private func locateHittable(_ ref: Int) async throws -> LocateResult {
-    let located = try await content(["op": "locate", "ref": .number(Double(ref))]).decode(LocateResult.self)
+  private func locateHittable(_ tabId: Int, _ ref: Int) async throws -> LocateResult {
+    let located = try await content(tabId, .locate(ref: ref)).decode(LocateResult.self)
 
     if !located.hitsTarget { throw Failure(description: "ref \(ref) is not hittable: \(located.hitDescription)") }
 
@@ -165,32 +193,34 @@ struct Commands {
     [
       "locate: hitsTarget=\(locate.hitsTarget) \(locate.hitDescription)",
       "mapped css (\(locate.point.left), \(locate.point.top)) to screen \(AXEngine.format(hit.screenPoint)) zoom \(String(format: "%.3f", hit.zoom)) frame \(AXEngine.format(hit.viewportFrame))",
-      "hit: \(hit.node.summary)",
+      "hit: \(hit.node.summary) in window \(hit.target.window.summary)",
     ]
   }
 
-  private func click(_ ref: Int) async throws -> CLIReply {
-    let located = try await locateHittable(ref)
-    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+  private func click(_ tabId: Int?, _ ref: Int) async throws -> CLIReply {
+    let tab = try await frontTab(tabId)
+    let located = try await locateHittable(tab.id, ref)
+    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
     let (pressed, depth) = try AXEngine.press(hit)
-    let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from hit)"] + hitLines(located, hit)
+    let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from hit) in tab \(tab.id)"] + hitLines(located, hit)
     let data: JSONValue = .object([
+      "tabId": .number(Double(tab.id)),
       "ref": .number(Double(ref)),
       "pressedRole": .string(pressed.role),
       "pressedLabel": .string(pressed.label),
       "action": .string(kAXPressAction),
       "depth": .number(Double(depth)),
       "hitRole": .string(hit.node.role),
-      "hitsTarget": .bool(located.hitsTarget),
       "hitDescription": .string(located.hitDescription),
       "screenPoint": .array([.number(hit.screenPoint.x), .number(hit.screenPoint.y)]),
     ])
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
   }
 
-  private func type(_ ref: Int, _ text: String) async throws -> CLIReply {
-    let located = try await locateHittable(ref)
-    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+  private func type(_ tabId: Int?, _ ref: Int, _ text: String) async throws -> CLIReply {
+    let tab = try await frontTab(tabId)
+    let located = try await locateHittable(tab.id, ref)
+    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
     let outcome = try AXEngine.type(text, into: hit)
     let matched = outcome.readBack == text
     let lines = [
@@ -199,28 +229,32 @@ struct Commands {
       "read back: \(outcome.readBack.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
     ] + hitLines(located, hit)
     let data: JSONValue = .object([
+      "tabId": .number(Double(tab.id)),
       "ref": .number(Double(ref)),
       "focusedRole": .string(outcome.focused.role),
       "focusResult": .string(outcome.focusResult.name),
       "valueRole": .string(outcome.valueNode.role),
       "valueResult": .string(outcome.valueResult.name),
       "readBack": outcome.readBack.map { .string($0) } ?? .null,
-      "hitsTarget": .bool(located.hitsTarget),
     ])
     let ok = outcome.focusResult == .success && outcome.valueResult == .success && matched
     return CLIReply(ok: ok, text: lines.joined(separator: "\n"), data: data)
   }
 
-  /// Dumps the AX frames next to the content script's viewport so the mapping can be calibrated in one run.
-  private func debugAX(_ ref: Int?) async throws -> CLIReply {
-    let snapshot = try await content(["op": "snapshot"])
-    let viewport = try (snapshot["viewport"] ?? .null).decode(Viewport.self)
-    let target = try await AXEngine.target()
+  /// Dumps the AX windows and frames next to the content script's viewport so window matching and mapping can be calibrated in one run.
+  private func debugAX(_ tabId: Int?, _ ref: Int?) async throws -> CLIReply {
+    let tab = try await frontTab(tabId)
+    let snapshot = try await content(tab.id, .snapshot).decode(SnapshotResult.self)
+    let viewport = snapshot.viewport
+    let target = try await AXEngine.target(for: tab)
+    let windowFrame = tab.windowFrame.map { "(\($0.left), \($0.top), \($0.width) x \($0.height))" } ?? "none"
     var lines = [
+      "tab: \(describe(tab)) windowFrame \(windowFrame)",
       "viewport: inner \(viewport.innerWidth)x\(viewport.innerHeight) client \(viewport.clientWidth ?? -1)x\(viewport.clientHeight ?? -1) visual \(viewport.visualWidth ?? -1)x\(viewport.visualHeight ?? -1)",
       "  scroll (\(viewport.scrollX), \(viewport.scrollY)) dpr \(viewport.devicePixelRatio) visualScale \(viewport.visualScale) visualOffset (\(viewport.visualOffsetLeft), \(viewport.visualOffsetTop))",
-      "page: \(snapshot["url"]?.string ?? "")",
-      "window: \(target.window.summary) \(AXEngine.format(target.window.frame))",
+      "windows:",
+    ] + target.candidates.map { "  \($0.summary)" } + [
+      "matched window: \(target.window.summary) \(AXEngine.format(target.window.frame))",
       "web areas: \(target.webAreas.count)",
     ]
 
@@ -241,12 +275,13 @@ struct Commands {
     }
 
     if let ref {
-      let located = try await content(["op": "locate", "ref": .number(Double(ref))]).decode(LocateResult.self)
-      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+      let located = try await content(tab.id, .locate(ref: ref)).decode(LocateResult.self)
+      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
       lines += hitLines(located, hit)
       lines.append("chain to web area:\n\(AXEngine.describe(hit.chain))")
     }
 
-    return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: .object(["text": .string(lines.joined(separator: "\n")), "viewport": snapshot["viewport"] ?? .null]))
+    let text = lines.joined(separator: "\n")
+    return CLIReply(ok: true, text: text, data: .object(["text": .string(text)]))
   }
 }

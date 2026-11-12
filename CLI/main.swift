@@ -1,24 +1,9 @@
 import Foundation
 
-let usage = """
-usage: safaripilot [--json] [--timeout SECONDS] COMMAND [ARGS]
-
-  status                 app, extension and background state
-  ping                   title and URL of the target tab
-  snapshot               interactive elements with refs
-  click REF              locate REF, then AXPress it
-  type REF TEXT          locate REF, then AXFocused + AXValue
-  events [--clear]       events logged by the page
-  tabs                   all Safari tabs
-  navigate URL           load URL in the target tab
-  screenshot [PATH]      save the visible tab as PNG
-  debug-ax [REF]         AX frames next to viewport metrics
-"""
-
 var arguments = Array(CommandLine.arguments.dropFirst())
 let json = arguments.contains("--json")
 arguments.removeAll { $0 == "--json" }
-var timeout = 20.0
+var timeout = CLIRequest.defaultTimeout
 
 if let index = arguments.firstIndex(of: "--timeout") {
   guard index + 1 < arguments.count, let value = Double(arguments[index + 1]) else {
@@ -30,22 +15,31 @@ if let index = arguments.firstIndex(of: "--timeout") {
   arguments.removeSubrange(index ... index + 1)
 }
 
-guard let command = arguments.first, command != "help", command != "--help" else {
-  print(usage)
+if arguments.isEmpty || arguments == ["help"] || arguments == ["--help"] {
+  print(CommandLineParsing.usage)
   exit(arguments.isEmpty ? 2 : 0)
 }
 
-var args = Array(arguments.dropFirst())
-
-if command == "screenshot" {
-  let path = args.first ?? "safaripilot-\(Int(Date.now.timeIntervalSince1970)).png"
-  args = [URL(filePath: path, relativeTo: URL.currentDirectory()).standardizedFileURL.path]
+if arguments == ["mcp"] {
+  do {
+    try await MCPServer.run()
+    exit(0)
+  } catch {
+    MCPServer.log("fatal: \(error)")
+    exit(1)
+  }
 }
 
 do {
-  let request = try JSONEncoder().encode(CLIRequest(command: command, args: args, timeoutSeconds: timeout))
-  let replyData = try Wire.exchange(request, timeoutSeconds: Int(timeout) + 15)
-  let reply = try JSONDecoder().decode(CLIReply.self, from: replyData)
+  let invocation = try CommandLineParsing.parse(arguments)
+  var reply = try AppClient.send(invocation.command, timeout: timeout)
+
+  if case .screenshot = invocation.command, reply.ok, let base64 = reply.data["png"]?.string, let png = Data(base64Encoded: base64) {
+    let path = invocation.outputPath ?? "safaripilot-\(Int(Date.now.timeIntervalSince1970)).png"
+    let url = URL(filePath: path, relativeTo: URL.currentDirectory()).standardizedFileURL
+    try png.write(to: url)
+    reply = CLIReply(ok: true, text: "\(reply.text)\nsaved \(url.path) (\(png.count) bytes)", data: .object(["path": .string(url.path), "bytes": .number(Double(png.count)), "tab": reply.data["tab"] ?? .null]))
+  }
 
   if json {
     let encoder = JSONEncoder()

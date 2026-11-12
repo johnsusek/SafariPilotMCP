@@ -4,6 +4,10 @@ options:
   deploymentTarget:
     macOS: "26.0"
   createIntermediateGroups: true
+packages:
+  MCP:
+    url: https://github.com/modelcontextprotocol/swift-sdk.git
+    from: 0.12.1
 settings:
   base:
     DEVELOPMENT_TEAM: WX2UGCD2SK
@@ -80,6 +84,11 @@ targets:
       - Shared/Wire.swift
       - Shared/JSONValue.swift
       - Shared/CLIWire.swift
+      - Shared/Contract.swift
+      - Shared/ViewportMapping.swift
+    dependencies:
+      - package: MCP
+        product: MCP
     settings:
       base:
         PRODUCT_NAME: safaripilot
@@ -92,6 +101,8 @@ targets:
     sources:
       - Tests
       - Shared
+      - CLI/Tools.swift
+      - CLI/CommandLineParsing.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Tests

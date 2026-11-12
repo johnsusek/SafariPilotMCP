@@ -62,11 +62,11 @@ final class AppModel {
   }
 
   func runCLI(_ request: CLIRequest) async -> CLIReply {
-    let commands = Commands(model: self, timeout: .seconds(request.timeoutSeconds))
-    let label = ([request.command] + request.args).joined(separator: " ")
+    let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
+    let label = String(describing: request.command)
 
     do {
-      let reply = try await commands.run(request.command, request.args)
+      let reply = try await commands.run(request.command)
       record(label, ok: reply.ok, summary: reply.text.components(separatedBy: "\n").first ?? "")
       return reply
     } catch {

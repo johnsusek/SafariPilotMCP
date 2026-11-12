@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// Finds Safari's visible web area and acts on page elements purely through AX: hit-test, AXPress, AXFocused, AXValue.
+/// Finds the Safari window showing a tab and acts on page elements purely through AX: hit-test, AXRaise, AXPress, AXFocused, AXValue.
 @MainActor
 enum AXEngine {
   struct Target {
@@ -10,6 +10,7 @@ enum AXEngine {
     let webArea: AXNode
     let scrollArea: AXNode?
     let webAreas: [AXNode]
+    let candidates: [WindowCandidate]
   }
 
   struct Hit {
@@ -21,30 +22,41 @@ enum AXEngine {
     let chain: [AXNode]
   }
 
-  static func target() async throws -> Target {
+  /// The hit landed in another Safari window that covers the target.
+  private struct Covered: Error { let by: String }
+
+  /// Finds the window showing the tab among all of Safari's AX windows; the tab must already be active in its window.
+  static func target(for tab: TabInfo) async throws -> Target {
     guard AXIsProcessTrusted() else { throw Failure(description: "Accessibility permission not granted to SafariPilot.app") }
     guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(description: "Safari is not running") }
+    guard !safari.isHidden else { throw Failure(description: "Safari is hidden; unhide it so its windows can be hit-tested") }
 
     let app = AXNode(element: AXUIElementCreateApplication(safari.processIdentifier))
     AXUIElementSetMessagingTimeout(app.element, 3)
 
-    guard let windowRef = app.value(kAXMainWindowAttribute) else { throw Failure(description: "Safari has no main window (AXMainWindow missing)") }
+    // WebKit builds a page's AX tree lazily and a just-selected tab takes a moment to appear, so a miss is retried for 1 s.
+    var attempt = 0
 
-    let window = AXNode(element: windowRef as! AXUIElement)
-    var webAreas = findWebAreas(in: window)
+    while true {
+      let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init)
+      let webAreas = windows.map { findWebAreas(in: $0) }
+      let candidates = zip(windows, webAreas).map { window, areas in
+        WindowCandidate(title: window.string(kAXTitleAttribute) ?? "", frame: window.frame, minimized: window.value(kAXMinimizedAttribute) as? Bool == true, urls: areas.map { $0.string("AXURL") ?? "?" })
+      }
 
-    // WebKit builds a page's AX tree lazily on the first client query, so the first walk can come back empty.
-    for _ in 0 ..< 10 where webAreas.isEmpty {
-      try await Task.sleep(for: .milliseconds(100))
-      webAreas = findWebAreas(in: window)
+      do {
+        let index = try WindowMatching.match(tab: tab, candidates: candidates)
+        let wanted = WindowMatching.normalize(tab.url)
+        let webArea = webAreas[index].first { WindowMatching.normalize($0.string("AXURL") ?? "") == wanted }!
+        let scrollArea = webArea.parent.flatMap { $0.role == kAXScrollAreaRole ? $0 : nil }
+        return Target(app: app, window: windows[index], webArea: webArea, scrollArea: scrollArea, webAreas: webAreas[index], candidates: candidates)
+      } catch .noMatch where attempt < 9 {
+        attempt += 1
+        try await Task.sleep(for: .milliseconds(100))
+      } catch {
+        throw Failure(description: error.description)
+      }
     }
-
-    guard let webArea = webAreas.first else {
-      throw Failure(description: "no AXWebArea under Safari's main window; top children: \(window.children.map(\.summary).joined(separator: ", "))")
-    }
-
-    let scrollArea = webArea.parent.flatMap { $0.role == kAXScrollAreaRole ? $0 : nil }
-    return Target(app: app, window: window, webArea: webArea, scrollArea: scrollArea, webAreas: webAreas)
   }
 
   static func findWebAreas(in root: AXNode) -> [AXNode] {
@@ -63,9 +75,28 @@ enum AXEngine {
     return found
   }
 
-  static func hitTest(css point: CGPoint, viewport: Viewport) async throws -> Hit {
-    let target = try await target()
+  /// Hit-tests the mapped point in the tab's window; when another Safari window covers it, raises the target and retries once.
+  static func hitTest(css point: CGPoint, viewport: Viewport, tab: TabInfo) async throws -> Hit {
+    let target = try await target(for: tab)
 
+    do {
+      return try hit(css: point, viewport: viewport, in: target)
+    } catch let covered as Covered {
+      let raised = AXUIElementPerformAction(target.window.element, kAXRaiseAction as CFString)
+
+      guard raised == .success else { throw Failure(description: "target window is covered by \(covered.by) and AXRaise failed: \(raised.name)") }
+
+      try await Task.sleep(for: .milliseconds(150))
+
+      do {
+        return try hit(css: point, viewport: viewport, in: target)
+      } catch let still as Covered {
+        throw Failure(description: "target window \(target.window.summary) is still covered by \(still.by) after AXRaise")
+      }
+    }
+  }
+
+  private static func hit(css point: CGPoint, viewport: Viewport, in target: Target) throws -> Hit {
     guard let webFrame = target.webArea.frame else { throw Failure(description: "AXWebArea has no frame") }
     guard viewport.innerWidth > 0 else { throw Failure(description: "viewport innerWidth is 0") }
 
@@ -84,12 +115,16 @@ enum AXEngine {
 
     let node = AXNode(element: hitElement)
 
-    guard let chain = node.chain(upTo: target.webArea) else {
-      let ancestry = sequence(first: node, next: \.parent).prefix(12).map(\.summary).joined(separator: " < ")
-      throw Failure(description: "hit at \(format(screenPoint)) is outside the web area: \(ancestry)")
+    if let chain = node.chain(upTo: target.webArea) {
+      return Hit(target: target, screenPoint: screenPoint, viewportFrame: frame, zoom: zoom, node: node, chain: chain)
     }
 
-    return Hit(target: target, screenPoint: screenPoint, viewportFrame: frame, zoom: zoom, node: node, chain: chain)
+    if let window = node.value(kAXWindowAttribute).map({ AXNode(element: $0 as! AXUIElement) }), !CFEqual(window.element, target.window.element) {
+      throw Covered(by: "\(window.summary) \(format(window.frame))")
+    }
+
+    let ancestry = sequence(first: node, next: \.parent).prefix(12).map(\.summary).joined(separator: " < ")
+    throw Failure(description: "hit at \(format(screenPoint)) is outside the web area: \(ancestry)")
   }
 
   static func press(_ hit: Hit) throws -> (pressed: AXNode, depth: Int) {
