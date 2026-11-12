@@ -152,7 +152,6 @@ enum AXEngine {
     let focusResult: AXError
     let valueNode: AXNode
     let valueResult: AXError
-    let readBack: String?
   }
 
   /// Sets AXFocused on the first element from the match up that allows it.
@@ -172,7 +171,7 @@ enum AXEngine {
     }
 
     let valueResult = AXUIElementSetAttributeValue(valueNode.element, kAXValueAttribute as CFString, text as CFString)
-    return TypeOutcome(focused: focused, focusResult: focusResult, valueNode: valueNode, valueResult: valueResult, readBack: valueNode.string(kAXValueAttribute))
+    return TypeOutcome(focused: focused, focusResult: focusResult, valueNode: valueNode, valueResult: valueResult)
   }
 
   /// Opens a popup select's native menu with AXPress and presses the `occurrence`th AXMenuItem titled `label`; WebKit exposes the menu under the window only while it is open, and a closed popup has no AX children.

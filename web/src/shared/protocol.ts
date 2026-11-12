@@ -107,6 +107,7 @@ export type InspectResult = {
   ref: number;
   hover: boolean;
   value: string | null;
+  secure: boolean;
   kind: ControlKind;
   checked: boolean | null;
   selectedIndex: number | null;

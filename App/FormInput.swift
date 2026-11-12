@@ -11,7 +11,7 @@ extension Commands {
     case .text:
       guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a text field, so value must be a string") }
 
-      return try await setText(tab, ref, text)
+      return try await setText(tab, ref, control.secure, text)
     case .checkbox, .radio: return try await setChecked(tab, ref, control, value)
     case .select: return try await select(tab, ref, control, value)
     case .date, .time, .dateTimeLocal:
@@ -39,17 +39,18 @@ extension Commands {
     return control
   }
 
-  private func setText(_ tab: TabInfo, _ ref: Int, _ text: String) async throws -> CLIReply {
+  /// Reads the value back from the page rather than the AX element, which WebKit may replace mid-call when focus changes the field's role (YouTube's search box).
+  private func setText(_ tab: TabInfo, _ ref: Int, _ secure: Bool, _ text: String) async throws -> CLIReply {
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
     let outcome = try AXEngine.type(text, into: match)
-    // Secure fields read back one bullet per character.
-    let expected = outcome.valueNode.subrole == kAXSecureTextFieldSubrole ? String(repeating: "\u{2022}", count: text.count) : text
-    let matched = outcome.readBack == expected
+    let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
+    let after = try await settled(tab.id, ref) { $0.value == expected }
+    let matched = after.value == expected
     let lines = [
       "AXFocused=true on \(outcome.focused.summary): \(outcome.focusResult.name)",
       "AXValue on \(outcome.valueNode.summary): \(outcome.valueResult.name)",
-      "read back: \(outcome.readBack.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
+      "read back: \(after.value.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
     ] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
@@ -58,10 +59,9 @@ extension Commands {
       "focusResult": .string(outcome.focusResult.name),
       "valueRole": .string(outcome.valueNode.role),
       "valueResult": .string(outcome.valueResult.name),
-      "readBack": outcome.readBack.map { .string($0) } ?? .null,
+      "readBack": after.value.map { .string($0) } ?? .null,
     ])
-    let ok = outcome.focusResult == .success && outcome.valueResult == .success && matched
-    return CLIReply(ok: ok, text: lines.joined(separator: "\n"), data: data)
+    return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)
   }
 
   private func setChecked(_ tab: TabInfo, _ ref: Int, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {

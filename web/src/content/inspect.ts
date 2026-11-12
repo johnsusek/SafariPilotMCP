@@ -30,6 +30,7 @@ export function inspect(ref: number): InspectResult | Failure {
     ref,
     hover: element.matches(":hover"),
     value: null,
+    secure: false,
     kind: "other" as ControlKind,
     checked: null,
     selectedIndex: null,
@@ -68,6 +69,15 @@ export function inspect(ref: number): InspectResult | Failure {
       ...base,
       value: element.value,
       kind: element.type as ControlKind,
+    };
+
+  // A password's value never leaves the page: it reads back one bullet per character, as AX shows it.
+  if (element instanceof HTMLInputElement && element.type === "password")
+    return {
+      ...base,
+      value: "\u2022".repeat(element.value.length),
+      secure: true,
+      kind: "text",
     };
 
   if (element instanceof HTMLInputElement) {

@@ -55,6 +55,7 @@ struct InspectResult: Codable, Sendable {
   let ref: Int
   let hover: Bool
   let value: String?
+  let secure: Bool
   let kind: ControlKind
   let checked: Bool?
   let selectedIndex: Int?
