@@ -75,4 +75,10 @@ describe("find", () => {
   test("needs a name or a role", () => {
     expect(names("  ")).toBe("find needs a name or a role");
   });
+
+  test("a clickable generic wrapping widgets is not named by them", () => {
+    document.body.innerHTML =
+      '<div onclick="1"><a href="#in">Zoom In</a><a href="#out">Zoom Out</a></div>';
+    expect(names("zoom")).toEqual(["Zoom In", "Zoom Out"]);
+  });
 });
