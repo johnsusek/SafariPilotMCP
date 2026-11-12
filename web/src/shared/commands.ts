@@ -23,6 +23,7 @@ export type PageRequest =
   // watch is the ref an action targets: its frame is always read, and its events carry onTarget.
   | { op: "events"; clear: boolean; arm: boolean; watch: RefPath | null }
   | { op: "inspect"; ref: RefPath }
+  | { op: "setColor"; ref: RefPath; value: string }
   | {
       op: "readPage";
       filter: "interactive" | "all";

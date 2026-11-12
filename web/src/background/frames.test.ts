@@ -683,9 +683,9 @@ describe("runPage reads", () => {
     });
   });
 
-  test("inspect and scroll route to the owning frame", async () => {
+  test("inspect, setColor and scroll route to the owning frame", async () => {
     documents[200].answer = (request) =>
-      request.op === "inspect"
+      request.op === "inspect" || request.op === "setColor"
         ? {
             ok: true,
             ref: request.ref,
@@ -705,6 +705,13 @@ describe("runPage reads", () => {
       ref: "5:3:4",
       value: "v",
     });
+    expect(
+      await runPage(send, { op: "setColor", ref: "5:3:4", value: "#00ff00" }),
+    ).toMatchObject({ ok: true, ref: "5:3:4" });
+    expect(calls.at(-1)).toEqual([
+      200,
+      { op: "setColor", ref: 4, value: "#00ff00" },
+    ]);
     expect(
       await runPage(send, { op: "scroll", ref: "5:3:4", left: 0, top: 100 }),
     ).toMatchObject({ moved: true });

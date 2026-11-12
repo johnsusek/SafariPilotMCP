@@ -57,6 +57,8 @@ export type ContentRequest =
   // arm turns on move and drag-over logging until the next events request; watch is a ref whose element sets each event's onTarget.
   | { op: "events"; clear: boolean; arm: boolean; watch: number | null }
   | { op: "inspect"; ref: number }
+  // Sets a color input's value and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
+  | { op: "setColor"; ref: number; value: string }
   // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
   | {
       op: "readPage";
@@ -139,7 +141,7 @@ export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
 // inspect: whether ref matches :hover, its form value (textContent for contenteditable, null when it has none),
 // and what kind of control it is. listbox is a select shown as a list (multiple or size over 1).
 // checked is set for checkbox and radio (native or ARIA); selectedIndex and options for both select kinds.
-// date, time and datetime-local are the inputs WebKit draws as separate typed fields.
+// date, time and datetime-local are the inputs WebKit draws as separate typed fields; color is an input type=color.
 export type ControlKind =
   | "text"
   | "checkbox"
@@ -149,6 +151,7 @@ export type ControlKind =
   | "date"
   | "time"
   | "datetime-local"
+  | "color"
   | "other";
 export type SelectOption = { value: string; label: string; disabled: boolean };
 export type InspectResult = {

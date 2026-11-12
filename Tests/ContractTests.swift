@@ -54,6 +54,7 @@ struct ContractTests {
     #expect(ContentRequest.events(clear: true, arm: true, watch: nil).json == ["op": "events", "clear": .bool(true), "arm": .bool(true), "watch": .null])
     #expect(ContentRequest.events(clear: true, arm: false, watch: PageRef(frames: [5], local: 7)).json == ["op": "events", "clear": .bool(true), "arm": .bool(false), "watch": "5:7"])
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
+    #expect(ContentRequest.setColor(ref: PageRef(frames: [5], local: 3), value: "#00ff00").json == ["op": "setColor", "ref": "5:3", "value": "#00ff00"])
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
     #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])

@@ -10,7 +10,6 @@ let nonTextInputs = new Set([
   "image",
   "file",
   "hidden",
-  "color",
 ]);
 
 let dateTimeInputs = new Set(["date", "time", "datetime-local"]);
@@ -63,6 +62,9 @@ export function inspect(ref: number): InspectResult | Failure {
       checked: element.checked,
     };
 
+  if (element instanceof HTMLInputElement && element.type === "color")
+    return { ...base, value: element.value, kind: "color" };
+
   if (element instanceof HTMLInputElement && dateTimeInputs.has(element.type))
     return {
       ...base,
@@ -99,4 +101,26 @@ export function inspect(ref: number): InspectResult | Failure {
       checked: element.getAttribute("aria-checked") === "true",
     };
   return base;
+}
+
+// No AX path sets a color input: its AXColorWell ignores AXValue and opens a popover of unnamed swatches. The isolated world's
+// value setter is the native one, so frameworks tracking the value (React) still see the change in the events.
+export function setColor(ref: number, value: string): InspectResult | Failure {
+  let element = resolveRef(ref);
+  if (!(element instanceof Element)) return element;
+
+  if (!(element instanceof HTMLInputElement) || element.type !== "color")
+    return { ok: false, error: `ref ${ref} is not a color input` };
+
+  if (element.disabled)
+    return { ok: false, error: `color input ref ${ref} is disabled` };
+
+  // WebKit takes any CSS color and stores its own serialization (green reads back #008000), but an unparsable one as #000000.
+  if (!CSS.supports("color", value))
+    return { ok: false, error: `"${value}" is not a CSS color` };
+
+  element.value = value;
+  element.dispatchEvent(new Event("input", { bubbles: true }));
+  element.dispatchEvent(new Event("change", { bubbles: true }));
+  return inspect(ref);
 }

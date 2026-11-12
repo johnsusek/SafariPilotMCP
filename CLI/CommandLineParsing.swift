@@ -12,7 +12,7 @@ enum CommandLineParsing {
     ping                            title and URL of the tab
     snapshot                        interactive elements with refs
     click REF                       locate REF, then AXPress it; REF is 12, or 5:12 inside iframe 5's frame
-    form-input REF VALUE            set a text field, checkbox or radio (true|false), or select option
+    form-input REF VALUE            set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     key [--ref REF] --text TEXT     type TEXT one key per character
     events [--clear]                events logged by the page

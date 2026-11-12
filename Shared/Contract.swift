@@ -62,7 +62,7 @@ struct EventsResult: Codable, Sendable {
   func replaced(_ frame: String, since before: EventsResult) -> Bool { !busy.contains(frame) && origins[frame] != before.origins[frame] }
 }
 /// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; checked is set for checkbox and radio, selectedIndex and options for both select kinds.
-enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", other }
+enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", color, other }
 struct SelectOption: Codable, Sendable, Equatable { let value: String; let label: String; let disabled: Bool }
 struct InspectResult: Codable, Sendable {
   let ref: PageRef
@@ -93,6 +93,8 @@ enum ContentRequest: Equatable, Sendable {
   /// watch is the ref an action targets: its frame is always read and its events carry onTarget.
   case events(clear: Bool, arm: Bool, watch: PageRef?)
   case inspect(ref: PageRef)
+  /// Sets a color input from the page script, firing untrusted input and change events; answers with inspect's read-back.
+  case setColor(ref: PageRef, value: String)
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
   case pageText(maxChars: Int)
@@ -106,6 +108,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .locate(ref): ["op": "locate", "ref": .string(ref.description)]
     case let .events(clear, arm, watch): ["op": "events", "clear": .bool(clear), "arm": .bool(arm), "watch": watch.map { .string($0.description) } ?? .null]
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
+    case let .setColor(ref, value): ["op": "setColor", "ref": .string(ref.description), "value": .string(value)]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]

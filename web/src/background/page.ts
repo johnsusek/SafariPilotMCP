@@ -370,7 +370,12 @@ async function dispatch(
     return scrolled.ok ? scrolled : inFrame(scrolled, path);
   }
 
-  let inspected = await send(frameId, { op: "inspect", ref: path.local });
+  let inspected = await send(
+    frameId,
+    request.op === "setColor"
+      ? { ...request, ref: path.local }
+      : { op: "inspect", ref: path.local },
+  );
   return inspected.ok
     ? { ...(inspected as InspectResult), ref: request.ref }
     : inFrame(inspected, path);

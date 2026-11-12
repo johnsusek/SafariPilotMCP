@@ -1,7 +1,7 @@
 import ApplicationServices
 import Foundation
 
-/// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, then reads the control back from the page.
+/// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, or a color input from the page script, then reads the control back from the page.
 extension Commands {
   func formInput(_ tabId: Int?, _ ref: PageRef, _ value: FormValue) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
@@ -18,8 +18,12 @@ extension Commands {
       guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a \(control.kind.rawValue) input, so value must be a string") }
 
       return try await setDateTime(tab, ref, control.kind, text)
+    case .color:
+      guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a color input, so value must be a string such as #00ff00") }
+
+      return try await setColor(tab, ref, text)
     case .listbox: throw Failure(description: "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
-    case .other: throw Failure(description: "ref \(ref) is not a text field, slider, checkbox, radio or select; use click or key")
+    case .other: throw Failure(description: "ref \(ref) is not a text field, slider, checkbox, radio, select or color input; use click or key")
     }
   }
 
@@ -128,6 +132,18 @@ extension Commands {
     }
 
     return CLIReply(ok: true, text: "selected \"\(option.label)\" in select ref \(ref) by pressing \(item.summary) in its menu", data: .object(data))
+  }
+
+  /// The AXColorWell ignores AXValue and opens a popover of unnamed swatches, so the page script sets the value; its input and change events are untrusted.
+  private func setColor(_ tab: TabInfo, _ ref: PageRef, _ value: String) async throws -> CLIReply {
+    let after = try await content(tab.id, .setColor(ref: ref, value: value)).decode(InspectResult.self)
+    let shown = after.value ?? ""
+    let lines = [
+      "set color ref \(ref) from the page script; its input and change events are untrusted",
+      "read back: \"\(shown)\" \(shown.lowercased() == value.lowercased() ? "(matches)" : "(the input's serialization)")",
+    ]
+    let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string("color"), "readBack": .string(shown)])
+    return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
   }
 
   /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.

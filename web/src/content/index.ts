@@ -2,7 +2,7 @@ import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
 import { frameBox, hitFrame, listFrames } from "./frames";
-import { inspect } from "./inspect";
+import { inspect, setColor } from "./inspect";
 import { locate } from "./locate";
 import { pageText } from "./pageText";
 import { scroll, scrollIntoView } from "./scroll";
@@ -21,6 +21,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "events")
       return takeEvents(request.clear, request.arm, request.watch);
     if (request.op === "inspect") return inspect(request.ref);
+    if (request.op === "setColor") return setColor(request.ref, request.value);
     if (request.op === "readPage")
       return readPage(
         request.filter,
