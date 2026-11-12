@@ -1,6 +1,11 @@
 // The app sends a Command through the background's poll; the background answers with a CommandResponse.
 // tabId null means the active tab of the last focused window.
-import type { ContentRequest, ContentResponse, Rect } from "./protocol";
+import type {
+  ContentRequest,
+  ContentResponse,
+  FrameEntry,
+  Rect,
+} from "./protocol";
 
 // windowFrame is the tab's window in screen coordinates (browser.windows.get), null when unavailable.
 export type TabInfo = {
@@ -30,12 +35,30 @@ export type Command =
   // Resizes the tab's window to width x height points and answers with the tab's new window frame.
   | { type: "resize"; tabId: number | null; width: number; height: number }
   // Fails when the tab is not the active tab of its window; the app selects it first.
-  | { type: "screenshot"; tabId: number | null };
+  | { type: "screenshot"; tabId: number | null }
+  // Walks the tab's frames from the top one: what each frame's content script answers and the trusted clicks and keydowns it logged since the last walk.
+  | { type: "frames"; tabId: number | null };
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 export type TabResult = { ok: true; tab: TabInfo };
 export type ClosedResult = { ok: true; closed: number };
 export type ScreenshotResult = { ok: true; dataUrl: string; tab: TabInfo };
 
+export type FrameNode = {
+  frameId: number;
+  error: string | null;
+  url: string;
+  title: string;
+  clicks: number;
+  keydowns: number;
+  frames: (FrameEntry & { frame: FrameNode | null })[];
+};
+export type FramesTree = { ok: true; tree: FrameNode };
+
 export type CommandResponse =
-  ContentResponse | TabsResult | TabResult | ClosedResult | ScreenshotResult;
+  | ContentResponse
+  | TabsResult
+  | TabResult
+  | ClosedResult
+  | ScreenshotResult
+  | FramesTree;

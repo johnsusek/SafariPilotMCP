@@ -29,6 +29,7 @@ enum CommandLineParsing {
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
     resize WIDTH HEIGHT             resize the tab's window in points
     debug-ax [REF]                  AX windows and frames next to viewport metrics
+    debug-frames                    each frame's content script, iframes and logged clicks and keydowns
     debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
     debug-cg click|hover REF        the same for a click or a hover
     debug-cg drag FROM TO           the same for a drag
@@ -81,6 +82,7 @@ enum CommandLineParsing {
         return number
       }
       invocation = try Invocation(command: .screenshot(tabId: tabId, corners: region, scale: scale), outputPath: rest.first)
+    case "debug-frames": invocation = Invocation(command: .debugFrames(tabId: tabId))
     case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try integer($0, "REF") }))
     case "debug-cg":
       let windowFields = !flag("--no-window-fields", &rest)

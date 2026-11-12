@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>SafariPilot frames</title>
+    <style>
+      iframe {
+        display: block;
+        width: 360px;
+        height: 120px;
+        margin: 8px 0;
+        border: 2px solid #888;
+      }
+      #scaled {
+        transform: scale(0.5);
+        transform-origin: 0 0;
+        width: 720px;
+        height: 240px;
+        margin-bottom: -112px;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Frames</h1>
+    <iframe title="Same origin" src="frame-child.html?name=same"></iframe>
+    <iframe title="Cross origin" id="cross"></iframe>
+    <iframe title="Srcdoc" srcdoc="<button>Srcdoc button</button> <input aria-label='Srcdoc field'>"></iframe>
+    <iframe title="Written" id="written"></iframe>
+    <iframe title="Sandboxed" sandbox="" src="frame-child.html?name=sandboxed"></iframe>
+    <iframe title="Nested" src="frame-child.html?name=outer&amp;nest=1"></iframe>
+    <iframe title="Scaled" id="scaled" src="frame-child.html?name=scaled"></iframe>
+    <script>
+      let other = location.hostname === "localhost" ? "127.0.0.1" : "localhost";
+      document.getElementById("cross").src = `${location.protocol}//${other}:${location.port}/frame-child.html?name=cross`;
+      let written = document.getElementById("written").contentDocument;
+      written.open();
+      written.write("<button>Written button</button> <input aria-label='Written field'>");
+      written.close();
+    </script>
+  </body>
+</html>

@@ -31,6 +31,7 @@ struct Commands {
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
+    case let .debugFrames(tabId): try await debugFrames(tabId)
     case let .debugCG(tabId, probe, windowFields): try await debugCG(tabId, probe, windowFields)
     }
   }
@@ -314,6 +315,8 @@ struct Commands {
       }
     }
 
+    lines += nestedWebAreas(in: target.webArea).map { "  nested \($0)" }
+
     for (name, frame) in [("webArea", target.webArea.frame), ("scrollArea", target.scrollArea?.frame)] {
       guard let frame else { continue }
 
@@ -331,5 +334,53 @@ struct Commands {
 
     let text = lines.joined(separator: "\n")
     return CLIReply(ok: true, text: text, data: .object(["text": .string(text)]))
+  }
+
+  /// Frame documents show up as AXWebArea elements inside the top one, if WebKit links them in.
+  private func nestedWebAreas(in webArea: AXNode) -> [String] {
+    var found: [String] = []
+    var queue = webArea.children.map { ($0, 1) }
+    var visited = 0
+
+    while !queue.isEmpty, visited < 20000 {
+      let (node, depth) = queue.removeFirst()
+      visited += 1
+
+      if node.role == "AXWebArea" {
+        found.append("\(String(repeating: "  ", count: depth))AXWebArea \(AXEngine.format(node.frame)) url \(node.string("AXURL") ?? "?") children \(node.children.count)")
+      }
+
+      queue += node.children.map { ($0, node.role == "AXWebArea" ? depth + 1 : depth) }
+    }
+
+    return found
+  }
+
+  private func debugFrames(_ tabId: Int?) async throws -> CLIReply {
+    let response = try await call(.frames(tabId: tabId))
+    var lines: [String] = []
+
+    func add(_ node: JSONValue, _ indent: String) {
+      let id = Int(node["frameId"]?.number ?? -1)
+
+      if let error = node["error"]?.string {
+        lines.append("\(indent)frame \(id): \(error)")
+        return
+      }
+
+      lines.append("\(indent)frame \(id) \(node["url"]?.string ?? "?") \"\(node["title"]?.string ?? "")\" clicks \(Int(node["clicks"]?.number ?? 0)) keydowns \(Int(node["keydowns"]?.number ?? 0))")
+
+      for entry in node["frames"]?.array ?? [] {
+        let rect = entry["rect"]
+        let box = [rect?["left"], rect?["top"], rect?["width"], rect?["height"]].map { String(format: "%.0f", $0?.number ?? -1) }
+        let sandbox = entry["sandbox"]?.string.map { " sandbox=\"\($0)\"" } ?? ""
+        lines.append("\(indent)  iframe [\(Int(entry["ref"]?.number ?? -1))] frameId \(Int(entry["frameId"]?.number ?? -1)) \(entry["src"]?.string ?? "?")\(sandbox) (\(box[0]), \(box[1]), \(box[2]) x \(box[3]))")
+
+        if let child = entry["frame"], child != .null { add(child, indent + "    ") }
+      }
+    }
+
+    add(response["tree"] ?? .null, "")
+    return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: response)
   }
 }

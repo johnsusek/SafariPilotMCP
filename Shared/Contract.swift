@@ -113,6 +113,7 @@ enum BackgroundCommand: Equatable, Sendable {
   case history(tabId: Int?, direction: HistoryDirection)
   case screenshot(tabId: Int?)
   case resize(tabId: Int?, width: Int, height: Int)
+  case frames(tabId: Int?)
 
   var json: [String: JSONValue] {
     let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
@@ -128,6 +129,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .history(tabId, direction): return ["type": "history", "tabId": id(tabId), "direction": .string(direction.rawValue)]
     case let .screenshot(tabId): return ["type": "screenshot", "tabId": id(tabId)]
     case let .resize(tabId, width, height): return ["type": "resize", "tabId": id(tabId), "width": .number(Double(width)), "height": .number(Double(height))]
+    case let .frames(tabId): return ["type": "frames", "tabId": id(tabId)]
     }
   }
 

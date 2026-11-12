@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Frame child</title>
+  </head>
+  <body>
+    <button id="button" type="button">Child button</button>
+    <input id="field" aria-label="Child field" />
+    <output id="count">0</output>
+    <script>
+      let params = new URLSearchParams(location.search);
+      document.title = `Frame ${params.get("name")}`;
+      document.getElementById("button").textContent = `${params.get("name")} button`;
+      document.getElementById("field").setAttribute("aria-label", `${params.get("name")} field`);
+      document.getElementById("button").addEventListener("click", () => document.getElementById("count").textContent++);
+
+      if (params.get("nest")) {
+        let inner = document.createElement("iframe");
+        inner.title = "Inner";
+        inner.src = "frame-child.html?name=inner";
+        document.body.append(inner);
+      }
+    </script>
+  </body>
+</html>

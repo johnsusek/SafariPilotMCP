@@ -1,6 +1,7 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
+import { listFrames } from "./frames";
 import { inspect } from "./inspect";
 import { locate } from "./locate";
 import { pageText } from "./pageText";
@@ -30,6 +31,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "scroll")
       return scroll(request.ref, request.left, request.top);
     if (request.op === "scrollIntoView") return scrollIntoView(request.ref);
+    if (request.op === "frames") return listFrames();
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

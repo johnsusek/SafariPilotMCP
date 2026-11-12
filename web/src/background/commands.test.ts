@@ -115,7 +115,11 @@ describe("runCommand", () => {
       tabId: 6,
       request: { op: "ping" },
     });
-    expect(fake.tabs.sendMessage).toHaveBeenCalledWith(6, { op: "ping" });
+    expect(fake.tabs.sendMessage).toHaveBeenCalledWith(
+      6,
+      { op: "ping" },
+      { frameId: 0 },
+    );
     expect(result).toEqual({ ok: true, url: "u", title: "t" });
   });
 

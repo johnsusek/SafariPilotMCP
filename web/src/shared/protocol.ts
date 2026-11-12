@@ -64,9 +64,25 @@ export type ContentRequest =
   | { op: "find"; name: string; role: string }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: number | null; left: number; top: number }
-  | { op: "scrollIntoView"; ref: number };
+  | { op: "scrollIntoView"; ref: number }
+  | { op: "frames" };
 
 export type Failure = { ok: false; error: string };
+
+// frames: this document's iframes with the frameId Safari gives each (-1 when it has none yet).
+export type FrameEntry = {
+  ref: number;
+  frameId: number;
+  src: string;
+  sandbox: string | null;
+  rect: Rect;
+};
+export type FramesResult = {
+  ok: true;
+  url: string;
+  title: string;
+  frames: FrameEntry[];
+};
 export type PingResult = { ok: true; url: string; title: string };
 export type SnapshotResult = {
   ok: true;
@@ -155,4 +171,5 @@ export type ContentResponse =
   | ReadPageResult
   | FindResult
   | PageTextResult
-  | ScrollResult;
+  | ScrollResult
+  | FramesResult;
