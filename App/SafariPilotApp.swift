@@ -7,9 +7,9 @@ struct SafariPilotApp: App {
 
   var body: some Scene {
     Window("SafariPilot", id: "main") {
-      StatusView(model: delegate.model)
+      MainView(model: delegate.model)
     }
-    .defaultSize(width: 720, height: 520)
+    .defaultSize(width: 780, height: 580)
     .commands {
       CommandMenu("Bridge") {
         Button("Request Accessibility Access") { delegate.model.requestAccessibility() }

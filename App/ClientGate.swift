@@ -107,6 +107,10 @@ final class ClientGate {
     }
   }
 
+  func removeAll() {
+    for record in store?.records ?? [] { remove(record) }
+  }
+
   /// A credential to write into a client's MCP settings: the one already there when SafariPilot knows it, else a new untrusted one.
   func credentialForSettings(name: String, existing: String?) throws -> String {
     guard let store else { throw Failure(description: "client credentials are unavailable: \(storeError ?? "keychain not loaded")") }

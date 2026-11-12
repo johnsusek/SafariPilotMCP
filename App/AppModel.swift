@@ -3,6 +3,7 @@ import ApplicationServices
 import Foundation
 import Observation
 import SafariServices
+import ServiceManagement
 
 @Observable @MainActor
 final class AppModel {
@@ -25,6 +26,7 @@ final class AppModel {
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
   private(set) var desktopAdded = false
+  private(set) var loginItem = SMAppService.mainApp.status
   var setupAlert: SetupAlert?
   private(set) var log: [LogEntry] = []
   private var started = false
@@ -43,6 +45,7 @@ final class AppModel {
     Task {
       while true {
         axTrusted = AXIsProcessTrusted()
+        loginItem = SMAppService.mainApp.status
         await refreshExtensionState()
         desktopAdded = ClaudeSetup.isAdded(config: try? Data(contentsOf: ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath) { gate.knows(credential: $0) }
         try? await Task.sleep(for: .seconds(3))
@@ -69,6 +72,16 @@ final class AppModel {
     } catch {
       record("open settings", ok: false, summary: error.localizedDescription)
     }
+  }
+
+  func setLaunchAtLogin(_ enabled: Bool) {
+    do {
+      if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
+    } catch {
+      setupAlert = SetupAlert(title: "Couldn't Change Launch at Login", message: error.localizedDescription)
+    }
+
+    loginItem = SMAppService.mainApp.status
   }
 
   /// Writes this app's server into Claude Desktop's config; a config that is not a JSON object is refused, not overwritten.

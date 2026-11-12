@@ -24,6 +24,8 @@ targets:
     sources:
       - App
       - Shared
+      - CLI/Tools.swift
+      - CLI/TabSession.swift
     dependencies:
       - target: SafariPilotExtension
         embed: true
