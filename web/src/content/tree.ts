@@ -15,6 +15,9 @@ type Item =
   | { text: string }
   | { element: Element; role: string; name: string; children: Item[] };
 
+// left is a lower bound on output characters still wanted; building stops once it runs out, since a large page would otherwise be walked whole for a short answer.
+type Walk = { interactiveOnly: boolean; left: number };
+
 type Output = {
   lines: string[];
   length: number;
@@ -68,12 +71,16 @@ function pushText(items: Item[], text: string) {
 }
 
 // Adds child to items: text joins the previous run, and an element that is not shown gives its children up to the parent.
-function add(items: Item[], child: Node, interactiveOnly: boolean) {
+function add(items: Item[], child: Node, walk: Walk) {
+  let interactiveOnly = walk.interactiveOnly;
+
   if (child.nodeType === Node.TEXT_NODE) {
     let text = interactiveOnly ? "" : collapse(child.textContent, textMax);
 
-    if (text) pushText(items, text);
+    if (!text) return;
 
+    pushText(items, text);
+    walk.left -= text.length + 2;
     return;
   }
 
@@ -84,7 +91,7 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
   let children =
     leafTags.has(child.localName) || isEditableRoot(child)
       ? []
-      : build(child, interactiveOnly);
+      : build(child, walk);
   // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic wrapping other elements.
   let wraps =
     collapsibleRoles.has(role) && children.some((item) => "element" in item);
@@ -150,12 +157,17 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
   }
 
   items.push({ element: child, role, name, children });
+  walk.left -= role.length + name.length + 8;
 }
 
-function build(node: Node, interactiveOnly: boolean): Item[] {
+function build(node: Node, walk: Walk): Item[] {
   let items: Item[] = [];
 
-  for (let child of flatChildren(node)) add(items, child, interactiveOnly);
+  for (let child of flatChildren(node)) {
+    if (walk.left <= 0) break;
+
+    add(items, child, walk);
+  }
 
   return items;
 }
@@ -281,18 +293,34 @@ function render(items: Item[], depth: number, output: Output): boolean {
   return true;
 }
 
-function textOf(items: Item[], maxChars: number, maxDepth: number) {
+// The walk's budget counts lines that later fold away (a lone text that becomes its element's name, a label's text), so it allows three times the output; a depth limit hides lines it cannot foresee, so then the walk is whole.
+let newWalk = (
+  filter: "interactive" | "all",
+  maxChars: number,
+  maxDepth: number,
+): Walk => ({
+  interactiveOnly: filter === "interactive",
+  left: Number.isFinite(maxDepth) ? Infinity : maxChars * 3,
+});
+
+function textOf(items: Item[], walk: Walk, maxChars: number, maxDepth: number) {
   let output: Output = { lines: [], length: 0, maxChars, maxDepth };
   let complete = render(items, 0, output);
-  return { text: output.lines.join("\n"), truncated: !complete };
+  return {
+    text: output.lines.join("\n"),
+    truncated: !complete || walk.left <= 0,
+  };
 }
 
-export let treeText = (
+export function treeText(
   root: Node,
   filter: "interactive" | "all",
   maxChars: number,
   maxDepth = Infinity,
-) => textOf(build(root, filter === "interactive"), maxChars, maxDepth);
+) {
+  let walk = newWalk(filter, maxChars, maxDepth);
+  return textOf(build(root, walk), walk, maxChars, maxDepth);
+}
 
 // ref limits the tree to that element and what is inside it; depth limits how many levels are shown.
 export function readPage(
@@ -302,18 +330,18 @@ export function readPage(
   depth: number | null,
 ): ReadPageResult | Failure {
   pruneRefs();
-  let interactiveOnly = filter === "interactive";
+  let walk = newWalk(filter, maxChars, depth ?? Infinity);
   let items: Item[] = [];
 
   if (ref === null)
-    items = build(document.body ?? document.documentElement, interactiveOnly);
+    items = build(document.body ?? document.documentElement, walk);
 
   if (ref !== null) {
     let element = resolveRef(ref);
 
     if (!(element instanceof Element)) return element;
 
-    add(items, element, interactiveOnly);
+    add(items, element, walk);
   }
 
   return {
@@ -321,6 +349,6 @@ export function readPage(
     url: location.href,
     title: document.title,
     viewport: readViewport(),
-    ...textOf(items, maxChars, depth ?? Infinity),
+    ...textOf(items, walk, maxChars, depth ?? Infinity),
   };
 }

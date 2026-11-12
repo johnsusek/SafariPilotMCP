@@ -171,6 +171,21 @@ describe("treeText", () => {
     expect(withoutRefs(text)).toBe('link "upvote" href=/vote');
   });
 
+  test("a short read of a long page stops walking early and gives the same prefix", () => {
+    document.body.innerHTML = Array.from(
+      { length: 2000 },
+      (_, index) => `<p>Paragraph ${index}</p>`,
+    ).join("");
+    let full = treeText(document.body, "all", 1e9).text;
+    let paragraphs = document.querySelectorAll("p");
+    let spy = vi.spyOn(paragraphs[1999], "checkVisibility");
+    let short = treeText(document.body, "all", 200);
+    expect(short.truncated).toBe(true);
+    expect(full.startsWith(short.text)).toBe(true);
+    expect(short.text.length).toBeGreaterThan(150);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   test("maxChars cuts at a line boundary", () => {
     document.body.innerHTML = "<p>one</p><p>two</p><p>three</p>";
     let full = treeText(document.body, "all", 10000).text;
