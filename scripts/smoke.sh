@@ -131,6 +131,15 @@ site_bbc() {
   close_tab
 }
 
+site_discourse() {
+  open_tab "https://meta.discourse.org/latest"
+  safaripilot --tab $tab scroll down 25 >/dev/null
+  sleep 2
+  check "discourse: find after scrolling lists on-screen links" '^\[[0-9]+\] link' find --role link
+  print -r -- "$output" | grep -q offscreen && { print "FAIL discourse: no offscreen links crowd the cap"; failures=$((failures + 1)) } || print "PASS discourse: no offscreen links crowd the cap"
+  close_tab
+}
+
 site_frames() {
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/button"
   check "frames: live sample inlined" '\[ref=[0-9]+:[0-9]+\]' read-page --max-chars 20000
@@ -141,6 +150,11 @@ site_frames() {
   local field=$(ref "Name (4 to 8 characters)" textbox)
   check "frames: form-input in frame" '\(matches\)' form-input $field "abcd"
   check "frames: keys counted in frame" 'keydowns reached' key --ref $field --text "ef"
+  close_tab
+  open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color"
+  local well=$(ref "Foreground color" button)
+  check "frames: color input set by name" 'read back: "#008000"' form-input $well green
+  check "frames: color change logged" 'change UNTRUSTED' events
   close_tab
   open_tab "https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_onclick"
   check "frames: tryit result button" 'click on \[[0-9]+:[0-9]+\]' click $(ref "Click me" button)
@@ -157,7 +171,7 @@ site_reddit() {
 }
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc frames reddit)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit)
 
 for site in $sites; do
   site_$site
