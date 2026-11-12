@@ -1,7 +1,7 @@
 import AppKit
 import ApplicationServices
 
-/// Finds the Safari window showing a tab and acts on page elements purely through AX: hit-test, AXRaise, AXPress, AXFocused, AXValue.
+/// Finds the Safari window showing a tab and acts on page elements purely through AX: frame matching, AXPress, AXFocused, AXValue.
 @MainActor
 enum AXEngine {
   struct Target {
@@ -13,23 +13,24 @@ enum AXEngine {
     let candidates: [WindowCandidate]
   }
 
-  struct Hit {
+  struct Match {
     let target: Target
     let screenPoint: CGPoint
+    let screenRect: CGRect
     let viewportFrame: CGRect
     let zoom: Double
-    let node: AXNode
+    let score: Double
+    /// The matched element first, then its ancestors up to, not including, the web area.
     let chain: [AXNode]
-  }
 
-  /// The hit landed in another Safari window that covers the target.
-  private struct Covered: Error { let by: String }
+    var node: AXNode { chain[0] }
+  }
 
   /// Finds the window showing the tab among all of Safari's AX windows; the tab must already be active in its window.
   static func target(for tab: TabInfo) async throws -> Target {
     guard AXIsProcessTrusted() else { throw Failure(description: "Accessibility permission not granted to SafariPilot.app") }
     guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(description: "Safari is not running") }
-    guard !safari.isHidden else { throw Failure(description: "Safari is hidden; unhide it so its windows can be hit-tested") }
+    guard !safari.isHidden else { throw Failure(description: "Safari is hidden; unhide it so AX can reach its windows") }
 
     let app = AXNode(element: AXUIElementCreateApplication(safari.processIdentifier))
     AXUIElementSetMessagingTimeout(app.element, 3)
@@ -75,64 +76,61 @@ enum AXEngine {
     return found
   }
 
-  /// Hit-tests the mapped point in the tab's window; when another Safari window covers it, raises the target and retries once.
-  static func hitTest(css point: CGPoint, viewport: Viewport, tab: TabInfo) async throws -> Hit {
+  /// Resolves a located element to the AX element whose reported frame best matches its mapped screen rect; never hit-tests, so covering windows and a stale hit-test origin do not matter.
+  static func resolve(_ located: LocateResult, tab: TabInfo) async throws -> Match {
     let target = try await target(for: tab)
+    let viewport = located.viewport
 
-    do {
-      return try hit(css: point, viewport: viewport, in: target)
-    } catch let covered as Covered {
-      let raised = AXUIElementPerformAction(target.window.element, kAXRaiseAction as CFString)
-
-      guard raised == .success else { throw Failure(description: "target window is covered by \(covered.by) and AXRaise failed: \(raised.name)") }
-
-      try await Task.sleep(for: .milliseconds(150))
-
-      do {
-        return try hit(css: point, viewport: viewport, in: target)
-      } catch let still as Covered {
-        throw Failure(description: "target window \(target.window.summary) is still covered by \(still.by) after AXRaise")
-      }
-    }
-  }
-
-  private static func hit(css point: CGPoint, viewport: Viewport, in target: Target) throws -> Hit {
     guard let webFrame = target.webArea.frame else { throw Failure(description: "AXWebArea has no frame") }
     guard viewport.innerWidth > 0 else { throw Failure(description: "viewport innerWidth is 0") }
 
     let frame = ViewportMapping.viewportFrame(webArea: webFrame, scrollArea: target.scrollArea?.frame)
     let zoom = ViewportMapping.zoom(viewport: viewport, frame: frame)
-    let screenPoint = ViewportMapping.screenPoint(css: point, viewport: viewport, frame: frame)
+    let screenPoint = ViewportMapping.screenPoint(css: CGPoint(x: located.point.left, y: located.point.top), viewport: viewport, frame: frame)
+    let screenRect = ViewportMapping.screenRect(css: located.rect, viewport: viewport, frame: frame)
 
     guard frame.contains(screenPoint) else {
       throw Failure(description: "mapped point \(format(screenPoint)) is outside the viewport frame \(format(frame)); element is probably off screen")
     }
 
-    var hitElement: AXUIElement?
-    let error = AXUIElementCopyElementAtPosition(target.app.element, Float(screenPoint.x), Float(screenPoint.y), &hitElement)
+    var best: (lineage: [AXNode], score: Double)?
+    var frontier: [[AXNode]] = target.webArea.children.map { [$0] }
+    var visited = 0
 
-    guard error == .success, let hitElement else { throw Failure(description: "AXUIElementCopyElementAtPosition at \(format(screenPoint)) failed: \(error.name)") }
+    // Lineages run from a node up to, not including, the web area. Subtrees whose frame misses the rect are skipped; empty or missing frames are still entered, since their children can lie outside them.
+    while let lineage = frontier.popLast() {
+      visited += 1
 
-    let node = AXNode(element: hitElement)
+      guard visited <= 5000 else { throw Failure(description: "visited 5000 AX elements under the web area without finishing; page is too large to resolve by frame") }
 
-    if let chain = node.chain(upTo: target.webArea) {
-      return Hit(target: target, screenPoint: screenPoint, viewportFrame: frame, zoom: zoom, node: node, chain: chain)
+      let node = lineage[0]
+      let nodeFrame = node.frame
+
+      if let nodeFrame, !nodeFrame.isEmpty, !nodeFrame.intersects(screenRect) { continue }
+
+      if let nodeFrame {
+        let score = FrameMatching.score(nodeFrame, screenRect)
+
+        if FrameMatching.beats(score: score, depth: lineage.count, best: best.map { ($0.score, $0.lineage.count) }) { best = (lineage, score) }
+      }
+
+      frontier.append(contentsOf: node.children.reversed().map { [$0] + lineage })
     }
 
-    if let window = node.value(kAXWindowAttribute).map({ AXNode(element: $0 as! AXUIElement) }), !CFEqual(window.element, target.window.element) {
-      throw Covered(by: "\(window.summary) \(format(window.frame))")
+    guard let best, best.score >= FrameMatching.minimum else {
+      let found = best.map { "best was \($0.lineage[0].summary) \(format($0.lineage[0].frame)) scoring \(String(format: "%.2f", $0.score))" } ?? "no element under the web area has a frame"
+      throw Failure(description: "no AX element matches the element's mapped frame \(format(screenRect)) (needs \(FrameMatching.minimum)); \(found) after \(visited) elements")
     }
 
-    let ancestry = sequence(first: node, next: \.parent).prefix(12).map(\.summary).joined(separator: " < ")
-    throw Failure(description: "hit at \(format(screenPoint)) is outside the web area: \(ancestry)")
+    return Match(target: target, screenPoint: screenPoint, screenRect: screenRect, viewportFrame: frame, zoom: zoom, score: best.score, chain: best.lineage)
   }
 
-  static func press(_ hit: Hit) throws -> (pressed: AXNode, depth: Int) {
-    guard let depth = hit.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else {
-      throw Failure(description: "no element from the hit up to the web area supports AXPress:\n\(describe(hit.chain))")
+  static func press(_ match: Match) throws -> (pressed: AXNode, depth: Int) {
+    guard let depth = match.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else {
+      throw Failure(description: "no element from the match up to the web area supports AXPress:\n\(describe(match.chain))")
     }
 
-    let pressed = hit.chain[depth]
+    let pressed = match.chain[depth]
     let error = AXUIElementPerformAction(pressed.element, kAXPressAction as CFString)
 
     guard error == .success else { throw Failure(description: "AXPress on \(pressed.summary) failed: \(error.name)") }
@@ -148,20 +146,20 @@ enum AXEngine {
     let readBack: String?
   }
 
-  /// Sets AXFocused on the first element from the hit up that allows it.
-  static func focus(_ hit: Hit) throws -> (focused: AXNode, result: AXError) {
-    guard let focused = hit.chain.first(where: { $0.isSettable(kAXFocusedAttribute) }) else {
-      throw Failure(description: "no element from the hit up to the web area has a settable AXFocused:\n\(describe(hit.chain))")
+  /// Sets AXFocused on the first element from the match up that allows it.
+  static func focus(_ match: Match) throws -> (focused: AXNode, result: AXError) {
+    guard let focused = match.chain.first(where: { $0.isSettable(kAXFocusedAttribute) }) else {
+      throw Failure(description: "no element from the match up to the web area has a settable AXFocused:\n\(describe(match.chain))")
     }
 
     return (focused, AXUIElementSetAttributeValue(focused.element, kAXFocusedAttribute as CFString, kCFBooleanTrue))
   }
 
-  static func type(_ text: String, into hit: Hit) throws -> TypeOutcome {
-    let (focused, focusResult) = try focus(hit)
+  static func type(_ text: String, into match: Match) throws -> TypeOutcome {
+    let (focused, focusResult) = try focus(match)
 
-    guard let valueNode = hit.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
-      throw Failure(description: "AXFocused set (\(focusResult.name)) but nothing has a settable AXValue:\n\(describe(hit.chain))")
+    guard let valueNode = match.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
+      throw Failure(description: "AXFocused set (\(focusResult.name)) but nothing has a settable AXValue:\n\(describe(match.chain))")
     }
 
     let valueResult = AXUIElementSetAttributeValue(valueNode.element, kAXValueAttribute as CFString, text as CFString)

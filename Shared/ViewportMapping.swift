@@ -35,4 +35,10 @@ enum ViewportMapping {
       y: frame.minY + (point.y - viewport.visualOffsetTop) * scale
     )
   }
+
+  static func screenRect(css rect: CSSRect, viewport: Viewport, frame: CGRect) -> CGRect {
+    let scale = zoom(viewport: viewport, frame: frame) * viewport.visualScale
+    let origin = screenPoint(css: CGPoint(x: rect.left, y: rect.top), viewport: viewport, frame: frame)
+    return CGRect(x: origin.x, y: origin.y, width: rect.width * scale, height: rect.height * scale)
+  }
 }

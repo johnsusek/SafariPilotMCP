@@ -32,6 +32,15 @@ struct ViewportMappingTests {
     #expect(ViewportMapping.screenPoint(css: CGPoint(x: 310, y: 205), viewport: pinched, frame: frame) == CGPoint(x: 120, y: 162))
   }
 
+  @Test func rectMapsOriginAndScalesSizeWithZoomAndPinch() {
+    var zoomed = viewport
+    zoomed.innerWidth = 960
+    zoomed.visualScale = 2
+    zoomed.visualOffsetLeft = 50
+    let rect = CSSRect(left: 100, top: 40, width: 30, height: 10)
+    #expect(ViewportMapping.screenRect(css: rect, viewport: zoomed, frame: frame) == CGRect(x: 225, y: 252, width: 75, height: 25))
+  }
+
   @Test func visualZoomUsesVisibleWidthIncludingPinch() {
     var pinched = viewport
     pinched.visualScale = 2

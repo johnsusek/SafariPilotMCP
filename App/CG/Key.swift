@@ -10,12 +10,12 @@ extension Commands {
 
     if let ref {
       let located = try await locateHittable(tab.id, ref)
-      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
-      let (focused, result) = try AXEngine.focus(hit)
+      let match = try await AXEngine.resolve(located, tab: tab)
+      let (focused, result) = try AXEngine.focus(match)
 
       guard result == .success else { throw Failure(description: "AXFocused=true on \(focused.summary) for ref \(ref) failed: \(result.name)") }
 
-      target = hit.target
+      target = match.target
       focusNode = focused
     } else {
       target = try await AXEngine.target(for: tab)

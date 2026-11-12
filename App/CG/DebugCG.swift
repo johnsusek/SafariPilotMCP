@@ -6,7 +6,7 @@ extension Commands {
   func debugCG(_ tabId: Int?, _ probe: CGProbe, _ windowFields: Bool) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     var setup: [String] = []
-    var hits: [AXEngine.Hit] = []
+    var matches: [AXEngine.Match] = []
     var scroll: (Double, Double)?
 
     for ref in probe.refs {
@@ -17,20 +17,20 @@ extension Commands {
       if let scroll, scroll != position { throw Failure(description: "locating ref \(ref) scrolled the page; FROM and TO must be visible together") }
 
       scroll = position
-      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
-      setup += ["ref \(ref):"] + hitLines(located, hit).map { "  \($0)" }
-      hits.append(hit)
+      let match = try await AXEngine.resolve(located, tab: tab)
+      setup += ["ref \(ref):"] + matchLines(located, match).map { "  \($0)" }
+      matches.append(match)
     }
 
     let target: AXEngine.Target
 
-    if let hit = hits.first { target = hit.target } else { target = try await AXEngine.target(for: tab) }
+    if let match = matches.first { target = match.target } else { target = try await AXEngine.target(for: tab) }
 
     var pid: pid_t = 0
     AXUIElementGetPid(target.app.element, &pid)
 
     if case let .key(_, ref?) = probe {
-      let (focused, result) = try AXEngine.focus(hits[0])
+      let (focused, result) = try AXEngine.focus(matches[0])
       setup.append("AXFocused=true on \(focused.summary) for ref \(ref): \(result.name)")
     }
 
@@ -46,7 +46,7 @@ extension Commands {
     let main = target.window.value(kAXMainAttribute) as? Bool
     let focused = target.window.value(kAXFocusedAttribute) as? Bool
     let postAccess = CGPreflightPostEventAccess()
-    let points = hits.map(\.screenPoint)
+    let points = matches.map(\.screenPoint)
 
     _ = try await content(tab.id, .events(clear: true, arm: true))
     var poster = EventPoster(pid: pid, windowID: windowID)

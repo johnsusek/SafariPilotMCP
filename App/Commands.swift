@@ -194,20 +194,20 @@ struct Commands {
     return located
   }
 
-  func hitLines(_ locate: LocateResult, _ hit: AXEngine.Hit) -> [String] {
+  func matchLines(_ locate: LocateResult, _ match: AXEngine.Match) -> [String] {
     [
       "locate: hitsTarget=\(locate.hitsTarget) \(locate.hitDescription)",
-      "mapped css (\(locate.point.left), \(locate.point.top)) to screen \(AXEngine.format(hit.screenPoint)) zoom \(String(format: "%.3f", hit.zoom)) frame \(AXEngine.format(hit.viewportFrame))",
-      "hit: \(hit.node.summary) in window \(hit.target.window.summary)",
+      "mapped css rect (\(locate.rect.left), \(locate.rect.top), \(locate.rect.width) x \(locate.rect.height)) to screen \(AXEngine.format(match.screenRect)) zoom \(String(format: "%.3f", match.zoom)) frame \(AXEngine.format(match.viewportFrame))",
+      "matched: \(match.node.summary) \(AXEngine.format(match.node.frame)) score \(String(format: "%.2f", match.score)) in window \(match.target.window.summary)",
     ]
   }
 
   private func click(_ tabId: Int?, _ ref: Int) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
-    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
-    let (pressed, depth) = try AXEngine.press(hit)
-    let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from hit) in tab \(tab.id)"] + hitLines(located, hit)
+    let match = try await AXEngine.resolve(located, tab: tab)
+    let (pressed, depth) = try AXEngine.press(match)
+    let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from match) in tab \(tab.id)"] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .number(Double(ref)),
@@ -215,9 +215,9 @@ struct Commands {
       "pressedLabel": .string(pressed.label),
       "action": .string(kAXPressAction),
       "depth": .number(Double(depth)),
-      "hitRole": .string(hit.node.role),
+      "matchedRole": .string(match.node.role),
+      "matchScore": .number(match.score),
       "hitDescription": .string(located.hitDescription),
-      "screenPoint": .array([.number(hit.screenPoint.x), .number(hit.screenPoint.y)]),
     ])
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
   }
@@ -225,14 +225,14 @@ struct Commands {
   private func type(_ tabId: Int?, _ ref: Int, _ text: String) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
-    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
-    let outcome = try AXEngine.type(text, into: hit)
+    let match = try await AXEngine.resolve(located, tab: tab)
+    let outcome = try AXEngine.type(text, into: match)
     let matched = outcome.readBack == text
     let lines = [
       "AXFocused=true on \(outcome.focused.summary): \(outcome.focusResult.name)",
       "AXValue on \(outcome.valueNode.summary): \(outcome.valueResult.name)",
       "read back: \(outcome.readBack.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
-    ] + hitLines(located, hit)
+    ] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .number(Double(ref)),
@@ -281,9 +281,9 @@ struct Commands {
 
     if let ref {
       let located = try await content(tab.id, .locate(ref: ref)).decode(LocateResult.self)
-      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport, tab: tab)
-      lines += hitLines(located, hit)
-      lines.append("chain to web area:\n\(AXEngine.describe(hit.chain))")
+      let match = try await AXEngine.resolve(located, tab: tab)
+      lines += matchLines(located, match)
+      lines.append("chain to web area:\n\(AXEngine.describe(match.chain))")
     }
 
     let text = lines.joined(separator: "\n")
