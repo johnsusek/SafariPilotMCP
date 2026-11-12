@@ -36,10 +36,17 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };
 
   if (command.type === "tabCreate") {
-    let { id: windowId } = await browser.windows.getLastFocused();
-    let create = async () =>
-      (await browser.tabs.create({ windowId, url: command.url ?? undefined }))
-        .id!;
+    // With no window open there is nothing to add a tab to, so a new unfocused window holds it.
+    let lastFocused = await browser.windows.getLastFocused().catch(() => null);
+    let url = command.url ?? undefined;
+    let create = async () => {
+      if (lastFocused)
+        return (await browser.tabs.create({ windowId: lastFocused.id, url }))
+          .id!;
+
+      let created = await browser.windows.create({ url, focused: false });
+      return created!.tabs![0].id!;
+    };
 
     if (command.url !== null) return await loadedTab(create);
 
