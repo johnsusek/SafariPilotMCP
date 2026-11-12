@@ -29,8 +29,7 @@ enum CommandLineParsing {
     debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
     debug-cg click|hover REF        the same for a click or a hover
     debug-cg drag FROM TO           the same for a drag
-      --global                      post to the HID event tap instead of Safari's pid
-      --no-window-fields            leave window-under-pointer fields unset on pid mouse events
+      --no-window-fields            leave window-under-pointer fields unset on mouse events
     mcp                             run as a stdio MCP server
 
   Without --tab, commands act on the active tab of the last focused window.
@@ -62,14 +61,13 @@ enum CommandLineParsing {
     case "screenshot": invocation = Invocation(command: .screenshot(tabId: tabId), outputPath: rest.first)
     case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try integer($0, "REF") }))
     case "debug-cg":
-      let global = flag("--global", &rest)
       let windowFields = !flag("--no-window-fields", &rest)
       let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
       let probe = try probe(rest, ref: ref)
 
-      if !windowFields, global || probe.isKey { throw Failure(description: "--no-window-fields applies only to pid-targeted mouse actions") }
+      if !windowFields, probe.isKey { throw Failure(description: "--no-window-fields applies only to mouse actions") }
 
-      invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, global: global, windowFields: windowFields))
+      invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, windowFields: windowFields))
     case "type":
       guard rest.count >= 2 else { throw Failure(description: "type needs REF and TEXT") }
 

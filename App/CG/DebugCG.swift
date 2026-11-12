@@ -3,7 +3,7 @@ import ApplicationServices
 
 /// debug-cg: posts Quartz input at page elements without activating Safari, then reports what the page logged.
 extension Commands {
-  func debugCG(_ tabId: Int?, _ probe: CGProbe, _ global: Bool, _ windowFields: Bool) async throws -> CLIReply {
+  func debugCG(_ tabId: Int?, _ probe: CGProbe, _ windowFields: Bool) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     var setup: [String] = []
     var hits: [AXEngine.Hit] = []
@@ -36,7 +36,7 @@ extension Commands {
 
     var windowID: CGWindowID?
 
-    if !global, !probe.isKey, windowFields {
+    if !probe.isKey, windowFields {
       guard let frame = target.window.frame else { throw Failure(description: "target window \(target.window.summary) has no AX frame") }
 
       windowID = try EventPoster.windowID(pid: pid, frame: frame)
@@ -46,18 +46,10 @@ extension Commands {
     let main = target.window.value(kAXMainAttribute) as? Bool
     let focused = target.window.value(kAXFocusedAttribute) as? Bool
     let postAccess = CGPreflightPostEventAccess()
-    let cursorBefore = CGEvent(source: nil)?.location
     let points = hits.map(\.screenPoint)
 
-    // The HID tap delivers to whatever is frontmost, so a global post aimed at a hidden Safari would act on another app.
-    if global, probe.isKey, !frontBefore { throw Failure(description: "--global key presses go to the frontmost app, which is not Safari; bring Safari forward first (e.g. run sleep 3 before the command)") }
-
-    if global, !probe.isKey {
-      for point in points { try EventPoster.requireVisible(point, pid: pid) }
-    }
-
     _ = try await content(tab.id, .events(clear: true, arm: true))
-    var poster = EventPoster(pid: pid, global: global, windowID: windowID)
+    var poster = EventPoster(pid: pid, windowID: windowID)
 
     switch probe {
     case let .key(chord, _): try await poster.key(chord)
@@ -68,17 +60,12 @@ extension Commands {
 
     try await Task.sleep(for: .milliseconds(300))
 
-    // Read :hover and the value before the cursor is put back, since moving it can change hover.
     var hover: Bool?
     var value: String?
 
     if case let .hover(ref) = probe { hover = try await content(tab.id, .inspect(ref: ref)).decode(InspectResult.self).hover }
 
     if case let .key(_, ref?) = probe { value = try await content(tab.id, .inspect(ref: ref)).decode(InspectResult.self).value }
-
-    let cursorAfter = CGEvent(source: nil)?.location
-
-    if global, !probe.isKey, let cursorBefore { CGWarpMouseCursorPosition(cursorBefore) }
 
     let frontAfter = NSWorkspace.shared.frontmostApplication?.processIdentifier == pid
     let eventsResponse = try await content(tab.id, .events(clear: true, arm: false))
@@ -91,16 +78,14 @@ extension Commands {
     let missing = expected.filter { !trusted.contains($0) && !untrusted.contains($0) }
     let others = Array(trusted.union(untrusted).subtracting(expected)).sorted()
     let list = { (types: [String]) in types.isEmpty ? "none" : types.joined(separator: ", ") }
-    let cursor = { (point: CGPoint?) in point.map(AXEngine.format) ?? "unknown" }
     let summary = events.isEmpty
       ? "nothing arrived: the page logged no events"
       : "expected trusted: \(list(arrivedTrusted)); untrusted only: \(list(arrivedUntrustedOnly)); missing: \(list(missing)); also: \(list(others))"
 
     var lines = [
-      "mode: \(global ? "global (HID event tap)" : "pid \(pid)")\(windowID.map { ", window fields \($0)" } ?? "")",
+      "pid \(pid)\(windowID.map { ", window fields \($0)" } ?? "")",
       "post access (CGPreflightPostEventAccess): \(postAccess)",
       "Safari frontmost: before \(frontBefore), after \(frontAfter); target window main \(main.map(String.init) ?? "?") focused \(focused.map(String.init) ?? "?")",
-      "cursor: before \(cursor(cursorBefore)), after posting \(cursor(cursorAfter))\(global && !probe.isKey ? ", restored" : "")",
       "points: \(points.isEmpty ? "none" : points.map(AXEngine.format).joined(separator: " to "))",
     ] + setup + ["posted:"] + poster.posted.map { "  \($0)" } + ["page events:"] + (events.isEmpty ? ["  none"] : events.map { "  \(describe($0))" })
 
@@ -112,7 +97,6 @@ extension Commands {
     let strings = { (types: [String]) in JSONValue.array(types.map { .string($0) }) }
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
-      "mode": .string(global ? "global" : "pid"),
       "pid": .number(Double(pid)),
       "windowId": windowID.map { .number(Double($0)) } ?? .null,
       "postAccess": .bool(postAccess),
@@ -120,8 +104,6 @@ extension Commands {
       "safariFrontmostAfter": .bool(frontAfter),
       "windowMain": main.map { .bool($0) } ?? .null,
       "windowFocused": focused.map { .bool($0) } ?? .null,
-      "cursorBefore": cursorBefore.map { .array([.number($0.x), .number($0.y)]) } ?? .null,
-      "cursorAfter": cursorAfter.map { .array([.number($0.x), .number($0.y)]) } ?? .null,
       "points": .array(points.map { .array([.number($0.x), .number($0.y)]) }),
       "posted": strings(poster.posted),
       "events": eventsResponse["events"] ?? .null,

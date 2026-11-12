@@ -1,20 +1,18 @@
 import CoreGraphics
 import Foundation
 
-/// Builds Quartz input events and posts each one either to a single pid or to the HID event tap, recording a line per event.
+/// Builds Quartz input events and posts each one to a single pid, recording a line per event.
 @MainActor
 struct EventPoster {
   let pid: pid_t
-  let global: Bool
   /// Written to the public window-under-pointer fields of mouse events; nil leaves them unset.
   let windowID: CGWindowID?
   private(set) var posted: [String] = []
-  // A private state source keeps the user's held modifiers out of the posted events and ours out of the global state.
+  // A private state source keeps the user's held modifiers out of the posted events and ours out of the system-wide state.
   private let source = CGEventSource(stateID: .privateState)
 
-  init(pid: pid_t, global: Bool, windowID: CGWindowID?) {
+  init(pid: pid_t, windowID: CGWindowID?) {
     self.pid = pid
-    self.global = global
     self.windowID = windowID
   }
 
@@ -25,37 +23,15 @@ struct EventPoster {
 
   private static let flags: [KeyChord.Modifier: CGEventFlags] = [.cmd: .maskCommand, .shift: .maskShift, .alt: .maskAlternate, .ctrl: .maskControl]
 
-  private struct Window {
-    let id: CGWindowID
-    let pid: pid_t
-    let owner: String
-    let bounds: CGRect
-  }
-
-  /// Normal-layer windows, front to back when the options ask for on-screen windows only.
-  private static func windows(_ options: CGWindowListOption) -> [Window] {
-    let list = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
-
-    return list.compactMap { window in
-      guard window[kCGWindowLayer as String] as? Int == 0, let id = window[kCGWindowNumber as String] as? CGWindowID, let pid = window[kCGWindowOwnerPID as String] as? pid_t else { return nil }
-      guard let bounds = window[kCGWindowBounds as String].flatMap({ CGRect(dictionaryRepresentation: $0 as! CFDictionary) }) else { return nil }
-
-      return Window(id: id, pid: pid, owner: window[kCGWindowOwnerName as String] as? String ?? "pid \(pid)", bounds: bounds)
-    }
-  }
-
-  /// A global post lands on whatever is frontmost at the point, so fail unless that is one of the pid's windows.
-  static func requireVisible(_ point: CGPoint, pid: pid_t) throws {
-    let top = windows([.optionOnScreenOnly, .excludeDesktopElements]).first { $0.bounds.contains(point) }
-
-    if top?.pid == pid { return }
-
-    throw Failure(description: "screen point \(AXEngine.format(point)) is covered by \(top?.owner ?? "no window"); --global posts land on whatever is there, so bring Safari's window forward first")
-  }
-
   /// Finds the CGWindowID of the pid's normal-layer window whose bounds match the AX window frame.
   static func windowID(pid: pid_t, frame: CGRect) throws -> CGWindowID {
-    let matches = windows(.optionAll).filter { $0.pid == pid }
+    let list = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
+    let matches: [(id: CGWindowID, bounds: CGRect)] = list.compactMap { window in
+      guard window[kCGWindowLayer as String] as? Int == 0, window[kCGWindowOwnerPID as String] as? pid_t == pid, let id = window[kCGWindowNumber as String] as? CGWindowID else { return nil }
+      guard let bounds = window[kCGWindowBounds as String].flatMap({ CGRect(dictionaryRepresentation: $0 as! CFDictionary) }) else { return nil }
+
+      return (id, bounds)
+    }
     let close = matches.filter { abs($0.bounds.minX - frame.minX) + abs($0.bounds.minY - frame.minY) + abs($0.bounds.width - frame.width) + abs($0.bounds.height - frame.height) <= 4 }
 
     guard close.count == 1 else {
@@ -67,7 +43,7 @@ struct EventPoster {
   }
 
   private mutating func post(_ event: CGEvent, _ detail: String) {
-    if global { event.post(tap: .cghidEventTap) } else { event.postToPid(pid) }
+    event.postToPid(pid)
 
     posted.append("\(Self.names[event.type] ?? "type \(event.type.rawValue)") \(detail)")
   }
@@ -146,13 +122,22 @@ struct EventPoster {
 
   mutating func drag(from start: CGPoint, to end: CGPoint) async throws {
     let steps = 12
+    var point = start
     try mouse(.leftMouseDown, start, pressed: true)
-    try await Task.sleep(for: .milliseconds(80))
 
-    for step in 1 ... steps {
-      let progress = Double(step) / Double(steps)
-      try mouse(.leftMouseDragged, CGPoint(x: start.x + (end.x - start.x) * progress, y: start.y + (end.y - start.y) * progress), pressed: true)
-      try await Task.sleep(for: .milliseconds(25))
+    do {
+      try await Task.sleep(for: .milliseconds(80))
+
+      for step in 1 ... steps {
+        let progress = Double(step) / Double(steps)
+        point = CGPoint(x: start.x + (end.x - start.x) * progress, y: start.y + (end.y - start.y) * progress)
+        try mouse(.leftMouseDragged, point, pressed: true)
+        try await Task.sleep(for: .milliseconds(25))
+      }
+    } catch {
+      // A button left down would turn the user's next mouse move into a drag.
+      try? mouse(.leftMouseUp, point, pressed: false)
+      throw error
     }
 
     try mouse(.leftMouseUp, end, pressed: false)

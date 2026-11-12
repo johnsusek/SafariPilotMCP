@@ -79,8 +79,15 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try map("click", ["ref": .bool(true)]) }
     #expect(throws: Failure.self) { try map("click") }
     #expect(throws: Failure.self) { try map("tab_select") }
-    #expect(throws: Failure.self) { try map("hover", ["ref": .number(1)]) }
     #expect(throws: Failure.self) { try map("read_page", ["filter": "visible"]) }
+  }
+
+  @Test func removedToolsAreUnknown() {
+    for name in ["hover", "drag", "right_click"] {
+      #expect("\(name)") { try map(name, ["ref": .number(1), "from": .number(1), "to": .number(2)]) } throws: { error in
+        (error as? Failure)?.description == "unknown tool \(name)"
+      }
+    }
   }
 
   @Test func navigateSplitsHistoryFromUrls() throws {
@@ -158,10 +165,10 @@ struct CommandLineParsingTests {
   }
 
   @Test func debugCGParses() throws {
-    #expect(try parse("debug-cg key cmd+a --ref 3").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+a"), ref: 3), global: false, windowFields: true))
-    #expect(try parse("--tab 2 debug-cg click 5 --global").command == .debugCG(tabId: 2, probe: .click(ref: 5), global: true, windowFields: true))
-    #expect(try parse("debug-cg hover 6 --no-window-fields").command == .debugCG(tabId: nil, probe: .hover(ref: 6), global: false, windowFields: false))
-    #expect(try parse("debug-cg drag 7 8").command == .debugCG(tabId: nil, probe: .drag(from: 7, to: 8), global: false, windowFields: true))
+    #expect(try parse("debug-cg key cmd+a --ref 3").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+a"), ref: 3), windowFields: true))
+    #expect(try parse("--tab 2 debug-cg click 5").command == .debugCG(tabId: 2, probe: .click(ref: 5), windowFields: true))
+    #expect(try parse("debug-cg hover 6 --no-window-fields").command == .debugCG(tabId: nil, probe: .hover(ref: 6), windowFields: false))
+    #expect(try parse("debug-cg drag 7 8").command == .debugCG(tabId: nil, probe: .drag(from: 7, to: 8), windowFields: true))
   }
 
   @Test func keyJoinsQuotedAndUnquotedWords() throws {
@@ -177,12 +184,20 @@ struct CommandLineParsingTests {
     }
 
     #expect(try parse("key a b c d --repeat 25").command == .key(tabId: nil, chords: ["a", "b", "c", "d"].map(KeyChord.parse), ref: nil, times: 25))
-    #expect(try parse("debug-cg key cmd+t").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+t"), ref: nil), global: false, windowFields: true))
+    #expect(try parse("debug-cg key cmd+t").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+t"), ref: nil), windowFields: true))
   }
 
   @Test func debugCGRejectsBadInput() {
-    for line in ["debug-cg", "debug-cg tap 3", "debug-cg click", "debug-cg drag 7", "debug-cg click 3 --ref 4", "debug-cg key Bogus", "debug-cg key Enter --no-window-fields", "debug-cg click 3 --global --no-window-fields", "debug-cg hover 3 --bogus"] {
+    for line in ["debug-cg", "debug-cg tap 3", "debug-cg click", "debug-cg drag 7", "debug-cg click 3 --ref 4", "debug-cg key Bogus", "debug-cg key Enter --no-window-fields", "debug-cg hover 3 --bogus"] {
       #expect(throws: Failure.self, "\(line)") { try parse(line) }
+    }
+  }
+
+  @Test func removedCommandsAndFlagsAreUnknown() {
+    let expected = ["hover 6": "unknown command hover", "drag 7 8": "unknown command drag", "debug-cg click 3 --global": "debug-cg click takes 1 argument, got 2", "debug-cg key Enter --global": "debug-cg key takes 1 argument, got 2"]
+
+    for (line, message) in expected {
+      #expect("\(line)") { try parse(line) } throws: { error in (error as? Failure)?.description == message }
     }
   }
 

@@ -53,7 +53,7 @@ struct ContractTests {
     let decoded = try JSONDecoder().decode(CLIRequest.self, from: JSONEncoder().encode(request))
     #expect(decoded.command == request.command)
     #expect(decoded.kind == "cli")
-    let probe = AppCommand.debugCG(tabId: 2, probe: .key(try KeyChord.parse("cmd+a"), ref: 4), global: false, windowFields: true)
+    let probe = AppCommand.debugCG(tabId: 2, probe: .key(try KeyChord.parse("cmd+a"), ref: 4), windowFields: true)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(probe)) == probe)
     let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", ref: 7, times: 3)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)

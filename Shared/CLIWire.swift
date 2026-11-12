@@ -36,8 +36,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case key(tabId: Int?, chords: [KeyChord], ref: Int?, times: Int)
   case screenshot(tabId: Int?)
   case debugAX(tabId: Int?, ref: Int?)
-  /// global posts to the HID event tap instead of Safari's pid; windowFields sets the mouse window-under-pointer fields on pid posts.
-  case debugCG(tabId: Int?, probe: CGProbe, global: Bool, windowFields: Bool)
+  /// windowFields sets the window-under-pointer fields on mouse posts.
+  case debugCG(tabId: Int?, probe: CGProbe, windowFields: Bool)
 
   static let defaultMaxChars = 50000
   static let scrollStep = 100.0

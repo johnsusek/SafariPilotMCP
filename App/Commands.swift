@@ -28,7 +28,7 @@ struct Commands {
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId): try await screenshot(tabId)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
-    case let .debugCG(tabId, probe, global, windowFields): try await debugCG(tabId, probe, global, windowFields)
+    case let .debugCG(tabId, probe, windowFields): try await debugCG(tabId, probe, windowFields)
     }
   }
 

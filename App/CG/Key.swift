@@ -22,11 +22,11 @@ extension Commands {
       focusNode = target.webArea
     }
 
-    try requireKeyboardFocus(in: target, refocus: focusNode)
+    try await requireKeyboardFocus(in: target, refocus: focusNode)
     var pid: pid_t = 0
     AXUIElementGetPid(target.app.element, &pid)
     let origin = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self).origin
-    var poster = EventPoster(pid: pid, global: false, windowID: nil)
+    var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
 
     for (index, chord) in presses.enumerated() {
@@ -76,7 +76,7 @@ extension Commands {
   }
 
   /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area or inside it; untested live.
-  private func requireKeyboardFocus(in target: AXEngine.Target, refocus: AXNode) throws {
+  private func requireKeyboardFocus(in target: AXEngine.Target, refocus: AXNode) async throws {
     let focused = { target.app.value(kAXFocusedUIElementAttribute).map { AXNode(element: $0 as! AXUIElement) } }
 
     if focused()?.chain(upTo: target.webArea) != nil { return }
@@ -88,11 +88,15 @@ extension Commands {
     }
 
     steps.append("AXFocused on \(refocus.summary): \(AXUIElementSetAttributeValue(refocus.element, kAXFocusedAttribute as CFString, kCFBooleanTrue).name)")
-    let now = focused()
 
-    if now?.chain(upTo: target.webArea) != nil { return }
+    // Safari reports no focused element for a moment after focus first moves into a page, so poll before giving up.
+    for _ in 0 ..< 20 {
+      if focused()?.chain(upTo: target.webArea) != nil { return }
 
-    let ancestry = now.map { sequence(first: $0, next: \.parent).prefix(6).map(\.summary).joined(separator: " < ") } ?? "nothing (Safari reports no focused element)"
+      try await Task.sleep(for: .milliseconds(50))
+    }
+
+    let ancestry = focused().map { sequence(first: $0, next: \.parent).prefix(6).map(\.summary).joined(separator: " < ") } ?? "nothing (Safari reports no focused element)"
     throw Failure(description: "keyboard focus is outside the tab's page, on \(ancestry), after setting \(steps.joined(separator: ", ")); no keys were posted")
   }
 }
