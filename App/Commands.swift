@@ -171,7 +171,7 @@ struct Commands {
 
   private func click(_ ref: Int) async throws -> CLIReply {
     let located = try await locateHittable(ref)
-    let hit = try AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
     let (pressed, depth) = try AXEngine.press(hit)
     let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from hit)"] + hitLines(located, hit)
     let data: JSONValue = .object([
@@ -190,7 +190,7 @@ struct Commands {
 
   private func type(_ ref: Int, _ text: String) async throws -> CLIReply {
     let located = try await locateHittable(ref)
-    let hit = try AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+    let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
     let outcome = try AXEngine.type(text, into: hit)
     let matched = outcome.readBack == text
     let lines = [
@@ -215,7 +215,7 @@ struct Commands {
   private func debugAX(_ ref: Int?) async throws -> CLIReply {
     let snapshot = try await content(["op": "snapshot"])
     let viewport = try (snapshot["viewport"] ?? .null).decode(Viewport.self)
-    let target = try AXEngine.target()
+    let target = try await AXEngine.target()
     var lines = [
       "viewport: inner \(viewport.innerWidth)x\(viewport.innerHeight) client \(viewport.clientWidth ?? -1)x\(viewport.clientHeight ?? -1) visual \(viewport.visualWidth ?? -1)x\(viewport.visualHeight ?? -1)",
       "  scroll (\(viewport.scrollX), \(viewport.scrollY)) dpr \(viewport.devicePixelRatio) visualScale \(viewport.visualScale) visualOffset (\(viewport.visualOffsetLeft), \(viewport.visualOffsetTop))",
@@ -242,7 +242,7 @@ struct Commands {
 
     if let ref {
       let located = try await content(["op": "locate", "ref": .number(Double(ref))]).decode(LocateResult.self)
-      let hit = try AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
+      let hit = try await AXEngine.hitTest(css: CGPoint(x: located.point.left, y: located.point.top), viewport: located.viewport)
       lines += hitLines(located, hit)
       lines.append("chain to web area:\n\(AXEngine.describe(hit.chain))")
     }

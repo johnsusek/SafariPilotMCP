@@ -18,6 +18,18 @@ xcodebuild -project SafariPilot.xcodeproj -scheme SafariPilot -configuration Rel
 pkill -x SafariPilot 2>/dev/null || true
 rm -rf /Applications/SafariPilot.app
 ditto "$app" /Applications/SafariPilot.app
+
+# Safari runs whichever registered copy of the extension LaunchServices picks; leave only the installed one.
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
+
+for stale in "$derived"/Build/Products/*/SafariPilot.app(N) ~/Library/Developer/Xcode/DerivedData/SafariPilot-*/Build/Products/*/SafariPilot.app(N); do
+  # Both exit nonzero for a copy that is already unregistered.
+  pluginkit -r "$stale/Contents/PlugIns/SafariPilotExtension.appex" 2>/dev/null || true
+  "$lsregister" -u "$stale" 2>/dev/null || true
+done
+
+"$lsregister" -f -R /Applications/SafariPilot.app
+pluginkit -a /Applications/SafariPilot.app/Contents/PlugIns/SafariPilotExtension.appex
 open /Applications/SafariPilot.app
 
 mkdir -p "$bindir"

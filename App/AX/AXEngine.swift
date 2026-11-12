@@ -21,7 +21,7 @@ enum AXEngine {
     let chain: [AXNode]
   }
 
-  static func target() throws -> Target {
+  static func target() async throws -> Target {
     guard AXIsProcessTrusted() else { throw Failure(description: "Accessibility permission not granted to SafariPilot.app") }
     guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(description: "Safari is not running") }
 
@@ -31,7 +31,13 @@ enum AXEngine {
     guard let windowRef = app.value(kAXMainWindowAttribute) else { throw Failure(description: "Safari has no main window (AXMainWindow missing)") }
 
     let window = AXNode(element: windowRef as! AXUIElement)
-    let webAreas = findWebAreas(in: window)
+    var webAreas = findWebAreas(in: window)
+
+    // WebKit builds a page's AX tree lazily on the first client query, so the first walk can come back empty.
+    for _ in 0 ..< 10 where webAreas.isEmpty {
+      try await Task.sleep(for: .milliseconds(100))
+      webAreas = findWebAreas(in: window)
+    }
 
     guard let webArea = webAreas.first else {
       throw Failure(description: "no AXWebArea under Safari's main window; top children: \(window.children.map(\.summary).joined(separator: ", "))")
@@ -57,8 +63,8 @@ enum AXEngine {
     return found
   }
 
-  static func hitTest(css point: CGPoint, viewport: Viewport) throws -> Hit {
-    let target = try target()
+  static func hitTest(css point: CGPoint, viewport: Viewport) async throws -> Hit {
+    let target = try await target()
 
     guard let webFrame = target.webArea.frame else { throw Failure(description: "AXWebArea has no frame") }
     guard viewport.innerWidth > 0 else { throw Failure(description: "viewport innerWidth is 0") }
