@@ -14,6 +14,8 @@ let nonTextInputs = new Set([
   "color",
 ]);
 
+let dateTimeInputs = new Set(["date", "time", "datetime-local"]);
+
 let ariaChecks: Record<string, ControlKind> = {
   checkbox: "checkbox",
   switch: "checkbox",
@@ -59,6 +61,13 @@ export function inspect(ref: number): InspectResult | Failure {
       value: element.value,
       kind: element.type,
       checked: element.checked,
+    };
+
+  if (element instanceof HTMLInputElement && dateTimeInputs.has(element.type))
+    return {
+      ...base,
+      value: element.value,
+      kind: element.type as ControlKind,
     };
 
   if (element instanceof HTMLInputElement) {

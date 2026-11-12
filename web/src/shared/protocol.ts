@@ -83,8 +83,17 @@ export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
 // inspect: whether ref matches :hover, its form value (textContent for contenteditable, null when it has none),
 // and what kind of control it is. listbox is a select shown as a list (multiple or size over 1).
 // checked is set for checkbox and radio (native or ARIA); selectedIndex and options for both select kinds.
+// date, time and datetime-local are the inputs WebKit draws as separate typed fields.
 export type ControlKind =
-  "text" | "checkbox" | "radio" | "select" | "listbox" | "other";
+  | "text"
+  | "checkbox"
+  | "radio"
+  | "select"
+  | "listbox"
+  | "date"
+  | "time"
+  | "datetime-local"
+  | "other";
 export type SelectOption = { value: string; label: string; disabled: boolean };
 export type InspectResult = {
   ok: true;

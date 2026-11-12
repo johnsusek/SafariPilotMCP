@@ -73,6 +73,18 @@
       </div>
 
       <div class="row">
+        <span>Time</span>
+        <input id="time" type="time" @change="bump('time'); values.time = $event.target.value" />
+        <output x-text="`${counts.time} ${values.time}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Date</span>
+        <input id="date" type="date" @change="bump('date'); values.date = $event.target.value" />
+        <output x-text="`${counts.date} ${values.date}`"></output>
+      </div>
+
+      <div class="row">
         <span>Editable</span>
         <div id="editable" class="editable" contenteditable="true" @input="bump('editable')">Edit me</div>
         <output x-text="counts.editable"></output>

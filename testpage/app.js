@@ -33,6 +33,8 @@ let counterNames = [
   "text",
   "textarea",
   "select",
+  "time",
+  "date",
   "editable",
   "pointerDown",
   "mouseUp",
@@ -67,7 +69,7 @@ function detailOf(event) {
 document.addEventListener("alpine:init", () => {
   Alpine.data("lab", () => ({
     counts: Object.fromEntries(counterNames.map((name) => [name, 0])),
-    values: { text: "", textarea: "", select: "One" },
+    values: { text: "", textarea: "", select: "One", time: "", date: "" },
     log: [],
 
     init() {

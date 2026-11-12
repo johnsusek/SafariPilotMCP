@@ -148,6 +148,7 @@ describe("inspect", () => {
       '<div id="aria" role="switch" aria-checked="true"></div>',
       '<select id="pick"><option value="1">One</option><option disabled>Two</option></select>',
       '<select id="many" multiple><option>A</option></select>',
+      '<input id="when" type="time" value="11:05"><input id="day" type="date"><input id="stamp" type="datetime-local">',
     ].join("");
     let byId = (id: string) => refFor(document.getElementById(id)!);
     expect(inspect(byId("email"))).toMatchObject({ kind: "text" });
@@ -175,5 +176,11 @@ describe("inspect", () => {
       ],
     });
     expect(inspect(byId("many"))).toMatchObject({ kind: "listbox" });
+    expect(inspect(byId("when"))).toMatchObject({
+      kind: "time",
+      value: "11:05",
+    });
+    expect(inspect(byId("day"))).toMatchObject({ kind: "date", value: "" });
+    expect(inspect(byId("stamp"))).toMatchObject({ kind: "datetime-local" });
   });
 });

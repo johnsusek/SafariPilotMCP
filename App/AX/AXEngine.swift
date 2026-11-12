@@ -166,25 +166,79 @@ enum AXEngine {
     return TypeOutcome(focused: focused, focusResult: focusResult, valueNode: valueNode, valueResult: valueResult, readBack: valueNode.string(kAXValueAttribute))
   }
 
-  /// Sets AXSelected on option `index` of a popup select; WebKit keeps a closed popup's options in the tree as AXMenuItems under an AXMenu, one per option element.
-  static func selectOption(_ index: Int, label: String, in match: Match) throws -> (item: AXNode, result: AXError) {
+  /// Opens a popup select's native menu with AXPress and presses the `occurrence`th AXMenuItem titled `label`; WebKit exposes the menu under the window only while it is open, and a closed popup has no AX children.
+  static func pickOption(_ label: String, occurrence: Int, in match: Match) async throws -> AXNode {
     guard let popup = match.chain.first(where: { $0.role == kAXPopUpButtonRole }) else {
       throw Failure(description: "no AXPopUpButton from the match up to the web area:\n\(describe(match.chain))")
     }
 
-    let items = popup.children.flatMap { $0.role == kAXMenuRole ? $0.children : [$0] }.filter { $0.role == kAXMenuItemRole }
+    let opened = AXUIElementPerformAction(popup.element, kAXPressAction as CFString)
 
-    guard index < items.count else {
-      throw Failure(description: "\(popup.summary) exposes \(items.count) AXMenuItems, too few for option \(index); children: \(popup.children.map(\.summary).joined(separator: ", "))")
+    guard opened == .success else { throw Failure(description: "AXPress on \(popup.summary) to open its menu failed: \(opened.name)") }
+
+    var menu: AXNode?
+
+    for _ in 0 ..< 20 {
+      menu = openMenu(in: match.target.window)
+
+      if menu != nil { break }
+
+      try await Task.sleep(for: .milliseconds(50))
     }
 
-    let item = items[index]
+    guard let menu else { throw Failure(description: "pressed \(popup.summary) but no open AXMenu appeared under \(match.target.window.summary) within 1 s") }
 
-    guard item.label.trimmingCharacters(in: .whitespaces) == label.trimmingCharacters(in: .whitespaces) else {
-      throw Failure(description: "AXMenuItem \(index) of \(popup.summary) is \(item.summary), not option \"\(label)\"; the AX items do not line up with the options")
+    let wanted = label.trimmingCharacters(in: .whitespaces)
+    let items = menu.children.filter { $0.role == kAXMenuItemRole }
+    let matching = items.filter { $0.label.trimmingCharacters(in: .whitespaces) == wanted }
+
+    guard occurrence < matching.count else {
+      AXUIElementPerformAction(menu.element, kAXCancelAction as CFString)
+      throw Failure(description: "the open menu of \(popup.summary) has \(matching.count) items titled \"\(label)\", needed \(occurrence + 1); items: \(items.map { "\"\($0.label)\"" }.joined(separator: ", "))")
     }
 
-    return (item, AXUIElementSetAttributeValue(item.element, kAXSelectedAttribute as CFString, kCFBooleanTrue))
+    let item = matching[occurrence]
+    let pressed = AXUIElementPerformAction(item.element, kAXPressAction as CFString)
+
+    guard pressed == .success else {
+      AXUIElementPerformAction(menu.element, kAXCancelAction as CFString)
+      throw Failure(description: "AXPress on \(item.summary) in the open menu failed: \(pressed.name)")
+    }
+
+    return item
+  }
+
+  /// The open popup menu WebKit hangs under the window (AXSplitGroup > AXTabGroup > AXGroup > AXMenu), skipping the page and the menu bar.
+  private static func openMenu(in window: AXNode) -> AXNode? {
+    var frontier: [(AXNode, Int)] = [(window, 0)]
+
+    while let (node, depth) = frontier.popLast() {
+      if node.role == kAXMenuRole { return node }
+
+      guard depth < 6, node.role != "AXWebArea", node.role != kAXMenuBarRole else { continue }
+
+      frontier.append(contentsOf: node.children.map { ($0, depth + 1) })
+    }
+
+    return nil
+  }
+
+  /// The AXIncrementor fields of a date or time input in display order, each with its title and current value description.
+  static func dateTimeFields(in match: Match) throws -> [AXNode] {
+    guard let area = match.chain.first(where: { $0.role == "AXDateTimeArea" }) else {
+      throw Failure(description: "no AXDateTimeArea from the match up to the web area:\n\(describe(match.chain))")
+    }
+
+    var fields: [AXNode] = []
+    var stack = [area]
+
+    while let node = stack.popLast() {
+      if node.role == kAXIncrementorRole { fields.append(node) }
+
+      stack.append(contentsOf: node.children.reversed())
+    }
+
+    return fields
   }
 
   static func describe(_ chain: [AXNode]) -> String {
