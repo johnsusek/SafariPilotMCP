@@ -71,7 +71,7 @@ describe("scrollIntoView", () => {
     let result = scrollIntoView(refFor(button));
     expect(spy).toHaveBeenCalledWith({
       block: "center",
-      inline: "center",
+      inline: "nearest",
       behavior: "instant",
     });
     expect(result.ok).toBe(true);

@@ -111,11 +111,17 @@ function contentText(node: Node, parts: string[], budget: { left: number }) {
       continue;
     }
 
+    // Block boxes and line breaks separate words, as browsers do when they name from content.
+    let display = getComputedStyle(child).display;
+    let gap = /^(inline|contents|$)/.test(display) ? "" : " ";
     let start = parts.length;
+    parts.push(gap);
     contentText(child, parts, budget);
     let title = child.getAttribute("title")?.trim();
 
     if (title && !parts.slice(start).join("").trim()) parts.push(` ${title} `);
+
+    parts.push(gap);
   }
 }
 

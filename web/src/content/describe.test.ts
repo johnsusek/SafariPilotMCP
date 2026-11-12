@@ -99,6 +99,16 @@ describe("nameOf", () => {
     expect(nameOf(link.firstElementChild!)).toBe("MDN");
   });
 
+  test("block children are separated, inline ones are not", () => {
+    expect(
+      nameOf(
+        first(
+          '<a href="#"><span>LIVE</span><div>Headline</div><p>Summary</p>end<b>s</b></a>',
+        ),
+      ),
+    ).toBe("LIVE Headline Summary ends");
+  });
+
   test("shadow content counts", () => {
     let host = first("<button></button>");
     host.attachShadow({ mode: "open" }).innerHTML = "<span>Shadow</span>";

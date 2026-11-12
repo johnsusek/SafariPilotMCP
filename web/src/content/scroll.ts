@@ -55,7 +55,7 @@ export function scrollIntoView(ref: number): ScrollResult | Failure {
   let before = element.getBoundingClientRect();
   element.scrollIntoView({
     block: "center",
-    inline: "center",
+    inline: "nearest",
     behavior: "instant",
   });
   let after = element.getBoundingClientRect();

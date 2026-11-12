@@ -39,7 +39,7 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
   if (!(element instanceof Element)) return element;
   element.scrollIntoView({
     block: "center",
-    inline: "center",
+    inline: "nearest",
     behavior: "instant",
   });
   let rect = await settledRect(element);
