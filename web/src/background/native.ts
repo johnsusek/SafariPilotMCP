@@ -27,6 +27,7 @@ export type PollResult = { id: string; response: CommandResponse };
 
 export type ToNative =
   | { kind: "poll"; instance: Instance; result?: PollResult }
-  | { kind: "lifecycle"; instance: Instance; event: string; at: number };
+  | { kind: "lifecycle"; instance: Instance; event: string; at: number }
+  | { kind: "keepalive"; instance: Instance };
 
 export type PollReply = { command?: NativeCommand | null; error?: string };

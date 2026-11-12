@@ -65,6 +65,8 @@ final class Transport {
       let at = message["at"]?.number.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .now
       record(instanceId, event: message["event"]?.string ?? "?", at: at)
       return .object(["ok": .bool(true)])
+    case "keepalive":
+      return .object(["ok": .bool(true)])
     default:
       return .object(["error": .string("unknown kind")])
     }
