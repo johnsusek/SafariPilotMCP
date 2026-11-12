@@ -1,0 +1,107 @@
+name: SafariPilot
+options:
+  bundleIdPrefix: net.johnsolo
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    DEVELOPMENT_TEAM: WX2UGCD2SK
+    CODE_SIGN_STYLE: Automatic
+    SWIFT_VERSION: "6.0"
+    MACOSX_DEPLOYMENT_TARGET: "26.0"
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    MARKETING_VERSION: "0.1"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  SafariPilot:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    dependencies:
+      - target: SafariPilotExtension
+        embed: true
+      - target: SafariPilotCLI
+        embed: true
+        copy:
+          destination: sharedSupport
+    info:
+      path: App/Info.plist
+      properties:
+        CFBundleDisplayName: SafariPilot
+        LSApplicationCategoryType: public.app-category.developer-tools
+        NSSupportsSuddenTermination: false
+    entitlements:
+      path: App/SafariPilot.entitlements
+      properties:
+        com.apple.security.app-sandbox: false
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot
+        ENABLE_HARDENED_RUNTIME: YES
+  SafariPilotExtension:
+    type: app-extension
+    platform: macOS
+    sources:
+      - Appex
+      - Shared/Wire.swift
+      - Shared/JSONValue.swift
+      - path: extension
+        buildPhase: resources
+    preBuildScripts:
+      - name: Build web extension
+        basedOnDependencyAnalysis: false
+        script: |
+          export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+          cd "$SRCROOT/web" && npm run build
+    info:
+      path: Appex/Info.plist
+      properties:
+        CFBundleDisplayName: SafariPilot
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.Safari.web-extension
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
+    entitlements:
+      path: Appex/SafariPilotExtension.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Extension
+        ENABLE_HARDENED_RUNTIME: YES
+  SafariPilotCLI:
+    type: tool
+    platform: macOS
+    sources:
+      - CLI
+      - Shared/Wire.swift
+      - Shared/JSONValue.swift
+      - Shared/CLIWire.swift
+    settings:
+      base:
+        PRODUCT_NAME: safaripilot
+        PRODUCT_MODULE_NAME: SafariPilotCLI
+        PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.cli
+        ENABLE_HARDENED_RUNTIME: YES
+  SafariPilotTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - Tests
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Tests
+        GENERATE_INFOPLIST_FILE: YES
+schemes:
+  SafariPilot:
+    build:
+      targets:
+        SafariPilot: all
+        SafariPilotTests: [test]
+    test:
+      targets:
+        - SafariPilotTests

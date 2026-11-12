@@ -1,0 +1,52 @@
+import SwiftUI
+
+struct StatusView: View {
+  let model: AppModel
+
+  var body: some View {
+    VStack(spacing: 0) {
+      Form {
+        LabeledContent("Accessibility") {
+          HStack {
+            Text(model.axTrusted ? "Granted" : "Not granted")
+            if !model.axTrusted { Button("Grant…") { model.requestAccessibility() } }
+          }
+        }
+        LabeledContent("Extension") {
+          HStack {
+            Text(model.extensionState.capitalized)
+            Button("Safari Settings…") { Task { await model.openExtensionSettings() } }
+          }
+        }
+        LabeledContent("Listener") {
+          Text(model.transport.listening ? "127.0.0.1:\(String(Wire.port))" : "Down \(model.transport.listenError ?? "")")
+            .textSelection(.enabled)
+        }
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+          LabeledContent("Background") { Text(backgroundState(now: context.date)) }
+        }
+      }
+      .formStyle(.grouped)
+      .fixedSize(horizontal: false, vertical: true)
+
+      Table(model.log.reversed()) {
+        TableColumn("Time") { Text($0.at.formatted(date: .omitted, time: .standard)) }
+          .width(min: 70, ideal: 80, max: 100)
+        TableColumn("Command", value: \.command)
+          .width(min: 100, ideal: 160)
+        TableColumn("Result") { entry in
+          Text(entry.summary)
+            .foregroundStyle(entry.ok ? Color.primary : Color.red)
+            .textSelection(.enabled)
+        }
+      }
+    }
+    .frame(minWidth: 520, minHeight: 360)
+  }
+
+  private func backgroundState(now: Date) -> String {
+    let transport = model.transport
+    let seen = transport.lastSeen.map { "seen \(Int(now.timeIntervalSince($0)))s ago" } ?? "never seen"
+    return transport.openPollCount > 0 ? "Reachable, \(seen)" : "Not reachable, \(seen)"
+  }
+}

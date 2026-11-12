@@ -1,0 +1,161 @@
+:root {
+  --log-width: 380px;
+  --header-height: 52px;
+  --bg: #fafafa;
+  --fg: #1d1d1f;
+  --muted: #e5e5ea;
+  --bad: #ffd6d6;
+  --bad-fg: #a40000;
+  font:
+    14px/1.4 -apple-system,
+    system-ui,
+    sans-serif;
+  color: var(--fg);
+}
+
+html {
+  overflow-x: hidden;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+}
+
+header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  height: var(--header-height);
+  padding: 0 16px;
+  margin-right: var(--log-width);
+  background: #fff;
+  border-bottom: 1px solid var(--muted);
+}
+
+header strong {
+  margin-right: auto;
+}
+
+main {
+  margin-right: var(--log-width);
+  padding: 16px;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 110px 1fr 160px;
+  gap: 12px;
+  align-items: center;
+  min-height: 48px;
+  border-bottom: 1px solid var(--muted);
+}
+
+output {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.fake {
+  display: inline-block;
+  width: fit-content;
+  padding: 6px 12px;
+  background: #dbeafe;
+  border-radius: 6px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.editable {
+  min-height: 24px;
+  padding: 4px 8px;
+  border: 1px solid #aaa;
+  background: #fff;
+}
+
+.menu {
+  position: relative;
+  width: fit-content;
+}
+
+.menu-items {
+  display: none;
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 5;
+  padding: 6px;
+  background: #fff;
+  border: 1px solid #aaa;
+}
+
+.menu:hover .menu-items {
+  display: block;
+}
+
+.scroller {
+  height: 80px;
+  overflow: auto;
+  border: 1px solid #aaa;
+}
+
+.spacer-small {
+  height: 200px;
+}
+
+.row-covered {
+  grid-template-columns: 110px 160px 1fr;
+}
+
+/* Right part of this button sits under the fixed log, so its center is covered. */
+.covered {
+  width: 400px;
+  margin-left: calc(100% - 100px);
+}
+
+.scaled {
+  width: fit-content;
+  transform: scale(0.5);
+  transform-origin: left center;
+}
+
+.spacer-fold {
+  height: 2500px;
+}
+
+#log {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  width: var(--log-width);
+  overflow-y: auto;
+  background: #fff;
+  border-left: 1px solid #aaa;
+  font:
+    12px/1.3 ui-monospace,
+    monospace;
+}
+
+.entry {
+  display: grid;
+  grid-template-columns: 52px 92px 1fr 72px;
+  gap: 4px;
+  padding: 2px 6px;
+  border-bottom: 1px solid var(--muted);
+}
+
+.entry small {
+  grid-column: 2 / -1;
+  color: #666;
+}
+
+.untrusted {
+  background: var(--bad);
+  color: var(--bad-fg);
+  font-weight: 700;
+}

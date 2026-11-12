@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>SafariPilot lab</title>
+    <link rel="stylesheet" href="style.css" />
+    <script defer src="app.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="lab">
+    <header>
+      <strong>SafariPilot lab</strong>
+      <button id="synthetic" type="button" @click="synthetic()">Synthetic click</button>
+      <button id="clear-log" type="button" @click="log = []">Clear log</button>
+      <button id="reset" type="button" @click="reset()">Reset</button>
+    </header>
+
+    <main>
+      <div class="row">
+        <span>Under header</span>
+        <button id="under-header" type="button" @click="bump('underHeader')">Under header</button>
+        <output x-text="counts.underHeader"></output>
+      </div>
+
+      <div class="row">
+        <span>Button</span>
+        <button id="native" type="button" @click="bump('native')">Button</button>
+        <output x-text="counts.native"></output>
+      </div>
+
+      <div class="row">
+        <span>Link</span>
+        <a id="link" href="#link" @click.prevent="bump('link')">Link</a>
+        <output x-text="counts.link"></output>
+      </div>
+
+      <div class="row">
+        <span>Checkbox</span>
+        <label><input id="checkbox" type="checkbox" @change="bump('checkbox')" /> Check</label>
+        <output x-text="counts.checkbox"></output>
+      </div>
+
+      <div class="row">
+        <span>Radio</span>
+        <span>
+          <label><input id="radio-a" type="radio" name="radio" value="a" @change="bump('radio')" /> A</label>
+          <label><input id="radio-b" type="radio" name="radio" value="b" @change="bump('radio')" /> B</label>
+        </span>
+        <output x-text="counts.radio"></output>
+      </div>
+
+      <div class="row">
+        <span>Text</span>
+        <input id="text" type="text" placeholder="Text" @input="bump('text'); values.text = $event.target.value" />
+        <output x-text="`${counts.text} ${values.text}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Textarea</span>
+        <textarea id="textarea" rows="2" placeholder="Textarea" @input="bump('textarea'); values.textarea = $event.target.value"></textarea>
+        <output x-text="`${counts.textarea} ${values.textarea}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Select</span>
+        <select id="select" @change="bump('select'); values.select = $event.target.value">
+          <option>One</option>
+          <option>Two</option>
+          <option>Three</option>
+        </select>
+        <output x-text="`${counts.select} ${values.select}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Editable</span>
+        <div id="editable" class="editable" contenteditable="true" @input="bump('editable')">Edit me</div>
+        <output x-text="counts.editable"></output>
+      </div>
+
+      <div class="row">
+        <span>Pointer div</span>
+        <div id="pointer-div" class="fake" @pointerdown="bump('pointerDown')" @mouseup="bump('mouseUp')">Down/up only</div>
+        <output x-text="`down ${counts.pointerDown} up ${counts.mouseUp}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Click div</span>
+        <div id="click-div" class="fake" @click="bump('clickDiv')">No role</div>
+        <output x-text="counts.clickDiv"></output>
+      </div>
+
+      <div class="row">
+        <span>Hover menu</span>
+        <div class="menu">
+          <button id="menu-trigger" type="button">Menu</button>
+          <div class="menu-items">
+            <button id="menu-item" type="button" @click="bump('menuItem')">Menu item</button>
+          </div>
+        </div>
+        <output x-text="counts.menuItem"></output>
+      </div>
+
+      <div class="row">
+        <span>In scroller</span>
+        <div class="scroller">
+          <div class="spacer-small"></div>
+          <button id="in-scroller" type="button" @click="bump('inScroller')">In scroller</button>
+          <div class="spacer-small"></div>
+        </div>
+        <output x-text="counts.inScroller"></output>
+      </div>
+
+      <div class="row row-covered">
+        <span>Covered</span>
+        <output x-text="counts.covered"></output>
+        <button id="covered" class="covered" type="button" @click="bump('covered')">Covered</button>
+      </div>
+
+      <div class="row">
+        <span>Scaled</span>
+        <div class="scaled">
+          <button id="scaled" type="button" @click="bump('scaled')">Scaled</button>
+        </div>
+        <output x-text="counts.scaled"></output>
+      </div>
+
+      <div class="row">
+        <span>Disabled</span>
+        <button id="disabled" type="button" disabled @click="bump('disabled')">Disabled</button>
+        <output x-text="counts.disabled"></output>
+      </div>
+
+      <div class="spacer-fold"></div>
+
+      <div class="row">
+        <span>Far</span>
+        <button id="far" type="button" @click="bump('far')">Far</button>
+        <output x-text="counts.far"></output>
+      </div>
+    </main>
+
+    <aside id="log">
+      <template x-for="entry in log" :key="entry.id">
+        <div class="entry" :class="entry.trusted ? 'trusted' : 'untrusted'">
+          <span x-text="entry.time"></span>
+          <b x-text="entry.type"></b>
+          <span x-text="entry.target"></span>
+          <span x-text="entry.trusted ? 'trusted' : 'UNTRUSTED'"></span>
+          <small x-text="entry.detail"></small>
+        </div>
+      </template>
+    </aside>
+  </body>
+</html>
