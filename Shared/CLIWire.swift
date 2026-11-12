@@ -32,6 +32,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case find(tabId: Int?, query: String)
   case pageText(tabId: Int?, maxChars: Int)
   case scroll(tabId: Int?, ref: Int?, left: Double, top: Double)
+  /// Presses chords in order, the whole sequence `times` times, after focusing ref when given.
+  case key(tabId: Int?, chords: [KeyChord], ref: Int?, times: Int)
   case screenshot(tabId: Int?)
   case debugAX(tabId: Int?, ref: Int?)
   /// global posts to the HID event tap instead of Safari's pid; windowFields sets the mouse window-under-pointer fields on pid posts.
@@ -39,6 +41,7 @@ enum AppCommand: Codable, Sendable, Equatable {
 
   static let defaultMaxChars = 50000
   static let scrollStep = 100.0
+  static let maxKeyPresses = 100
 
   /// "back" and "forward" walk history; anything else is a URL to load.
   static func navigation(tabId: Int?, target: String) -> AppCommand {
@@ -57,6 +60,23 @@ enum AppCommand: Codable, Sendable, Equatable {
     case "right": return .scroll(tabId: tabId, ref: ref, left: distance, top: 0)
     default: throw Failure(description: "scroll direction must be up, down, left or right, not \(direction)")
     }
+  }
+
+  /// Splits keys on whitespace into chords; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
+  static func key(tabId: Int?, keys: String, ref: Int?, times: Int) throws -> AppCommand {
+    let chords = try keys.split(whereSeparator: \.isWhitespace).map { try KeyChord.parse(String($0)) }
+    let presses = chords.count * times
+
+    guard !chords.isEmpty else { throw Failure(description: "key needs at least one key, such as Enter or shift+Tab") }
+
+    if let chord = chords.first(where: { $0.modifiers.contains(.cmd) }) {
+      throw Failure(description: "\(chord.name) refused: Safari acts on its own shortcuts such as cmd+t and cmd+w before the page sees them, so cmd chords are not sent")
+    }
+
+    guard times >= 1 else { throw Failure(description: "repeat must be at least 1, not \(times)") }
+    guard presses <= maxKeyPresses else { throw Failure(description: "\(chords.count) keys x \(times) repeats is \(presses) presses; the limit is \(maxKeyPresses)") }
+
+    return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
 }
 

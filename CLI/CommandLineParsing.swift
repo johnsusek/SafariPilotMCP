@@ -13,6 +13,7 @@ enum CommandLineParsing {
     snapshot                        interactive elements with refs
     click REF                       locate REF, then AXPress it
     type REF TEXT                   locate REF, then AXFocused + AXValue
+    key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     events [--clear]                events logged by the page
     tabs                            all Safari tabs
     tab-create [URL]                open a tab in the last focused window
@@ -82,6 +83,10 @@ enum CommandLineParsing {
       guard let target = rest.first else { throw Failure(description: "navigate needs a URL, back or forward") }
 
       invocation = Invocation(command: .navigation(tabId: tabId, target: target))
+    case "key":
+      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let times = try option("--repeat", &rest).map { try integer($0, "--repeat") } ?? 1
+      invocation = try Invocation(command: .key(tabId: tabId, keys: rest.joined(separator: " "), ref: ref, times: times))
     case "scroll":
       let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
 

@@ -53,7 +53,12 @@ struct KeyChord: Codable, Sendable, Equatable {
     }
 
     if rest.count == 1, let character = rest.first {
-      if let code = characterCodes[character] { return KeyChord(key: String(character), keyCode: code, modifiers: modifiers, character: String(character)) }
+      if let code = characterCodes[character] {
+        // An explicit shift types the key's shifted character, as the hardware key would.
+        let shifted = character.isLetter ? Character(character.uppercased()) : shiftedCharacters.first { $0.value == character }?.key
+        let typed = modifiers.contains(.shift) ? shifted ?? character : character
+        return KeyChord(key: String(character), keyCode: code, modifiers: modifiers, character: String(typed))
+      }
 
       let base = character.isASCII && character.isUppercase ? Character(character.lowercased()) : shiftedCharacters[character]
 

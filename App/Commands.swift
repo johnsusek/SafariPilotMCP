@@ -25,6 +25,7 @@ struct Commands {
     case let .find(tabId, query): try await find(tabId, query)
     case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
+    case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId): try await screenshot(tabId)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
     case let .debugCG(tabId, probe, global, windowFields): try await debugCG(tabId, probe, global, windowFields)

@@ -77,7 +77,8 @@ export type LocateResult = {
   hitDescription: string;
   viewport: Viewport;
 };
-export type EventsResult = { ok: true; events: LoggedEvent[] };
+// origin is performance.timeOrigin, which changes when the page navigates or reloads.
+export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
 
 // inspect: whether ref matches :hover and its form value (textContent for contenteditable), null when it has none.
 export type InspectResult = {

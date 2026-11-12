@@ -16,8 +16,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       return { ok: true, url: location.href, title: document.title };
     if (request.op === "snapshot") return snapshot();
     if (request.op === "locate") return await locate(request.ref);
-    if (request.op === "events")
-      return { ok: true, events: takeEvents(request.clear, request.arm) };
+    if (request.op === "events") return takeEvents(request.clear, request.arm);
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "readPage")
       return readPage(request.filter, request.maxChars);

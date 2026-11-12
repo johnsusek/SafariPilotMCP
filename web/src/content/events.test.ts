@@ -15,15 +15,22 @@ let entry = (index: number) => ({
 });
 
 describe("ring buffer", () => {
-  test("keeps the newest 500 and clears on request", () => {
+  test("keeps the newest 1500 and clears on request", () => {
     takeEvents(true, false);
-    for (let index = 0; index < 520; index++) record(entry(index));
-    let events = takeEvents(false, false);
-    expect(events.length).toBe(500);
+    for (let index = 0; index < 1520; index++) record(entry(index));
+    let events = takeEvents(false, false).events;
+    expect(events.length).toBe(1500);
     expect(events[0].target).toBe("t20");
-    expect(events[499].target).toBe("t519");
-    expect(takeEvents(true, false).length).toBe(500);
-    expect(takeEvents(false, false)).toEqual([]);
+    expect(events[1499].target).toBe("t1519");
+    expect(takeEvents(true, false).events.length).toBe(1500);
+    expect(takeEvents(false, false).events).toEqual([]);
+  });
+
+  test("replies with the document's time origin", () => {
+    expect(takeEvents(true, false)).toMatchObject({
+      ok: true,
+      origin: performance.timeOrigin,
+    });
   });
 
   test("coalesces consecutive identical entries", () => {
@@ -33,7 +40,7 @@ describe("ring buffer", () => {
     recordCoalesced({ ...entry(1), type: "mousemove", isTrusted: true });
     recordCoalesced({ ...entry(2), type: "mousemove" });
     recordCoalesced({ ...entry(1), type: "mousemove" });
-    let events = takeEvents(true, false);
+    let events = takeEvents(true, false).events;
     expect(events.map((event) => [event.target, event.count])).toEqual([
       ["t1", 2],
       ["t1", 1],
@@ -65,7 +72,7 @@ describe("logger", () => {
     fresh.dispatchEvent(
       new KeyboardEvent("keydown", { bubbles: true, key: "a", code: "KeyA" }),
     );
-    let [click, keydown] = takeEvents(true, false);
+    let [click, keydown] = takeEvents(true, false).events;
     expect(click).toMatchObject({
       type: "click",
       ref,
@@ -89,18 +96,18 @@ describe("logger", () => {
       );
     takeEvents(true, false);
     move(1);
-    expect(takeEvents(true, true)).toEqual([]);
+    expect(takeEvents(true, true).events).toEqual([]);
     move(2);
     move(3);
     pad.dispatchEvent(new MouseEvent("mouseenter"));
-    let armed = takeEvents(true, false);
+    let armed = takeEvents(true, false).events;
     expect(armed.map((event) => [event.type, event.count])).toEqual([
       ["mousemove", 2],
       ["mouseenter", 1],
     ]);
     expect(armed[0].detail).toContain("client=3,");
     move(4);
-    expect(takeEvents(true, false)).toEqual([]);
+    expect(takeEvents(true, false).events).toEqual([]);
   });
 
   test("logs drag events that are always on", () => {
@@ -109,7 +116,7 @@ describe("logger", () => {
     let source = document.getElementById("source")!;
     for (let type of ["dragstart", "dragover", "drop", "dragend"])
       source.dispatchEvent(new Event(type, { bubbles: true }));
-    expect(takeEvents(true, false).map((event) => event.type)).toEqual([
+    expect(takeEvents(true, false).events.map((event) => event.type)).toEqual([
       "dragstart",
       "drop",
       "dragend",

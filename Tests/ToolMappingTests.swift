@@ -5,7 +5,7 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, sessionTab: session) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "query": "Sign in", "ref": .number(3), "text": "hello", "direction": "down"]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "query": "Sign in", "ref": .number(3), "text": "hello", "direction": "down", "keys": "Enter"]
 
     for tool in Tools.definitions {
       let arguments = samples.filter { tool.required.contains($0.key) }
@@ -46,9 +46,9 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsWithoutAnyTabFail() throws {
-    for name in ["click", "type", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
+    for name in ["click", "type", "key", "find", "read_page", "get_page_text", "scroll", "screenshot", "navigate"] {
       #expect("\(name)") {
-        try map(name, ["ref": .number(1), "text": "x", "query": "q", "direction": "down", "url": "back"], session: nil)
+        try map(name, ["ref": .number(1), "text": "x", "keys": "Enter", "query": "q", "direction": "down", "url": "back"], session: nil)
       } throws: { error in
         (error as? Failure)?.description == Tools.noSessionTab
       }
@@ -101,6 +101,32 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try map("scroll", ["direction": "sideways"]) }
   }
 
+  @Test func keyMapsChordsRefAndRepeat() throws {
+    let chords = try ["Backspace", "shift+Tab", "a"].map(KeyChord.parse)
+    #expect(try map("key", ["keys": "Backspace  shift+Tab a"]) == .key(tabId: 20, chords: chords, ref: nil, times: 1))
+    #expect(try map("key", ["keys": "Enter", "ref": .number(6), "repeat": "3", "tabId": .number(2)]) == .key(tabId: 2, chords: [KeyChord.parse("Enter")], ref: 6, times: 3))
+    #expect(try map("key", ["keys": "Tab", "repeat": .number(100)]) == .key(tabId: 20, chords: [KeyChord.parse("Tab")], ref: nil, times: 100))
+  }
+
+  @Test func keyRejectsBadInput() {
+    for keys: JSONValue in ["", "   ", "cmd+t", "Enter cmd+shift+w", "Bogus"] {
+      #expect(throws: Failure.self, "\(keys)") { try map("key", ["keys": keys]) }
+    }
+
+    #expect(throws: Failure.self) { try map("key") }
+    #expect(throws: Failure.self) { try map("key", ["keys": "Enter", "repeat": .number(0)]) }
+    #expect(throws: Failure.self) { try map("key", ["keys": "Enter Tab", "repeat": .number(51)]) }
+    #expect(throws: Failure.self) { try map("key", ["keys": .number(5)]) }
+  }
+
+  @Test func keyRefusalNamesSafariShortcuts() {
+    #expect {
+      try map("key", ["keys": "cmd+t"])
+    } throws: { error in
+      (error as? Failure)?.description.contains("cmd+t and cmd+w") == true
+    }
+  }
+
   @Test func tabToolsMap() throws {
     #expect(try map("tabs_list") == .tabs)
     #expect(try map("tab_create") == .tabCreate(url: nil))
@@ -136,6 +162,22 @@ struct CommandLineParsingTests {
     #expect(try parse("--tab 2 debug-cg click 5 --global").command == .debugCG(tabId: 2, probe: .click(ref: 5), global: true, windowFields: true))
     #expect(try parse("debug-cg hover 6 --no-window-fields").command == .debugCG(tabId: nil, probe: .hover(ref: 6), global: false, windowFields: false))
     #expect(try parse("debug-cg drag 7 8").command == .debugCG(tabId: nil, probe: .drag(from: 7, to: 8), global: false, windowFields: true))
+  }
+
+  @Test func keyJoinsQuotedAndUnquotedWords() throws {
+    let expected = try AppCommand.key(tabId: nil, chords: ["Backspace", "Backspace", "Enter"].map(KeyChord.parse), ref: nil, times: 1)
+    #expect(try parse("key Backspace Backspace Enter").command == expected)
+    #expect(try CommandLineParsing.parse(["key", "Backspace Backspace Enter"]).command == expected)
+    #expect(try parse("--tab 4 key shift+Tab --ref 9 --repeat 2").command == .key(tabId: 4, chords: [KeyChord.parse("shift+Tab")], ref: 9, times: 2))
+  }
+
+  @Test func keyRejectsBadInputButDebugCGTakesCmd() throws {
+    for line in ["key", "key cmd+a", "key Enter --repeat 0", "key Enter --repeat 101", "key a b c d --repeat 26", "key Enter --repeat", "key Enter --ref x", "key Enter --bogus"] {
+      #expect(throws: Failure.self, "\(line)") { try parse(line) }
+    }
+
+    #expect(try parse("key a b c d --repeat 25").command == .key(tabId: nil, chords: ["a", "b", "c", "d"].map(KeyChord.parse), ref: nil, times: 25))
+    #expect(try parse("debug-cg key cmd+t").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+t"), ref: nil), global: false, windowFields: true))
   }
 
   @Test func debugCGRejectsBadInput() {

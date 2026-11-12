@@ -24,6 +24,12 @@ struct KeyChordTests {
     #expect(try KeyChord.parse("+").keyCode == 24)
   }
 
+  @Test func explicitShiftTypesTheShiftedCharacter() throws {
+    #expect(try KeyChord.parse("shift+a") == KeyChord(key: "a", keyCode: 0, modifiers: [.shift], character: "A"))
+    #expect(try KeyChord.parse("shift+1").character == "!")
+    #expect(try KeyChord.parse("alt+a").character == "a")
+  }
+
   @Test func unknownKeysFailWithTheAcceptedList() {
     for text in ["Return", "é", "cmd+", "cmd+cmd+a", "F1", ""] {
       #expect(throws: Failure.self, "\(text)") { try KeyChord.parse(text) }

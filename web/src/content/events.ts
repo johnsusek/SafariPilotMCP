@@ -1,4 +1,4 @@
-import type { LoggedEvent } from "../shared/protocol";
+import type { EventsResult, LoggedEvent } from "../shared/protocol";
 import { describe } from "./describe";
 import { existingRef } from "./refs";
 
@@ -44,7 +44,8 @@ export let armedTypes = [
   "dragleave",
 ];
 
-let capacity = 500;
+// A key press logs up to 5 entries plus 2 per modifier, so 100 presses with three modifiers each (the key tool's worst case) fit.
+let capacity = 1500;
 let buffer: LoggedEvent[] = [];
 let armed = false;
 
@@ -88,11 +89,11 @@ function setArmed(on: boolean) {
 }
 
 // Every take disarms; arm re-arms after the take so a measurement starts from an empty, armed log.
-export function takeEvents(clear: boolean, arm: boolean) {
+export function takeEvents(clear: boolean, arm: boolean): EventsResult {
   let events = clear ? buffer : buffer.slice();
   if (clear) buffer = [];
   setArmed(arm);
-  return events;
+  return { ok: true, events, origin: performance.timeOrigin };
 }
 
 export function detailOf(event: Event) {
