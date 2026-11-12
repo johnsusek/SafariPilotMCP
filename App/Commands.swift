@@ -228,7 +228,9 @@ struct Commands {
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
     let outcome = try AXEngine.type(text, into: match)
-    let matched = outcome.readBack == text
+    // Secure fields read back one bullet per character.
+    let expected = outcome.valueNode.subrole == kAXSecureTextFieldSubrole ? String(repeating: "\u{2022}", count: text.count) : text
+    let matched = outcome.readBack == expected
     let lines = [
       "AXFocused=true on \(outcome.focused.summary): \(outcome.focusResult.name)",
       "AXValue on \(outcome.valueNode.summary): \(outcome.valueResult.name)",
