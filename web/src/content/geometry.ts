@@ -51,6 +51,17 @@ export function intersect(first: Rect, second: Rect): Rect | null {
 let fractions = [0.5, 0.25, 0.75, 0.1, 0.9];
 
 // Center of the target (clamped into the visible clip) first, then a grid over the clip ordered by distance from that center.
+// The smallest rect holding both; a rect without area adds nothing.
+export function unite(first: Rect, second: Rect): Rect {
+  if (second.width <= 0 || second.height <= 0) return first;
+  if (first.width <= 0 || first.height <= 0) return second;
+  let left = Math.min(first.left, second.left);
+  let top = Math.min(first.top, second.top);
+  let right = Math.max(first.left + first.width, second.left + second.width);
+  let bottom = Math.max(first.top + first.height, second.top + second.height);
+  return { left, top, width: right - left, height: bottom - top };
+}
+
 export function candidatePoints(rect: Rect, clip: Rect): Point[] {
   let insetLeft = Math.min(2, clip.width / 4);
   let insetTop = Math.min(2, clip.height / 4);

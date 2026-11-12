@@ -98,17 +98,15 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
           child.hasAttribute("aria-label") ||
           child.hasAttribute("aria-labelledby"));
 
-  // A label's text already names its control, and a legend's names its fieldset.
+  // A label's text already names its control, a legend's its fieldset and a caption's its table.
   let control = (child as HTMLLabelElement).control;
 
   if (control && !isPruned(control))
     children = children.filter((item) => !("text" in item));
 
-  if (
-    child.localName === "legend" &&
-    child.parentElement?.localName === "fieldset"
-  )
-    return;
+  let named = { legend: "fieldset", caption: "table" }[child.localName];
+
+  if (named && child.parentElement?.localName === named) return;
 
   if (!shown) {
     for (let item of children) {

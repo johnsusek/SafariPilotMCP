@@ -6,6 +6,7 @@ import {
   pickPoint,
   readViewport,
   toRect,
+  unite,
   visibleArea,
 } from "./geometry";
 import { deepElementFromPoint, isWithin } from "./hit";
@@ -48,16 +49,19 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
     left: rect.left + rect.width / 2,
     top: rect.top + rect.height / 2,
   };
-  // WebKit gives a checkbox or radio inside a label the label's AX frame, so report that rect for frame matching.
-  let label =
+  // WebKit gives a checkbox or radio the union of its own frame and its labels' frames, so report that rect for frame matching.
+  let labels =
     element instanceof HTMLInputElement &&
     (element.type === "checkbox" || element.type === "radio")
-      ? element.closest("label")
-      : null;
+      ? Array.from(element.labels ?? [])
+      : [];
   let base = {
     ok: true as const,
     ref,
-    rect: label ? toRect(label.getBoundingClientRect()) : rect,
+    rect: labels.reduce(
+      (union, label) => unite(union, toRect(label.getBoundingClientRect())),
+      rect,
+    ),
     viewport,
   };
   if (rect.width <= 0 || rect.height <= 0)
@@ -75,10 +79,15 @@ export async function locate(ref: number): Promise<LocateResult | Failure> {
       hitsTarget: false,
       hitDescription: "element is outside the viewport",
     };
-  let target = element;
-  let point = pickPoint(rect, clip, (candidate) =>
-    isWithin(target, deepElementFromPoint(candidate)),
-  );
+  // A custom checkbox or radio often sits under its own label, and a hit on the label reaches it.
+  let owners = [
+    element,
+    ...Array.from((element as HTMLInputElement).labels ?? []),
+  ];
+  let point = pickPoint(rect, clip, (candidate) => {
+    let hit = deepElementFromPoint(candidate);
+    return owners.some((owner) => isWithin(owner, hit));
+  });
   if (point)
     return {
       ...base,

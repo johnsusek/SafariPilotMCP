@@ -109,6 +109,18 @@ describe("nameOf", () => {
     ).toBe("LIVE Headline Summary ends");
   });
 
+  test("a br separates words", () => {
+    expect(nameOf(first("<button>Stat<sup>[1]</sup><br>2026</button>"))).toBe(
+      "Stat[1] 2026",
+    );
+  });
+
+  test("labels skip hidden text, other fields and repeats", () => {
+    document.body.innerHTML =
+      '<label for="a">Once<span style="display: none">Once</span></label><label>Once <input id="a" type="radio"><select><option>S</option></select></label>';
+    expect(nameOf(document.querySelector("input")!)).toBe("Once");
+  });
+
   test("shadow content counts", () => {
     let host = first("<button></button>");
     host.attachShadow({ mode: "open" }).innerHTML = "<span>Shadow</span>";

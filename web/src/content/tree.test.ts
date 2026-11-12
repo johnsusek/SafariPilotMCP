@@ -150,6 +150,15 @@ describe("treeText", () => {
     );
   });
 
+  test("a caption names its table and a br separates words", () => {
+    let { text } = render(
+      "<table><caption>Share</caption><tr><th>Stat<br>2026</th></tr></table>",
+    );
+    expect(withoutRefs(text)).toBe(
+      ['table "Share"', "  row", '    columnheader "Stat 2026"'].join("\n"),
+    );
+  });
+
   test("a widget wrapping the same widget shows once", () => {
     let { text } = render(
       '<div role="button" tabindex="0"><button>Next</button></div>',

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { candidatePoints, intersect, pickPoint } from "./geometry";
+import { candidatePoints, intersect, pickPoint, unite } from "./geometry";
 
 let viewport = { left: 0, top: 0, width: 1000, height: 800 };
 
@@ -48,5 +48,18 @@ describe("pickPoint", () => {
       expect(point.left).toBeGreaterThanOrEqual(10);
       expect(point.left).toBeLessThanOrEqual(12);
     }
+  });
+});
+
+test("unite spans both rects and ignores empty ones", () => {
+  let box = { left: 10, top: 10, width: 24, height: 24 };
+  let label = { left: 0, top: 0, width: 300, height: 88 };
+  expect(unite(box, label)).toEqual(label);
+  expect(unite(box, { left: 50, top: 5, width: 0, height: 0 })).toEqual(box);
+  expect(unite(box, { left: 40, top: 40, width: 10, height: 10 })).toEqual({
+    left: 10,
+    top: 10,
+    width: 40,
+    height: 40,
   });
 });

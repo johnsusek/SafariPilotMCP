@@ -86,6 +86,8 @@ let svgTitle = (element: Element) =>
     ? element.querySelector(":scope > title")?.textContent?.trim()
     : "";
 
+let formTags = new Set(["input", "select", "textarea"]);
+
 // Text an element shows, as accessible name from content: shadow trees and slots included, hidden subtrees skipped, and a descendant's aria-label or an image's alt standing in for its content.
 function contentText(node: Node, parts: string[], budget: { left: number }) {
   for (let child of flatChildren(node)) {
@@ -98,7 +100,15 @@ function contentText(node: Node, parts: string[], budget: { left: number }) {
       continue;
     }
 
-    if (!(child instanceof Element) || isPruned(child)) continue;
+    if (!(child instanceof Element)) continue;
+
+    // A br has no box, so it would be pruned before it could separate words.
+    if (child.localName === "br") {
+      parts.push(" ");
+      continue;
+    }
+
+    if (isPruned(child) || formTags.has(child.localName)) continue;
 
     let label =
       child.getAttribute("aria-label")?.trim() ||
@@ -124,6 +134,12 @@ function contentText(node: Node, parts: string[], budget: { left: number }) {
     parts.push(gap);
   }
 }
+
+let shownText = (element: Element) => {
+  let parts: string[] = [];
+  contentText(element, parts, { left: nameMax * 8 });
+  return collapse(parts.join(""));
+};
 
 export function collapse(text: string | null | undefined, max = nameMax) {
   let clean = (text ?? "")
@@ -174,7 +190,7 @@ export function nameOf(element: Element, fromContent = true) {
     () => element.getAttribute("aria-label"),
     () =>
       "labels" in input && input.labels
-        ? Array.from(input.labels, (label) => label.textContent).join(" ")
+        ? [...new Set(Array.from(input.labels, shownText))].join(" ")
         : "",
     () =>
       element.localName === "input" && inputRoles[input.type] === "button"
@@ -186,13 +202,15 @@ export function nameOf(element: Element, fromContent = true) {
       element.localName === "fieldset"
         ? element.querySelector(":scope > legend")?.textContent
         : "",
+    () =>
+      element.localName === "table"
+        ? element.querySelector(":scope > caption")?.textContent
+        : "",
     () => {
       if (!fromContent || isTextField || element.localName === "select")
         return "";
 
-      let parts: string[] = [];
-      contentText(element, parts, { left: nameMax * 8 });
-      return parts.join("");
+      return shownText(element);
     },
     () => element.getAttribute("title"),
     () => element.getAttribute("placeholder"),
