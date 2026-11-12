@@ -17,7 +17,7 @@ enum CommandLineParsing {
     key [--ref REF] --text TEXT     type TEXT one key per character
     events [--clear]                events logged by the page
     tabs                            all Safari tabs
-    tab-create [URL]                open a tab in the last focused window
+    tab-create [URL]                open a tab in a new window
     tab-select ID                   make a tab active in its window
     tab-close ID                    close a tab
     navigate URL|back|forward       load a URL or walk history
@@ -56,7 +56,7 @@ enum CommandLineParsing {
     case "click": invocation = try Invocation(command: .click(tabId: tabId, ref: integer(rest.first, "REF")))
     case "events": invocation = Invocation(command: .events(tabId: tabId, clear: flag("--clear", &rest)))
     case "tabs": invocation = Invocation(command: .tabs)
-    case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first))
+    case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first, windowId: nil))
     case "tab-select": invocation = try Invocation(command: .tabSelect(tabId: integer(rest.first, "ID")))
     case "tab-close": invocation = try Invocation(command: .tabClose(tabId: integer(rest.first, "ID")))
     case "read-page":

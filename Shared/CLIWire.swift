@@ -23,7 +23,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case formInput(tabId: Int?, ref: Int, value: FormValue)
   case events(tabId: Int?, clear: Bool)
   case tabs
-  case tabCreate(url: String?)
+  /// Opens the tab in windowId, or in a new window when it is nil or closed.
+  case tabCreate(url: String?, windowId: Int?)
   case tabSelect(tabId: Int)
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)

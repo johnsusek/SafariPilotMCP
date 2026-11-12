@@ -1,7 +1,8 @@
-/// The tabs one MCP server process may see and act on: those it opened with tab_create and, transitively, tabs they opened. `current` is the default tab for page tools.
+/// The tabs one MCP server process may see and act on: those it opened with tab_create and, transitively, tabs they opened. `current` is the default tab for page tools; `window` is where tab_create opens tabs, so the session never adds tabs to the user's windows.
 struct TabSession: Equatable, Sendable {
   var owned: Set<Int> = []
   var current: Int?
+  var window: Int?
 
   static let noCurrent = "No session tab: call tab_create to open one."
 
@@ -31,7 +32,7 @@ struct TabSession: Equatable, Sendable {
     }
   }
 
-  /// A successful tab_create owns its tab and makes it current; closing a tab forgets it.
+  /// A successful tab_create owns its tab, makes it current and keeps its window for the next one; closing a tab forgets it.
   mutating func record(_ command: AppCommand, reply: CLIReply) {
     guard reply.ok else { return }
 
@@ -41,6 +42,7 @@ struct TabSession: Equatable, Sendable {
 
       owned.insert(id)
       current = id
+      window = reply.data["tab"]?["windowId"]?.number.map { Int($0) }
     case let .tabClose(tabId):
       owned.remove(tabId)
 

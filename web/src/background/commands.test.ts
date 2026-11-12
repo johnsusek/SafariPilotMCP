@@ -54,7 +54,12 @@ let fakeBrowser = () => ({
       { id: 1, left: 10, top: 20, width: 800, height: 600 },
       { id: 2 },
     ]),
-    getLastFocused: vi.fn(async () => ({ id: 1 })),
+    create: vi.fn(
+      async (): Promise<{ id: number; tabs: chrome.tabs.Tab[] }> => ({
+        id: 3,
+        tabs: [],
+      }),
+    ),
   },
 });
 
@@ -189,13 +194,17 @@ describe("runCommand", () => {
     expect(await pending).toMatchObject({ ok: false });
   });
 
-  test("tabCreate with a url opens in the last focused window and waits", async () => {
+  test("tabCreate with a url opens in the given window and waits", async () => {
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       fireComplete(8);
       return tabs.at(-1);
     });
-    let result = await run({ type: "tabCreate", url: "https://new" });
+    let result = await run({
+      type: "tabCreate",
+      url: "https://new",
+      windowId: 1,
+    });
     expect(fake.tabs.create).toHaveBeenCalledWith({
       windowId: 1,
       url: "https://new",
@@ -204,6 +213,23 @@ describe("runCommand", () => {
       ok: true,
       tab: { id: 8, windowFrame: frame },
     });
+  });
+
+  test("tabCreate opens an unfocused window when it has none or it is closed", async () => {
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 3, true));
+      return { id: 3, tabs: [tabs.at(-1)!] };
+    });
+    fake.windows.get.mockRejectedValueOnce(new Error("No window with id: 4"));
+    await run({ type: "tabCreate", url: null, windowId: 4 });
+    let result = await run({ type: "tabCreate", url: null, windowId: null });
+    expect(fake.windows.create).toHaveBeenCalledTimes(2);
+    expect(fake.windows.create).toHaveBeenCalledWith({
+      url: undefined,
+      focused: false,
+    });
+    expect(fake.tabs.create).not.toHaveBeenCalled();
+    expect(result).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
   });
 
   test("tabSelect activates without focusing the window, tabClose reports the id", async () => {

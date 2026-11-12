@@ -24,7 +24,7 @@ enum Tools {
 
   static let definitions = [
     ToolDefinition(name: "tabs_list", description: "Lists this session's tabs, those opened with tab_create and any they opened, with id, window id, URL, title, opener and whether each is the active tab of its window."),
-    ToolDefinition(name: "tab_create", description: "Opens a new tab in the last focused Safari window, or a new window when none is open, loading url when given, and makes it this session's default tab for page tools.", properties: ["url": property("string", "URL to load.")]),
+    ToolDefinition(name: "tab_create", description: "Opens a new tab in this session's own Safari window, which the first call opens, loading url when given, and makes it this session's default tab for page tools.", properties: ["url": property("string", "URL to load.")]),
     ToolDefinition(name: "tab_select", description: "Makes a tab the active tab of its window.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "tab_close", description: "Closes a tab.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "navigate", description: "Loads a URL in a tab, or goes back or forward in its history when url is \"back\" or \"forward\", and waits for the page to load.", properties: ["tabId": tabId, "url": property("string", "URL to load, or \"back\" or \"forward\".")], required: ["url"]),
@@ -92,7 +92,7 @@ enum Tools {
 
     switch name {
     case "tabs_list": return .tabs
-    case "tab_create": return try .tabCreate(url: arguments.string("url"))
+    case "tab_create": return try .tabCreate(url: arguments.string("url"), windowId: session.window)
     case "tab_select": return try .tabSelect(tabId: arguments.require(tabId, "tabId"))
     case "tab_close": return try .tabClose(tabId: arguments.require(tabId, "tabId"))
     case "navigate": return try .navigation(tabId: page(), target: arguments.require(arguments.string("url"), "url"))
