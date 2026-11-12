@@ -240,6 +240,13 @@ struct Commands {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
+
+    // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter, as from the keyboard.
+    if match.node.role == "AXDisclosureTriangle" {
+      let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1)
+      return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data)
+    }
+
     let origin = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self).origin
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
