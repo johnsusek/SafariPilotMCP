@@ -239,8 +239,22 @@ struct Commands {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
+    let origin = try await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self).origin
     let (pressed, depth) = try AXEngine.press(match)
-    let lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from match) in tab \(tab.id)"] + matchLines(located, match)
+    try await Task.sleep(for: .milliseconds(150))
+    let after = try? await content(tab.id, .events(clear: true, arm: false)).decode(EventsResult.self)
+    let clicks = after?.events.filter { $0.type == "click" && $0.isTrusted } ?? []
+    let navigated = after?.origin != origin
+    var lines = ["pressed \(pressed.summary) via AXPress (\(depth) up from match) in tab \(tab.id)"]
+
+    // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
+    if !navigated, clicks.isEmpty {
+      lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
+      return CLIReply(ok: false, text: (lines + matchLines(located, match)).joined(separator: "\n"), data: .null)
+    }
+
+    lines[0] += navigated ? "; the page navigated" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
+    lines += matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .number(Double(ref)),
