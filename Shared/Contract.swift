@@ -37,12 +37,14 @@ struct LoggedEvent: Codable, Sendable, Equatable {
   let target: String
   let time: Double
   let detail: String
+  let count: Int
 }
 
 struct PingResult: Codable, Sendable { let url: String; let title: String }
 struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
 struct LocateResult: Codable, Sendable { let ref: Int; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let hitDescription: String; let viewport: Viewport }
 struct EventsResult: Codable, Sendable { let events: [LoggedEvent] }
+struct InspectResult: Codable, Sendable { let ref: Int; let hover: Bool; let value: String? }
 struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
@@ -59,7 +61,8 @@ enum ContentRequest: Equatable, Sendable {
   case ping
   case snapshot
   case locate(ref: Int)
-  case events(clear: Bool)
+  case events(clear: Bool, arm: Bool)
+  case inspect(ref: Int)
   case readPage(filter: ReadFilter, maxChars: Int)
   case find(query: String)
   case pageText(maxChars: Int)
@@ -70,7 +73,8 @@ enum ContentRequest: Equatable, Sendable {
     case .ping: ["op": "ping"]
     case .snapshot: ["op": "snapshot"]
     case let .locate(ref): ["op": "locate", "ref": .number(Double(ref))]
-    case let .events(clear): ["op": "events", "clear": .bool(clear)]
+    case let .events(clear, arm): ["op": "events", "clear": .bool(clear), "arm": .bool(arm)]
+    case let .inspect(ref): ["op": "inspect", "ref": .number(Double(ref))]
     case let .readPage(filter, maxChars): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars))]
     case let .find(query): ["op": "find", "query": .string(query)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]

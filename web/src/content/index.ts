@@ -1,6 +1,7 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
+import { inspect } from "./inspect";
 import { locate } from "./locate";
 import { pageText } from "./pageText";
 import { scroll } from "./scroll";
@@ -16,7 +17,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "snapshot") return snapshot();
     if (request.op === "locate") return await locate(request.ref);
     if (request.op === "events")
-      return { ok: true, events: takeEvents(request.clear) };
+      return { ok: true, events: takeEvents(request.clear, request.arm) };
+    if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "readPage")
       return readPage(request.filter, request.maxChars);
     if (request.op === "find") return find(request.query);

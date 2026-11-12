@@ -34,6 +34,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case scroll(tabId: Int?, ref: Int?, left: Double, top: Double)
   case screenshot(tabId: Int?)
   case debugAX(tabId: Int?, ref: Int?)
+  /// global posts to the HID event tap instead of Safari's pid; windowFields sets the mouse window-under-pointer fields on pid posts.
+  case debugCG(tabId: Int?, probe: CGProbe, global: Bool, windowFields: Bool)
 
   static let defaultMaxChars = 50000
   static let scrollStep = 100.0
@@ -56,4 +58,14 @@ enum AppCommand: Codable, Sendable, Equatable {
     default: throw Failure(description: "scroll direction must be up, down, left or right, not \(direction)")
     }
   }
+}
+
+/// The Quartz input debug-cg posts; refs are page element refs.
+enum CGProbe: Codable, Sendable, Equatable {
+  case key(KeyChord, ref: Int?)
+  case click(ref: Int)
+  case hover(ref: Int)
+  case drag(from: Int, to: Int)
+
+  var isKey: Bool { if case .key = self { true } else { false } }
 }

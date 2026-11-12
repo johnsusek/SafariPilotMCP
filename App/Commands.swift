@@ -27,6 +27,7 @@ struct Commands {
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
     case let .screenshot(tabId): try await screenshot(tabId)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
+    case let .debugCG(tabId, probe, global, windowFields): try await debugCG(tabId, probe, global, windowFields)
     }
   }
 
@@ -42,12 +43,12 @@ struct Commands {
     return response
   }
 
-  private func content(_ tabId: Int?, _ request: ContentRequest) async throws -> JSONValue {
+  func content(_ tabId: Int?, _ request: ContentRequest) async throws -> JSONValue {
     try await call(.content(tabId: tabId, request: request))
   }
 
   /// Resolves the tab and makes it the active tab of its window, since AX and captureVisibleTab only see a window's visible tab.
-  private func frontTab(_ tabId: Int?) async throws -> TabInfo {
+  func frontTab(_ tabId: Int?) async throws -> TabInfo {
     let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
 
     if tab.active { return tab }
@@ -56,6 +57,11 @@ struct Commands {
   }
 
   private func describe(_ tab: TabInfo) -> String { "\(tab.active ? "*" : " ") \(tab.id) w\(tab.windowId) \(tab.url) \(tab.title)" }
+
+  func describe(_ event: LoggedEvent) -> String {
+    let count = event.count > 1 ? " x\(event.count)" : ""
+    return "\(event.type) \(event.isTrusted ? "trusted" : "UNTRUSTED") \(event.ref.map { "[\($0)]" } ?? "")\(event.target) \(event.detail)\(count)"
+  }
 
   private func describe(_ element: ElementInfo) -> String {
     let offscreen = element.inViewport ? "" : " (offscreen)"
@@ -114,10 +120,8 @@ struct Commands {
   }
 
   private func events(_ tabId: Int?, _ clear: Bool) async throws -> CLIReply {
-    let response = try await content(tabId, .events(clear: clear))
-    let lines = try response.decode(EventsResult.self).events.map { event in
-      "\(event.type) \(event.isTrusted ? "trusted" : "UNTRUSTED") \(event.ref.map { "[\($0)]" } ?? "")\(event.target) \(event.detail)"
-    }
+    let response = try await content(tabId, .events(clear: clear, arm: false))
+    let lines = try response.decode(EventsResult.self).events.map(describe)
     return CLIReply(ok: true, text: lines.isEmpty ? "no events" : lines.joined(separator: "\n"), data: response)
   }
 
@@ -181,7 +185,7 @@ struct Commands {
   }
 
   /// Locate, then refuse to act when the content script says the point would land on something else.
-  private func locateHittable(_ tabId: Int, _ ref: Int) async throws -> LocateResult {
+  func locateHittable(_ tabId: Int, _ ref: Int) async throws -> LocateResult {
     let located = try await content(tabId, .locate(ref: ref)).decode(LocateResult.self)
 
     if !located.hitsTarget { throw Failure(description: "ref \(ref) is not hittable: \(located.hitDescription)") }
@@ -189,7 +193,7 @@ struct Commands {
     return located
   }
 
-  private func hitLines(_ locate: LocateResult, _ hit: AXEngine.Hit) -> [String] {
+  func hitLines(_ locate: LocateResult, _ hit: AXEngine.Hit) -> [String] {
     [
       "locate: hitsTarget=\(locate.hitsTarget) \(locate.hitDescription)",
       "mapped css (\(locate.point.left), \(locate.point.top)) to screen \(AXEngine.format(hit.screenPoint)) zoom \(String(format: "%.3f", hit.zoom)) frame \(AXEngine.format(hit.viewportFrame))",

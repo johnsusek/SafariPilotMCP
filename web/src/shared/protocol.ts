@@ -43,13 +43,17 @@ export type LoggedEvent = {
   target: string;
   time: number;
   detail: string;
+  // Consecutive identical armed-type entries (same type, target and trust) merged into one; 1 otherwise.
+  count: number;
 };
 
 export type ContentRequest =
   | { op: "ping" }
   | { op: "snapshot" }
   | { op: "locate"; ref: number }
-  | { op: "events"; clear: boolean }
+  // arm turns on move and drag-over logging until the next events request.
+  | { op: "events"; clear: boolean; arm: boolean }
+  | { op: "inspect"; ref: number }
   | { op: "readPage"; filter: "interactive" | "all"; maxChars: number }
   | { op: "find"; query: string }
   | { op: "pageText"; maxChars: number }
@@ -74,6 +78,14 @@ export type LocateResult = {
   viewport: Viewport;
 };
 export type EventsResult = { ok: true; events: LoggedEvent[] };
+
+// inspect: whether ref matches :hover and its form value (textContent for contenteditable), null when it has none.
+export type InspectResult = {
+  ok: true;
+  ref: number;
+  hover: boolean;
+  value: string | null;
+};
 
 // readPage: an indented element tree as text, one node per line, with refs from the same
 // ref space as snapshot and locate. filter "interactive" keeps only actionable elements.
@@ -109,6 +121,7 @@ export type ContentResponse =
   | SnapshotResult
   | LocateResult
   | EventsResult
+  | InspectResult
   | ReadPageResult
   | FindResult
   | PageTextResult

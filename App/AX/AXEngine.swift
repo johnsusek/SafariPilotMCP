@@ -148,12 +148,17 @@ enum AXEngine {
     let readBack: String?
   }
 
-  static func type(_ text: String, into hit: Hit) throws -> TypeOutcome {
+  /// Sets AXFocused on the first element from the hit up that allows it.
+  static func focus(_ hit: Hit) throws -> (focused: AXNode, result: AXError) {
     guard let focused = hit.chain.first(where: { $0.isSettable(kAXFocusedAttribute) }) else {
       throw Failure(description: "no element from the hit up to the web area has a settable AXFocused:\n\(describe(hit.chain))")
     }
 
-    let focusResult = AXUIElementSetAttributeValue(focused.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
+    return (focused, AXUIElementSetAttributeValue(focused.element, kAXFocusedAttribute as CFString, kCFBooleanTrue))
+  }
+
+  static func type(_ text: String, into hit: Hit) throws -> TypeOutcome {
+    let (focused, focusResult) = try focus(hit)
 
     guard let valueNode = hit.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
       throw Failure(description: "AXFocused set (\(focusResult.name)) but nothing has a settable AXValue:\n\(describe(hit.chain))")

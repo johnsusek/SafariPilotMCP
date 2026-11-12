@@ -25,6 +25,11 @@ enum CommandLineParsing {
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
     screenshot [PATH]               save the tab as PNG
     debug-ax [REF]                  AX windows and frames next to viewport metrics
+    debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
+    debug-cg click|hover REF        the same for a click or a hover
+    debug-cg drag FROM TO           the same for a drag
+      --global                      post to the HID event tap instead of Safari's pid
+      --no-window-fields            leave window-under-pointer fields unset on pid mouse events
     mcp                             run as a stdio MCP server
 
   Without --tab, commands act on the active tab of the last focused window.
@@ -55,6 +60,15 @@ enum CommandLineParsing {
     case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
     case "screenshot": invocation = Invocation(command: .screenshot(tabId: tabId), outputPath: rest.first)
     case "debug-ax": invocation = try Invocation(command: .debugAX(tabId: tabId, ref: rest.first.map { try integer($0, "REF") }))
+    case "debug-cg":
+      let global = flag("--global", &rest)
+      let windowFields = !flag("--no-window-fields", &rest)
+      let ref = try option("--ref", &rest).map { try integer($0, "--ref") }
+      let probe = try probe(rest, ref: ref)
+
+      if !windowFields, global || probe.isKey { throw Failure(description: "--no-window-fields applies only to pid-targeted mouse actions") }
+
+      invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, global: global, windowFields: windowFields))
     case "type":
       guard rest.count >= 2 else { throw Failure(description: "type needs REF and TEXT") }
 
@@ -85,6 +99,24 @@ enum CommandLineParsing {
     if let stray = rest.first(where: { $0.hasPrefix("--") }) { throw Failure(description: "unknown option \(stray) for \(name)") }
 
     return invocation
+  }
+
+  private static func probe(_ words: [String], ref: Int?) throws -> CGProbe {
+    let action = words.first ?? "missing"
+    let arguments = Array(words.dropFirst())
+    let arity = ["key": 1, "click": 1, "hover": 1, "drag": 2]
+
+    guard let expected = arity[action] else { throw Failure(description: "debug-cg action must be key, click, hover or drag, not \(action)") }
+    guard arguments.count == expected else { throw Failure(description: "debug-cg \(action) takes \(expected) argument\(expected == 1 ? "" : "s"), got \(arguments.count)") }
+
+    if ref != nil, action != "key" { throw Failure(description: "--ref applies only to debug-cg key") }
+
+    switch action {
+    case "key": return try .key(KeyChord.parse(arguments[0]), ref: ref)
+    case "click": return try .click(ref: integer(arguments[0], "REF"))
+    case "hover": return try .hover(ref: integer(arguments[0], "REF"))
+    default: return try .drag(from: integer(arguments[0], "FROM"), to: integer(arguments[1], "TO"))
+    }
   }
 
   /// Removes `name VALUE` from words and returns VALUE.

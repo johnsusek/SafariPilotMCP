@@ -102,6 +102,15 @@
       </div>
 
       <div class="row">
+        <span>Drag</span>
+        <span>
+          <span id="drag-source" class="fake" draggable="true" @dragstart="$event.dataTransfer.setData('text/plain', 'drag')">Drag me</span>
+          <span id="drop-zone" class="fake" @dragover.prevent @drop.prevent="bump('drop')">Drop here</span>
+        </span>
+        <output x-text="counts.drop"></output>
+      </div>
+
+      <div class="row">
         <span>In scroller</span>
         <div class="scroller">
           <div class="spacer-small"></div>

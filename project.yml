@@ -88,6 +88,7 @@ targets:
       - Shared/Wire.swift
       - Shared/JSONValue.swift
       - Shared/CLIWire.swift
+      - Shared/KeyChord.swift
       - Shared/Contract.swift
       - Shared/ViewportMapping.swift
     dependencies:

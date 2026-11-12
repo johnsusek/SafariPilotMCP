@@ -131,6 +131,19 @@ struct CommandLineParsingTests {
     #expect(try parse("screenshot shot.png") == Invocation(command: .screenshot(tabId: nil), outputPath: "shot.png"))
   }
 
+  @Test func debugCGParses() throws {
+    #expect(try parse("debug-cg key cmd+a --ref 3").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+a"), ref: 3), global: false, windowFields: true))
+    #expect(try parse("--tab 2 debug-cg click 5 --global").command == .debugCG(tabId: 2, probe: .click(ref: 5), global: true, windowFields: true))
+    #expect(try parse("debug-cg hover 6 --no-window-fields").command == .debugCG(tabId: nil, probe: .hover(ref: 6), global: false, windowFields: false))
+    #expect(try parse("debug-cg drag 7 8").command == .debugCG(tabId: nil, probe: .drag(from: 7, to: 8), global: false, windowFields: true))
+  }
+
+  @Test func debugCGRejectsBadInput() {
+    for line in ["debug-cg", "debug-cg tap 3", "debug-cg click", "debug-cg drag 7", "debug-cg click 3 --ref 4", "debug-cg key Bogus", "debug-cg key Enter --no-window-fields", "debug-cg click 3 --global --no-window-fields", "debug-cg hover 3 --bogus"] {
+      #expect(throws: Failure.self, "\(line)") { try parse(line) }
+    }
+  }
+
   @Test func badInputFails() {
     #expect(throws: Failure.self) { try parse("click") }
     #expect(throws: Failure.self) { try parse("click abc") }

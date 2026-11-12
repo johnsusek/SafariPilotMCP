@@ -13,11 +13,15 @@ let loggedTypes = [
   "focusin",
   "focusout",
   "keydown",
+  "keypress",
   "keyup",
   "beforeinput",
   "input",
   "change",
   "submit",
+  "dragstart",
+  "drop",
+  "dragend",
 ];
 
 let counterNames = [
@@ -34,6 +38,7 @@ let counterNames = [
   "mouseUp",
   "clickDiv",
   "menuItem",
+  "drop",
   "inScroller",
   "covered",
   "scaled",
