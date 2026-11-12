@@ -52,7 +52,12 @@ let wake = (reason: string) => {
 
 browser.runtime.onStartup.addListener(() => wake("onStartup"));
 browser.runtime.onInstalled.addListener(() => wake("onInstalled"));
-browser.alarms.onAlarm.addListener((alarm) => wake(`alarm ${alarm.name}`));
+browser.alarms.onAlarm.addListener((alarm) => {
+  // Safari unloads a non-persistent background once it has not sent on a port for 2 minutes,
+  // so each alarm sends on the native port. Incoming port messages and native polls do not count.
+  port.postMessage({ kind: "keepalive", instance });
+  wake(`alarm ${alarm.name}`);
+});
 browser.tabs.onActivated.addListener(() => wake("tabs.onActivated"));
 browser.tabs.onUpdated.addListener((_tabId, change) => {
   if (change.status === "complete") wake("tabs.onUpdated");
@@ -60,9 +65,12 @@ browser.tabs.onUpdated.addListener((_tabId, change) => {
 
 // Lead (b): the app calls SFSafariApplication.dispatchMessage when a command is queued and no poll is open.
 let port = browser.runtime.connectNative(appId);
-port.onMessage.addListener((message) =>
-  wake(`dispatch ${JSON.stringify(message)}`),
-);
+port.onMessage.addListener((message) => {
+  // Safari also delivers the app's reply to each keepalive here; only app dispatches are wakes.
+  if (message?.ok) return;
+
+  wake(`dispatch ${JSON.stringify(message)}`);
+});
 port.onDisconnect.addListener(() => lifecycle("native port disconnected"));
 
 browser.alarms.create("keepalive", { periodInMinutes: 1 });
