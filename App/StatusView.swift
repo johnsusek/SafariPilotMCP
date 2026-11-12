@@ -33,7 +33,30 @@ struct StatusView: View {
         }
         LabeledContent("Claude Code") {
           Button("Copy Command") { model.copyClaudeCodeCommand() }
-            .help(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath))
+            .help("Copies a claude mcp add command with a new credential")
+        }
+        Section("Clients") {
+          if let error = model.gate.storeError { Text(error).foregroundStyle(.red).textSelection(.enabled) }
+
+          if model.gate.trustedClients.isEmpty && model.gate.sessions.isEmpty { Text("None").foregroundStyle(.secondary) }
+
+          ForEach(model.gate.trustedClients) { record in
+            LabeledContent(record.name) {
+              HStack {
+                Text("Trusted since \(record.issuedAt.formatted(date: .abbreviated, time: .omitted))").foregroundStyle(.secondary)
+                Button("Remove") { model.gate.remove(record) }
+              }
+            }
+          }
+
+          ForEach(model.gate.sessions) { session in
+            LabeledContent(session.name) {
+              HStack {
+                Text("Connected \(session.since.formatted(date: .omitted, time: .shortened))").foregroundStyle(.secondary)
+                Button("Disconnect") { model.gate.revoke(session) }
+              }
+            }
+          }
         }
       }
       .formStyle(.grouped)

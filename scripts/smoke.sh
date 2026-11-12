@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Live smoke test against real sites through the installed CLI; prints PASS or FAIL per check and exits nonzero on any failure.
 # Sites change, so a failure means look, not necessarily a regression. Run: scripts/smoke.sh [site ...]
+# Needs the Debug app (scripts/install.sh --debug): Release builds run only mcp and status.
 setopt pipe_fail
 failures=0
 tab=""

@@ -72,9 +72,10 @@ enum Server {
     }
 
     let message = try JSONDecoder().decode(JSONValue.self, from: buffer.prefix { $0 != 0x0A })
-    let reply: Data = if message["kind"]?.string == "cli" {
-      try await JSONEncoder().encode(model.runCLI(message.decode(CLIRequest.self)))
-    } else {
+    let reply: Data = switch message["kind"]?.string {
+    case "cli": try await JSONEncoder().encode(model.runCLI(message.decode(CLIRequest.self)))
+    case "hello": try await JSONEncoder().encode(model.gate.approve(message.decode(HelloRequest.self)))
+    default:
       try await JSONEncoder().encode(model.transport.handle(message))
     }
 

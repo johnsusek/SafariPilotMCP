@@ -12,7 +12,7 @@ npm --prefix web run --silent build
 npm --prefix web test --silent
 xcodegen generate --quiet
 result=0
-xcodebuild test -project SafariPilot.xcodeproj -scheme SafariPilot -destination 'platform=macOS' -derivedDataPath "$derived" 2>&1 | grep -E " error:|failed|Test run with|^\*\* TEST" || result=$?
+xcodebuild test -project SafariPilot.xcodeproj -scheme SafariPilot -destination 'platform=macOS' -derivedDataPath "$derived" -allowProvisioningUpdates 2>&1 | grep -E " error:|failed|Test run with|^\*\* TEST" || result=$?
 
 pluginkit -r "$app/Contents/PlugIns/SafariPilotExtension.appex" 2>/dev/null || true
 "$lsregister" -u "$app" 2>/dev/null || true

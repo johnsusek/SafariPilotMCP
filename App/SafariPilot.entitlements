@@ -8,5 +8,9 @@
 	<array>
 		<string>WX2UGCD2SK.net.johnsolo.SafariPilot</string>
 	</array>
+	<key>keychain-access-groups</key>
+	<array>
+		<string>$(AppIdentifierPrefix)net.johnsolo.SafariPilot</string>
+	</array>
 </dict>
 </plist>

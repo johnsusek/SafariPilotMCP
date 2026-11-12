@@ -43,6 +43,8 @@ targets:
         com.apple.security.app-sandbox: false
         com.apple.security.application-groups:
           - WX2UGCD2SK.net.johnsolo.SafariPilot
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)net.johnsolo.SafariPilot
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot
@@ -111,6 +113,8 @@ targets:
       - CLI/TabSession.swift
       - CLI/CommandLineParsing.swift
       - App/ClaudeSetup.swift
+      - App/ClientCredentials.swift
+      - App/ApprovalQueue.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Tests

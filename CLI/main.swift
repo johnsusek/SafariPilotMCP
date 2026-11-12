@@ -15,8 +15,14 @@ if let index = arguments.firstIndex(of: "--timeout") {
   arguments.removeSubrange(index ... index + 1)
 }
 
+#if DEBUG
+  let usage = CommandLineParsing.usage
+#else
+  let usage = "usage: safaripilot mcp|status\n\n  mcp     run as a stdio MCP server\n  status  app, extension and background state\n\nDev commands are in Debug builds: scripts/install.sh --debug"
+#endif
+
 if arguments.isEmpty || arguments == ["help"] || arguments == ["--help"] {
-  print(CommandLineParsing.usage)
+  print(usage)
   exit(arguments.isEmpty ? 2 : 0)
 }
 
@@ -29,6 +35,13 @@ if arguments == ["mcp"] {
     exit(1)
   }
 }
+
+#if !DEBUG
+  guard arguments == ["status"] else {
+    FileHandle.standardError.write(Data("error: this build runs only mcp and status; dev commands are in Debug builds (scripts/install.sh --debug)\n".utf8))
+    exit(2)
+  }
+#endif
 
 do {
   let invocation = try CommandLineParsing.parse(arguments)

@@ -7,7 +7,7 @@ enum ClaudeSetup {
 
   static var serverPath: String { Bundle.main.sharedSupportURL!.appending(path: "safaripilot").path }
 
-  static func codeCommand(serverPath: String) -> String { "claude mcp add --scope user \(serverName) -- '\(serverPath)' mcp" }
+  static func codeCommand(serverPath: String, credential: String) -> String { "claude mcp add --scope user --env \(HelloRequest.credentialVariable)=\(credential) \(serverName) -- '\(serverPath)' mcp" }
 
   enum SetupError: Error, CustomStringConvertible {
     case notAnObject(String)
@@ -20,7 +20,7 @@ enum ClaudeSetup {
   }
 
   /// Returns the config with this server's entry set, keeping every other key; nil config means no file yet.
-  static func merged(config: Data?, serverPath: String) throws -> Data {
+  static func merged(config: Data?, serverPath: String, credential: String) throws -> Data {
     var root: [String: Any] = [:]
 
     if let config, !config.isEmpty {
@@ -35,14 +35,21 @@ enum ClaudeSetup {
       servers = object
     }
 
-    servers[serverName] = ["command": serverPath, "args": ["mcp"]]
+    servers[serverName] = ["command": serverPath, "args": ["mcp"], "env": [HelloRequest.credentialVariable: credential]]
     root["mcpServers"] = servers
     return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
   }
 
-  static func isAdded(config: Data?, serverPath: String) -> Bool {
-    guard let config, let root = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return false }
-    guard let entry = (root["mcpServers"] as? [String: Any])?[serverName] as? [String: Any] else { return false }
-    return entry["command"] as? String == serverPath && entry["args"] as? [String] == ["mcp"]
+  private static func entry(_ config: Data?) -> [String: Any]? {
+    guard let config, let root = try? JSONSerialization.jsonObject(with: config) as? [String: Any] else { return nil }
+    return (root["mcpServers"] as? [String: Any])?[serverName] as? [String: Any]
+  }
+
+  static func credential(in config: Data?) -> String? { (entry(config)?["env"] as? [String: Any])?[HelloRequest.credentialVariable] as? String }
+
+  /// Added means this app's binary, the mcp argument, and a credential SafariPilot still knows.
+  static func isAdded(config: Data?, serverPath: String, knows: (String) -> Bool) -> Bool {
+    guard let entry = entry(config), let credential = credential(in: config) else { return false }
+    return entry["command"] as? String == serverPath && entry["args"] as? [String] == ["mcp"] && knows(credential)
   }
 }

@@ -6,6 +6,9 @@ import Synchronization
 enum MCPServer {
   /// The tabs this server process may see and act on, and its default tab for page tools.
   static let session = Mutex(TabSession())
+  /// The name and version the client reported in initialize, shown in the approval dialog.
+  static let client = Mutex((name: "", version: ""))
+  static let approval = Approval()
 
   static func run() async throws {
     let server = Server(name: "safaripilot", version: "0.1", instructions: Tools.instructions, capabilities: .init(tools: .init(listChanged: false)))
@@ -13,7 +16,7 @@ enum MCPServer {
 
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }
     await server.withMethodHandler(CallTool.self) { params in await call(params) }
-    try await server.start(transport: StdioTransport())
+    try await server.start(transport: StdioTransport()) { info, _ in client.withLock { $0 = (info.name, info.version) } }
     log("ready with \(tools.count) tools")
     await server.waitUntilCompleted()
   }
@@ -129,12 +132,47 @@ enum MCPServer {
 
   static func text(_ text: String) -> Tool.Content { .text(text: text, annotations: nil, _meta: nil) }
 
-  /// Wire.exchange blocks for up to the whole timeout, so it runs on a dispatch thread instead of the cooperative pool.
+  /// Sends a command under this process's approved session, asking for approval first when there is none;
+  /// a refused session is dropped so the next command asks again.
   private static func exchange(_ command: AppCommand) async throws -> CLIReply {
+    let key = try await approval.session()
+    let reply = try await blocking { try AppClient.send(command, timeout: CLIRequest.defaultTimeout, session: key) }
+
+    if reply.data["unapproved"]?.bool == true { await approval.drop(key) }
+
+    return reply
+  }
+
+  /// Wire.exchange blocks for up to its whole timeout, so it runs on a dispatch thread instead of the cooperative pool.
+  static func blocking<Value: Sendable>(_ work: @escaping @Sendable () throws -> Value) async throws -> Value {
     try await withCheckedThrowingContinuation { continuation in
-      DispatchQueue.global().async { continuation.resume(with: Result { try AppClient.send(command, timeout: CLIRequest.defaultTimeout) }) }
+      DispatchQueue.global().async { continuation.resume(with: Result { try work() }) }
     }
   }
 
   static func log(_ message: String) { FileHandle.standardError.write(Data("safaripilot mcp: \(message)\n".utf8)) }
+}
+
+/// This process's approval: the first command asks the app, which shows the dialog, and concurrent commands share that one ask.
+actor Approval {
+  private var key: String?
+  private var pending: Task<String, Error>?
+
+  func session() async throws -> String {
+    if let key { return key }
+    if let pending { return try await pending.value }
+
+    let (name, version) = MCPServer.client.withLock { $0 }
+    let credential = ProcessInfo.processInfo.environment[HelloRequest.credentialVariable]
+    let task = Task { try await MCPServer.blocking { try AppClient.hello(clientName: name, clientVersion: version, credential: credential) } }
+    pending = task
+    defer { pending = nil }
+    let approved = try await task.value
+    key = approved
+    return approved
+  }
+
+  func drop(_ stale: String) {
+    if key == stale { key = nil }
+  }
 }

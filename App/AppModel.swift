@@ -20,6 +20,7 @@ final class AppModel {
   }
 
   let transport = Transport()
+  let gate = ClientGate()
   private(set) var axTrusted = AXIsProcessTrusted()
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
@@ -43,7 +44,7 @@ final class AppModel {
       while true {
         axTrusted = AXIsProcessTrusted()
         await refreshExtensionState()
-        desktopAdded = ClaudeSetup.isAdded(config: try? Data(contentsOf: ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath)
+        desktopAdded = ClaudeSetup.isAdded(config: try? Data(contentsOf: ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath) { gate.knows(credential: $0) }
         try? await Task.sleep(for: .seconds(3))
       }
     }
@@ -76,7 +77,8 @@ final class AppModel {
 
     do {
       let existing = FileManager.default.fileExists(atPath: url.path) ? try Data(contentsOf: url) : nil
-      let merged = try ClaudeSetup.merged(config: existing, serverPath: ClaudeSetup.serverPath)
+      let credential = try gate.credentialForSettings(name: "Claude Desktop", existing: ClaudeSetup.credential(in: existing))
+      let merged = try ClaudeSetup.merged(config: existing, serverPath: ClaudeSetup.serverPath, credential: credential)
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
       try merged.write(to: url, options: .atomic)
       desktopAdded = true
@@ -86,14 +88,26 @@ final class AppModel {
     }
   }
 
+  /// Copies the command with a new untrusted credential, to this Mac only since it holds a secret.
   func copyClaudeCodeCommand() {
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath), forType: .string)
+    do {
+      let credential = try gate.credentialForSettings(name: "Claude Code", existing: nil)
+      NSPasteboard.general.prepareForNewContents(with: .currentHostOnly)
+      NSPasteboard.general.setString(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath, credential: credential), forType: .string)
+    } catch {
+      setupAlert = SetupAlert(title: "Couldn't Create a Credential", message: "\(error)")
+    }
   }
 
   func runCLI(_ request: CLIRequest) async -> CLIReply {
-    let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
     let label = String(describing: request.command)
+
+    if let refusal = gate.refusal(for: request) {
+      record(label, ok: false, summary: refusal)
+      return CLIReply(ok: false, text: refusal, data: .object(["unapproved": .bool(true)]))
+    }
+
+    let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
 
     do {
       let reply = try await commands.run(request.command)
