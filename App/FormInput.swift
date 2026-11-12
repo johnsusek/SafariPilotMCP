@@ -19,7 +19,7 @@ extension Commands {
 
       return try await setDateTime(tab, ref, control.kind, text)
     case .listbox: throw Failure(description: "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
-    case .other: throw Failure(description: "ref \(ref) is not a text field, checkbox, radio or select; use click or key")
+    case .other: throw Failure(description: "ref \(ref) is not a text field, slider, checkbox, radio or select; use click or key")
     }
   }
 

@@ -10,7 +10,6 @@ let nonTextInputs = new Set([
   "image",
   "file",
   "hidden",
-  "range",
   "color",
 ]);
 
