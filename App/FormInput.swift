@@ -225,6 +225,9 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(50))
     }
 
+    // A window opened unfocused in the background never reports a focused element though keys still reach the field; the read-back catches a miss.
+    if focused() == nil, target.window.value(kAXMainAttribute) as? Bool == true { return }
+
     throw Failure(description: "set AXFocused on \(field.summary) but Safari reports focus on \(focused()?.summary ?? "nothing"); no keys were posted to it")
   }
 }

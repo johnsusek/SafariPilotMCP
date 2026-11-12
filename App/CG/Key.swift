@@ -96,6 +96,9 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(50))
     }
 
+    // A window Safari opened unfocused while in the background never reports a focused element, yet keys posted to Safari reach its page; the keydown count afterwards catches keys that went nowhere.
+    if focused() == nil, target.window.value(kAXMainAttribute) as? Bool == true { return }
+
     let ancestry = focused().map { sequence(first: $0, next: \.parent).prefix(6).map(\.summary).joined(separator: " < ") } ?? "nothing (Safari reports no focused element)"
     throw Failure(description: "keyboard focus is outside the tab's page, on \(ancestry), after setting \(steps.joined(separator: ", ")); no keys were posted")
   }
