@@ -10,9 +10,10 @@ struct ContractTests {
   let tab = #"{"id":12,"windowId":3,"active":false,"url":"https://a.test/","title":"A","windowFrame":{"left":0,"top":25,"width":1200,"height":900}}"#
 
   @Test func tabInfoDecodesWithAndWithoutWindowFrame() throws {
-    let decoded = try decode(TabsResult.self, #"{"ok":true,"tabs":[\#(tab),{"id":13,"windowId":3,"active":true,"url":"","title":"","windowFrame":null}]}"#)
-    #expect(decoded.tabs[0] == TabInfo(id: 12, windowId: 3, active: false, url: "https://a.test/", title: "A", windowFrame: CSSRect(left: 0, top: 25, width: 1200, height: 900)))
+    let decoded = try decode(TabsResult.self, #"{"ok":true,"tabs":[\#(tab),{"id":13,"windowId":3,"active":true,"url":"","title":"","windowFrame":null,"openerId":12}]}"#)
+    #expect(decoded.tabs[0] == TabInfo(id: 12, windowId: 3, active: false, url: "https://a.test/", title: "A", windowFrame: CSSRect(left: 0, top: 25, width: 1200, height: 900), openerId: nil))
     #expect(decoded.tabs[1].windowFrame == nil)
+    #expect(decoded.tabs[1].openerId == 12)
   }
 
   @Test func tabClosedAndScreenshotResultsDecode() throws {

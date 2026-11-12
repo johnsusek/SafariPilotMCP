@@ -24,6 +24,7 @@ export let infoOf = (
   url: tab.url ?? "",
   title: tab.title ?? "",
   windowFrame: frame,
+  openerId: tab.openerTabId ?? null,
 });
 
 export async function resolveTab(tabId: number | null) {

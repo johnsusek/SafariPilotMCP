@@ -107,6 +107,7 @@ targets:
       - Tests
       - Shared
       - CLI/Tools.swift
+      - CLI/TabSession.swift
       - CLI/CommandLineParsing.swift
     settings:
       base:

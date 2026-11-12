@@ -10,6 +10,7 @@ export type TabInfo = {
   url: string;
   title: string;
   windowFrame: Rect | null;
+  openerId: number | null;
 };
 
 export type Command =
@@ -35,8 +36,4 @@ export type ClosedResult = { ok: true; closed: number };
 export type ScreenshotResult = { ok: true; dataUrl: string; tab: TabInfo };
 
 export type CommandResponse =
-  | ContentResponse
-  | TabsResult
-  | TabResult
-  | ClosedResult
-  | ScreenshotResult;
+  ContentResponse | TabsResult | TabResult | ClosedResult | ScreenshotResult;

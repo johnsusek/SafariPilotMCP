@@ -18,6 +18,9 @@ struct TabInfo: Codable, Sendable, Equatable {
   let url: String
   let title: String
   let windowFrame: CSSRect?
+  let openerId: Int?
+
+  var line: String { "\(active ? "*" : " ") \(id) w\(windowId) \(url) \(title)\(openerId.map { " (opened by \($0))" } ?? "")" }
 }
 
 struct ElementInfo: Codable, Sendable, Equatable {

@@ -57,7 +57,6 @@ struct Commands {
     return try await call(.tabSelect(tabId: tab.id)).decode(TabResult.self).tab
   }
 
-  private func describe(_ tab: TabInfo) -> String { "\(tab.active ? "*" : " ") \(tab.id) w\(tab.windowId) \(tab.url) \(tab.title)" }
 
   func describe(_ event: LoggedEvent) -> String {
     let count = event.count > 1 ? " x\(event.count)" : ""
@@ -128,7 +127,7 @@ struct Commands {
 
   private func tabs() async throws -> CLIReply {
     let response = try await call(.tabs)
-    let lines = try response.decode(TabsResult.self).tabs.map(describe)
+    let lines = try response.decode(TabsResult.self).tabs.map(\.line)
     return CLIReply(ok: true, text: lines.isEmpty ? "no tabs" : lines.joined(separator: "\n"), data: response)
   }
 
@@ -231,7 +230,7 @@ struct Commands {
     let target = try await AXEngine.target(for: tab)
     let windowFrame = tab.windowFrame.map { "(\($0.left), \($0.top), \($0.width) x \($0.height))" } ?? "none"
     var lines = [
-      "tab: \(describe(tab)) windowFrame \(windowFrame)",
+      "tab: \(tab.line) windowFrame \(windowFrame)",
       "viewport: inner \(viewport.innerWidth)x\(viewport.innerHeight) client \(viewport.clientWidth ?? -1)x\(viewport.clientHeight ?? -1) visual \(viewport.visualWidth ?? -1)x\(viewport.visualHeight ?? -1)",
       "  scroll (\(viewport.scrollX), \(viewport.scrollY)) dpr \(viewport.devicePixelRatio) visualScale \(viewport.visualScale) visualOffset (\(viewport.visualOffsetLeft), \(viewport.visualOffsetTop))",
       "windows:",

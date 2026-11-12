@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 struct ToolMappingTests {
-  func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, sessionTab: session) }
+  func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
     let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down"]
@@ -56,7 +56,7 @@ struct ToolMappingTests {
       #expect("\(name)") {
         try map(name, ["ref": .number(1), "value": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back"], session: nil)
       } throws: { error in
-        (error as? Failure)?.description == Tools.noSessionTab
+        (error as? Failure)?.description == TabSession.noCurrent
       }
     }
 
@@ -68,12 +68,40 @@ struct ToolMappingTests {
     let created = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "tab": .object(["id": .number(31)])]))
     let failed = CLIReply(ok: false, text: "", data: .object(["error": "no"]))
     let closed = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "closed": .number(31)]))
-    #expect(Tools.session(after: .tabCreate(url: nil), reply: created, current: nil) == 31)
-    #expect(Tools.session(after: .tabCreate(url: nil), reply: created, current: 8) == 31)
-    #expect(Tools.session(after: .tabCreate(url: nil), reply: failed, current: 8) == 8)
-    #expect(Tools.session(after: .tabClose(tabId: 31), reply: closed, current: 31) == nil)
-    #expect(Tools.session(after: .tabClose(tabId: 9), reply: closed, current: 31) == 31)
-    #expect(Tools.session(after: .click(tabId: 9, ref: 1), reply: created, current: 31) == 31)
+    var session = TabSession(owned: [8], current: 8)
+    session.record(.tabCreate(url: nil), reply: failed)
+    #expect(session == TabSession(owned: [8], current: 8))
+    session.record(.tabCreate(url: nil), reply: created)
+    #expect(session == TabSession(owned: [8, 31], current: 31))
+    session.record(.click(tabId: 8, ref: 1), reply: created)
+    #expect(session == TabSession(owned: [8, 31], current: 31))
+    session.record(.tabClose(tabId: 8), reply: closed)
+    #expect(session == TabSession(owned: [31], current: 31))
+    session.record(.tabClose(tabId: 31), reply: closed)
+    #expect(session == TabSession(owned: [], current: nil))
+  }
+
+  func tab(_ id: Int, opener: Int? = nil) -> TabInfo { TabInfo(id: id, windowId: 1, active: false, url: "https://\(id).test/", title: "", windowFrame: nil, openerId: opener) }
+
+  @Test func adoptsPopupsOfOwnedTabsTransitively() {
+    var session = TabSession(owned: [5], current: 5)
+    let tabs = [tab(1), tab(5, opener: 1), tab(7, opener: 9), tab(9, opener: 5), tab(3, opener: 2)]
+    #expect(session.adopt(tabs).map(\.id).sorted() == [7, 9])
+    #expect(session.visible(tabs).map(\.id) == [5, 7, 9])
+    #expect(session.adopt(tabs).isEmpty)
+  }
+
+  @Test func adoptForgetsClosedTabs() {
+    var session = TabSession(owned: [5, 6], current: 5)
+    _ = session.adopt([tab(6)])
+    #expect(session == TabSession(owned: [6], current: nil))
+  }
+
+  @Test func commandsNameTheirTargetTab() {
+    #expect(AppCommand.click(tabId: 4, ref: 1).targetTab == 4)
+    #expect(AppCommand.tabClose(tabId: 6).targetTab == 6)
+    #expect(AppCommand.tabs.targetTab == nil)
+    #expect(AppCommand.tabCreate(url: nil).targetTab == nil)
   }
 
   @Test func integersAcceptDigitStrings() throws {

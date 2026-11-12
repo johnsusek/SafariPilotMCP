@@ -43,6 +43,15 @@ enum AppCommand: Codable, Sendable, Equatable {
   static let scrollStep = 100.0
   static let maxKeyPresses = 100
 
+  /// The tab the command acts on, or nil for commands that act on no tab or on the active one.
+  var targetTab: Int? {
+    switch self {
+    case .status, .tabs, .tabCreate: nil
+    case let .tabSelect(tabId), let .tabClose(tabId): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .key(tabId, _, _, _), let .screenshot(tabId), let .debugAX(tabId, _), let .debugCG(tabId, _, _): tabId
+    }
+  }
+
   /// "back" and "forward" walk history; anything else is a URL to load.
   static func navigation(tabId: Int?, target: String) -> AppCommand {
     guard let direction = HistoryDirection(rawValue: target) else { return .navigate(tabId: tabId, url: target) }
