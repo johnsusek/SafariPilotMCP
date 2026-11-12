@@ -1,7 +1,11 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installLogger, takeEvents } from "./events";
+import { find } from "./find";
 import { locate } from "./locate";
+import { pageText } from "./pageText";
+import { scroll } from "./scroll";
 import { snapshot } from "./snapshot";
+import { readPage } from "./tree";
 
 installLogger();
 
@@ -13,6 +17,12 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "locate") return await locate(request.ref);
     if (request.op === "events")
       return { ok: true, events: takeEvents(request.clear) };
+    if (request.op === "readPage")
+      return readPage(request.filter, request.maxChars);
+    if (request.op === "find") return find(request.query);
+    if (request.op === "pageText") return pageText(request.maxChars);
+    if (request.op === "scroll")
+      return scroll(request.ref, request.left, request.top);
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

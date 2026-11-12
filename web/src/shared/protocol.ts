@@ -49,7 +49,11 @@ export type ContentRequest =
   | { op: "ping" }
   | { op: "snapshot" }
   | { op: "locate"; ref: number }
-  | { op: "events"; clear: boolean };
+  | { op: "events"; clear: boolean }
+  | { op: "readPage"; filter: "interactive" | "all"; maxChars: number }
+  | { op: "find"; query: string }
+  | { op: "pageText"; maxChars: number }
+  | { op: "scroll"; ref: number | null; left: number; top: number };
 
 export type Failure = { ok: false; error: string };
 export type PingResult = { ok: true; url: string; title: string };
@@ -70,9 +74,42 @@ export type LocateResult = {
   viewport: Viewport;
 };
 export type EventsResult = { ok: true; events: LoggedEvent[] };
+
+// readPage: an indented element tree as text, one node per line, with refs from the same
+// ref space as snapshot and locate. filter "interactive" keeps only actionable elements.
+export type ReadPageResult = {
+  ok: true;
+  url: string;
+  title: string;
+  viewport: Viewport;
+  text: string;
+  truncated: boolean;
+};
+
+// find: up to 20 visible elements whose role, name or text contains the query, case-insensitively.
+// Matches get refs even when they are not interactive.
+export type FindResult = { ok: true; matches: ElementInfo[] };
+
+// pageText: readable text of the page, main or article content first, else the body.
+export type PageTextResult = {
+  ok: true;
+  url: string;
+  title: string;
+  text: string;
+  truncated: boolean;
+};
+
+// scroll: scrolls by (left, top) CSS px the nearest scrollable ancestor of ref, or the document
+// when ref is null. moved is false when nothing could scroll.
+export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
+
 export type ContentResponse =
   | Failure
   | PingResult
   | SnapshotResult
   | LocateResult
-  | EventsResult;
+  | EventsResult
+  | ReadPageResult
+  | FindResult
+  | PageTextResult
+  | ScrollResult;

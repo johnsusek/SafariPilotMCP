@@ -1,0 +1,216 @@
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { runCommand } from "./commands";
+import { loadTimeoutMs } from "./load";
+import { resolveTab } from "./tabs";
+
+type Listener = (tabId: number, change: { status?: string }) => void;
+
+let tabs: chrome.tabs.Tab[];
+let listeners: Set<Listener>;
+let fireComplete = (tabId: number) => {
+  for (let listener of listeners) listener(tabId, { status: "complete" });
+};
+
+let tab = (id: number, windowId: number, active: boolean) =>
+  ({
+    id,
+    windowId,
+    active,
+    url: `https://site/${id}`,
+    title: `T${id}`,
+  }) as chrome.tabs.Tab;
+
+let fakeBrowser = () => ({
+  tabs: {
+    query: vi.fn(async (filter: { active?: boolean }) =>
+      filter.active
+        ? tabs.filter((each) => each.active && each.windowId === 1)
+        : tabs,
+    ),
+    get: vi.fn(async (id: number) => {
+      let found = tabs.find((each) => each.id === id);
+
+      if (!found) throw new Error("Invalid tab ID");
+
+      return found;
+    }),
+    sendMessage: vi.fn(),
+    update: vi.fn(async () => {}),
+    create: vi.fn(),
+    remove: vi.fn(async () => {}),
+    goBack: vi.fn(async () => {}),
+    goForward: vi.fn(async () => {}),
+    captureVisibleTab: vi.fn(async () => "data:image/png;base64,AA"),
+    onUpdated: {
+      addListener: (listener: Listener) => listeners.add(listener),
+      removeListener: (listener: Listener) => listeners.delete(listener),
+    },
+  },
+  windows: {
+    get: vi.fn(async (id: number) =>
+      id === 1 ? { id, left: 10, top: 20, width: 800, height: 600 } : { id },
+    ),
+    getAll: vi.fn(async () => [
+      { id: 1, left: 10, top: 20, width: 800, height: 600 },
+      { id: 2 },
+    ]),
+    getLastFocused: vi.fn(async () => ({ id: 1 })),
+  },
+});
+
+let fake: ReturnType<typeof fakeBrowser>;
+let frame = { left: 10, top: 20, width: 800, height: 600 };
+
+beforeEach(() => {
+  tabs = [tab(5, 1, true), tab(6, 1, false), tab(7, 2, true)];
+  listeners = new Set();
+  fake = fakeBrowser();
+  vi.stubGlobal("browser", fake);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+let run = (command: object) =>
+  runCommand({ id: "c1", ...command } as Parameters<typeof runCommand>[0]);
+
+describe("resolveTab", () => {
+  test("null is the active tab of the last focused window", async () => {
+    expect((await resolveTab(null)).id).toBe(5);
+    expect(fake.tabs.query).toHaveBeenCalledWith({
+      active: true,
+      lastFocusedWindow: true,
+    });
+  });
+
+  test("unknown ids fail clearly", async () => {
+    await expect(resolveTab(99)).rejects.toThrow("no tab with id 99");
+  });
+});
+
+describe("runCommand", () => {
+  test("tabs carry their window frame, null when the window has none", async () => {
+    let result = await run({ type: "tabs" });
+    expect(result).toMatchObject({
+      ok: true,
+      tabs: [
+        { id: 5, windowFrame: frame },
+        { id: 6, windowFrame: frame },
+        { id: 7, windowFrame: null },
+      ],
+    });
+  });
+
+  test("content forwards to the resolved tab", async () => {
+    fake.tabs.sendMessage.mockResolvedValue({ ok: true, url: "u", title: "t" });
+    let result = await run({
+      type: "content",
+      tabId: 6,
+      request: { op: "ping" },
+    });
+    expect(fake.tabs.sendMessage).toHaveBeenCalledWith(6, { op: "ping" });
+    expect(result).toEqual({ ok: true, url: "u", title: "t" });
+  });
+
+  test("content without a content script asks for a reload", async () => {
+    fake.tabs.sendMessage.mockRejectedValue(
+      new Error("Could not establish connection"),
+    );
+    let rejected = await run({
+      type: "content",
+      tabId: null,
+      request: { op: "ping" },
+    });
+    expect(rejected).toMatchObject({ ok: false });
+    expect((rejected as { error: string }).error).toMatch(
+      /^no content script answered in tab 5 .*reload the tab/,
+    );
+    fake.tabs.sendMessage.mockResolvedValue(undefined);
+    let silent = await run({
+      type: "content",
+      tabId: null,
+      request: { op: "ping" },
+    });
+    expect((silent as { error: string }).error).toMatch(/reload the tab/);
+  });
+
+  test("screenshot fails unless the tab is active in its window", async () => {
+    expect(await run({ type: "screenshot", tabId: 6 })).toEqual({
+      ok: false,
+      error: "tab 6 is not the active tab of its window; select it first",
+    });
+    let result = await run({ type: "screenshot", tabId: 7 });
+    expect(fake.tabs.captureVisibleTab).toHaveBeenCalledWith(2, {
+      format: "png",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      dataUrl: "data:image/png;base64,AA",
+      tab: { id: 7 },
+    });
+  });
+
+  test("navigate answers after the tab completes loading", async () => {
+    fake.tabs.update.mockImplementation(async () => {
+      setTimeout(() => fireComplete(6), 0);
+    });
+    let result = await run({ type: "navigate", tabId: 6, url: "https://next" });
+    expect(fake.tabs.update).toHaveBeenCalledWith(6, { url: "https://next" });
+    expect(result).toMatchObject({ ok: true, tab: { id: 6 } });
+    expect(listeners.size).toBe(0);
+  });
+
+  test("a load that completes before the call returns still counts", async () => {
+    fake.tabs.goBack.mockImplementation(async () => fireComplete(5));
+    let result = await run({ type: "history", tabId: null, direction: "back" });
+    expect(result).toMatchObject({ ok: true, tab: { id: 5 } });
+  });
+
+  test("navigate fails after the load timeout", async () => {
+    vi.useFakeTimers();
+    let pending = run({ type: "navigate", tabId: 6, url: "https://slow" });
+    await vi.advanceTimersByTimeAsync(loadTimeoutMs);
+    expect(await pending).toEqual({
+      ok: false,
+      error: "navigate failed: tab 6 did not finish loading within 15 s",
+    });
+    expect(listeners.size).toBe(0);
+  });
+
+  test("other tabs finishing do not end the wait", async () => {
+    vi.useFakeTimers();
+    fake.tabs.goForward.mockImplementation(async () => fireComplete(7));
+    let pending = run({ type: "history", tabId: 6, direction: "forward" });
+    await vi.advanceTimersByTimeAsync(loadTimeoutMs);
+    expect(await pending).toMatchObject({ ok: false });
+  });
+
+  test("tabCreate with a url opens in the last focused window and waits", async () => {
+    fake.tabs.create.mockImplementation(async () => {
+      tabs.push(tab(8, 1, true));
+      fireComplete(8);
+      return tabs.at(-1);
+    });
+    let result = await run({ type: "tabCreate", url: "https://new" });
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      windowId: 1,
+      url: "https://new",
+    });
+    expect(result).toMatchObject({
+      ok: true,
+      tab: { id: 8, windowFrame: frame },
+    });
+  });
+
+  test("tabSelect activates without focusing the window, tabClose reports the id", async () => {
+    await run({ type: "tabSelect", tabId: 6 });
+    expect(fake.tabs.update).toHaveBeenCalledWith(6, { active: true });
+    expect(await run({ type: "tabClose", tabId: 6 })).toEqual({
+      ok: true,
+      closed: 6,
+    });
+    expect(fake.tabs.remove).toHaveBeenCalledWith(6);
+  });
+});

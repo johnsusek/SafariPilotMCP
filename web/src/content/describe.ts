@@ -17,7 +17,65 @@ let tagRoles: Record<string, string> = {
   summary: "button",
   textarea: "textbox",
   option: "option",
+  h1: "heading",
+  h2: "heading",
+  h3: "heading",
+  h4: "heading",
+  h5: "heading",
+  h6: "heading",
+  p: "paragraph",
+  img: "img",
+  nav: "navigation",
+  main: "main",
+  header: "banner",
+  footer: "contentinfo",
+  aside: "complementary",
+  article: "article",
+  form: "form",
+  dialog: "dialog",
+  ul: "list",
+  ol: "list",
+  menu: "list",
+  li: "listitem",
+  dl: "list",
+  dt: "term",
+  dd: "definition",
+  table: "table",
+  tr: "row",
+  td: "cell",
+  th: "columnheader",
+  fieldset: "group",
+  details: "group",
+  hr: "separator",
+  progress: "progressbar",
+  meter: "meter",
+  iframe: "iframe",
+  blockquote: "blockquote",
+  pre: "code",
+  code: "code",
+  svg: "img",
 };
+
+// Roles whose accessible name comes from their text content.
+export let contentRoles = new Set([
+  "button",
+  "link",
+  "heading",
+  "tab",
+  "menuitem",
+  "menuitemcheckbox",
+  "menuitemradio",
+  "option",
+  "treeitem",
+  "cell",
+  "columnheader",
+  "rowheader",
+  "checkbox",
+  "radio",
+  "switch",
+  "tooltip",
+  "term",
+]);
 
 let nameMax = 80;
 
@@ -53,7 +111,8 @@ function labelledByText(element: Element) {
   return ids.map((id) => root.getElementById(id)?.textContent ?? "").join(" ");
 }
 
-export function nameOf(element: Element) {
+// fromContent false skips text content, for containers whose text is rendered as their children.
+export function nameOf(element: Element, fromContent = true) {
   let input = element as HTMLInputElement;
   let isTextField =
     element.localName === "textarea" ||
@@ -71,8 +130,11 @@ export function nameOf(element: Element) {
         : "",
     () => (element.localName === "img" ? element.getAttribute("alt") : ""),
     () =>
-      isTextField || element.localName === "select" ? "" : element.textContent,
-    () => element.querySelector("img[alt]")?.getAttribute("alt"),
+      !fromContent || isTextField || element.localName === "select"
+        ? ""
+        : element.textContent,
+    () =>
+      fromContent ? element.querySelector("img[alt]")?.getAttribute("alt") : "",
     () => element.getAttribute("title"),
     () => element.getAttribute("placeholder"),
   ];

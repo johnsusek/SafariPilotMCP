@@ -1,5 +1,6 @@
-import type { ElementInfo, SnapshotResult } from "../shared/protocol";
+import type { ElementInfo, Rect, SnapshotResult } from "../shared/protocol";
 import { nameOf, roleOf } from "./describe";
+import { flatElements, flatParent } from "./flat";
 import { intersect, readViewport, toRect, visibleArea } from "./geometry";
 import { pruneRefs, refFor } from "./refs";
 
@@ -24,21 +25,6 @@ let widgetRoles = new Set([
   "spinbutton",
   "treeitem",
 ]);
-
-function* walk(root: ParentNode): Generator<Element> {
-  for (let child of Array.from(root.children)) {
-    yield child;
-    if (child.shadowRoot) yield* walk(child.shadowRoot);
-    yield* walk(child);
-  }
-}
-
-function flatParent(element: Element) {
-  let parent = element.assignedSlot ?? element.parentNode;
-  return parent instanceof ShadowRoot
-    ? parent.host
-    : (parent as Element | null);
-}
 
 export function isInteractive(element: Element) {
   let tag = element.localName;
@@ -66,31 +52,46 @@ export function isInteractive(element: Element) {
   return !parent || getComputedStyle(parent).cursor !== "pointer";
 }
 
+// Rendered with a nonzero box; elements without one cannot be located.
+export function hasBox(element: Element) {
+  let box = element.getBoundingClientRect();
+  return box.width > 0 && box.height > 0;
+}
+
+export function elementInfo(
+  element: Element,
+  visible: Rect,
+  name = nameOf(element),
+): ElementInfo {
+  let rect = toRect(element.getBoundingClientRect());
+  let info: ElementInfo = {
+    ref: refFor(element),
+    tag: element.localName,
+    role: roleOf(element),
+    name,
+    rect,
+    inViewport: intersect(rect, visible) !== null,
+  };
+
+  if (
+    (element as HTMLButtonElement).disabled === true ||
+    element.getAttribute("aria-disabled") === "true"
+  )
+    info.disabled = true;
+
+  return info;
+}
+
 export function snapshot(): SnapshotResult {
   pruneRefs();
   let viewport = readViewport();
   let visible = visibleArea(viewport);
   let elements: ElementInfo[] = [];
 
-  for (let element of walk(document)) {
-    if (!isInteractive(element)) continue;
-    let rect = toRect(element.getBoundingClientRect());
-    if (rect.width <= 0 || rect.height <= 0) continue;
-    if (!element.checkVisibility({ visibilityProperty: true })) continue;
-    let info: ElementInfo = {
-      ref: refFor(element),
-      tag: element.localName,
-      role: roleOf(element),
-      name: nameOf(element),
-      rect,
-      inViewport: intersect(rect, visible) !== null,
-    };
-    if (
-      (element as HTMLButtonElement).disabled === true ||
-      element.getAttribute("aria-disabled") === "true"
-    )
-      info.disabled = true;
-    elements.push(info);
+  for (let element of flatElements(document)) {
+    if (!isInteractive(element) || !hasBox(element)) continue;
+
+    elements.push(elementInfo(element, visible));
   }
 
   return {

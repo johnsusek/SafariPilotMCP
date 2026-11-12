@@ -131,6 +131,33 @@
         <output x-text="counts.disabled"></output>
       </div>
 
+      <section aria-label="Reading">
+        <h2>Reading</h2>
+        <p>Plain text with a <a href="#reading">link</a> inside.</p>
+        <div class="row">
+          <span>Password</span>
+          <input id="password" type="password" aria-label="Password" value="not-for-readpage" />
+        </div>
+        <div class="row">
+          <span>Details</span>
+          <details>
+            <summary>More</summary>
+            <p>Hidden until expanded.</p>
+          </details>
+        </div>
+        <div class="row" aria-hidden="true">
+          <span>Aria hidden</span>
+          <button id="aria-hidden" type="button">Not in readPage</button>
+        </div>
+        <div class="row">
+          <span>Shadow</span>
+          <div id="shadow-host">
+            <template shadowrootmode="open"><button id="in-shadow" type="button">In shadow</button><slot></slot></template>
+            <span>Slotted text</span>
+          </div>
+        </div>
+      </section>
+
       <div class="spacer-fold"></div>
 
       <div class="row">
