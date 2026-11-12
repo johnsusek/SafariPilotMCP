@@ -30,7 +30,7 @@ check() {
 }
 
 # ref NAME [ROLE]: the first ref find returns.
-ref() { safaripilot --tab $tab find "$1" ${2:+--role} ${2:+$2} | head -1 | sed -nE 's/^\[([0-9]+)\].*/\1/p' }
+ref() { safaripilot --tab $tab find "$1" ${2:+--role} ${2:+$2} | head -1 | sed -nE 's/^\[([0-9:]+)\].*/\1/p' }
 
 site_wikipedia() {
   open_tab "https://en.wikipedia.org/wiki/Usage_share_of_web_browsers"
@@ -130,8 +130,24 @@ site_bbc() {
   close_tab
 }
 
+site_frames() {
+  open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/button"
+  check "frames: live sample inlined" '\[ref=[0-9]+:[0-9]+\]' read-page --max-chars 20000
+  check "frames: cross-origin button clicked" 'click on \[[0-9]+:[0-9]+\]' click $(ref "Add to favorites" button)
+  check "frames: frame text in page text" '\[frame [0-9]+ [^]]*mdnplay.dev\]' text
+  close_tab
+  open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/text"
+  local field=$(ref "Name (4 to 8 characters)" textbox)
+  check "frames: form-input in frame" '\(matches\)' form-input $field "abcd"
+  check "frames: keys counted in frame" 'keydowns reached' key --ref $field --text "ef"
+  close_tab
+  open_tab "https://www.w3schools.com/jsref/tryit.asp?filename=tryjsref_onclick"
+  check "frames: tryit result button" 'click on \[[0-9]+:[0-9]+\]' click $(ref "Click me" button)
+  close_tab
+}
+
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc frames)
 
 for site in $sites; do
   site_$site
