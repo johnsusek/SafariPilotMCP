@@ -1,9 +1,8 @@
 import type { ElementInfo, Failure, FindResult } from "../shared/protocol";
-import { roleOf } from "./describe";
+import { contentRoles, nameOf, roleOf } from "./describe";
 import { flatElements } from "./flat";
 import { readViewport, visibleArea } from "./geometry";
-import { elementInfo, hasBox } from "./snapshot";
-import { displayName } from "./tree";
+import { elementInfo, hasBox, isInteractive } from "./snapshot";
 
 let limit = 20;
 
@@ -26,7 +25,10 @@ export function find(name: string, role: string): FindResult | Failure {
 
     if (wantedRole && elementRole.toLowerCase() !== wantedRole) continue;
 
-    let elementName = displayName(element, elementRole);
+    let elementName = nameOf(
+      element,
+      isInteractive(element) || contentRoles.has(elementRole),
+    );
 
     if (needle && !elementName.toLowerCase().includes(needle)) continue;
 

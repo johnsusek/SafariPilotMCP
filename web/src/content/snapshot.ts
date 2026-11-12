@@ -1,5 +1,5 @@
 import type { ElementInfo, Rect, SnapshotResult } from "../shared/protocol";
-import { nameOf, roleOf } from "./describe";
+import { isEditableRoot, nameOf, roleOf } from "./describe";
 import { flatElements, flatParent } from "./flat";
 import { intersect, readViewport, toRect, visibleArea } from "./geometry";
 import { pruneRefs, refFor } from "./refs";
@@ -39,12 +39,7 @@ export function isInteractive(element: Element) {
   if (tabIndex !== null && tabIndex.trim() !== "-1") return true;
   if (element.hasAttribute("onclick") || (element as HTMLElement).onclick)
     return true;
-  let html = element as HTMLElement;
-  if (
-    html.isContentEditable &&
-    !(flatParent(element) as HTMLElement | null)?.isContentEditable
-  )
-    return true;
+  if (isEditableRoot(element)) return true;
 
   // Listeners added with addEventListener are invisible, so treat the outermost cursor:pointer element as clickable.
   if (getComputedStyle(element).cursor !== "pointer") return false;

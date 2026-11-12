@@ -70,6 +70,40 @@ describe("nameOf", () => {
   test("image alt when there is no text", () => {
     expect(nameOf(first('<a href="#"><img alt="Logo"></a>'))).toBe("Logo");
   });
+
+  test("images with empty alt give way to later ones", () => {
+    expect(
+      nameOf(
+        first(
+          '<a href="#"><img alt=""><span><img alt="Wiki"><img alt="Free"></span></a>',
+        ),
+      ),
+    ).toBe("Wiki Free");
+  });
+
+  test("hidden content and nested labels", () => {
+    expect(
+      nameOf(
+        first(
+          '<button><span aria-hidden="true">x</span><span hidden>no</span><svg aria-label="Close"></svg> dialog</button>',
+        ),
+      ),
+    ).toBe("Close dialog");
+  });
+
+  test("svg title names an svg and the link around it", () => {
+    let link = first(
+      '<a href="/"><svg role="img"><title>MDN</title></svg></a>',
+    );
+    expect(nameOf(link)).toBe("MDN");
+    expect(nameOf(link.firstElementChild!)).toBe("MDN");
+  });
+
+  test("shadow content counts", () => {
+    let host = first("<button></button>");
+    host.attachShadow({ mode: "open" }).innerHTML = "<span>Shadow</span>";
+    expect(nameOf(host)).toBe("Shadow");
+  });
 });
 
 describe("describe", () => {

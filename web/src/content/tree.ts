@@ -1,5 +1,11 @@
 import type { Failure, ReadPageResult } from "../shared/protocol";
-import { collapse, contentRoles, nameOf, roleOf } from "./describe";
+import {
+  collapse,
+  contentRoles,
+  isEditableRoot,
+  nameOf,
+  roleOf,
+} from "./describe";
 import { flatChildren, isPruned } from "./flat";
 import { readViewport } from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
@@ -50,10 +56,6 @@ let textMax = 300;
 let valueMax = 40;
 let hrefMax = 60;
 
-export function displayName(element: Element, role: string) {
-  return nameOf(element, isInteractive(element) || contentRoles.has(role));
-}
-
 function pushText(items: Item[], text: string) {
   let last = items.at(-1);
 
@@ -79,14 +81,22 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
 
   let role = roleOf(child);
   let interactive = isInteractive(child);
-  let name = displayName(child, role);
-  let children = leafTags.has(child.localName)
-    ? []
-    : build(child, interactiveOnly);
+  let children =
+    leafTags.has(child.localName) || isEditableRoot(child)
+      ? []
+      : build(child, interactiveOnly);
+  // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic wrapping other elements.
+  let wraps =
+    collapsibleRoles.has(role) && children.some((item) => "element" in item);
+  let name = nameOf(child, interactive && !wraps);
   let shown = interactiveOnly
     ? interactive
     : interactive ||
-      (role === "img" ? name !== "" : !collapsibleRoles.has(role) || !!name);
+      (role === "img"
+        ? name !== ""
+        : !collapsibleRoles.has(role) ||
+          child.hasAttribute("aria-label") ||
+          child.hasAttribute("aria-labelledby"));
 
   if (!shown) {
     for (let item of children) {
@@ -106,6 +116,14 @@ function add(items: Item[], child: Node, interactiveOnly: boolean) {
     name = collapse(children[0].text, textMax);
     children = [];
   }
+
+  if (
+    !interactive &&
+    !name &&
+    !children.length &&
+    !leafTags.has(child.localName)
+  )
+    return;
 
   items.push({ element: child, role, name, children });
 }
@@ -128,6 +146,8 @@ function valueOf(element: Element) {
     ).join(", ");
 
   if (tag === "textarea") return (element as HTMLTextAreaElement).value;
+
+  if (isEditableRoot(element)) return (element as HTMLElement).innerText;
 
   if (tag !== "input") return "";
 

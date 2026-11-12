@@ -104,6 +104,48 @@ describe("treeText", () => {
     );
   });
 
+  test("cells and headings show their content as children, empty rows go", () => {
+    let { text } = render(
+      '<table><tr><td>Top <a href="/new">new</a></td></tr><tr></tr><tr><td>plain</td></tr></table><h2>Intro <a href="#e">edit</a></h2>',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        "table",
+        "  row",
+        "    cell",
+        '      "Top"',
+        '      link "new" href=/new',
+        "  row",
+        '    cell "plain"',
+        "heading level=2",
+        '  "Intro"',
+        '  link "edit" href=/#e',
+      ].join("\n"),
+    );
+  });
+
+  test("a focusable generic wrapping elements takes no name from them", () => {
+    let { text } = render(
+      '<div tabindex="0">Repo <a href="/star">Star</a></div>',
+      "interactive",
+    );
+    expect(withoutRefs(text)).toBe(
+      ["generic", '  link "Star" href=/star'].join("\n"),
+    );
+  });
+
+  test("an editor is one textbox showing its text as value", () => {
+    let { text } = render(
+      '<div contenteditable="true" aria-label="Code"><div><span>let</span> <span>x</span></div></div>',
+    );
+    expect(withoutRefs(text)).toBe('textbox "Code" value="let x"');
+  });
+
+  test("links take a descendant's title when it has no text", () => {
+    let { text } = render('<a href="/vote"><div title="upvote"></div></a>');
+    expect(withoutRefs(text)).toBe('link "upvote" href=/vote');
+  });
+
   test("maxChars cuts at a line boundary", () => {
     document.body.innerHTML = "<p>one</p><p>two</p><p>three</p>";
     let full = treeText(document.body, "all", 10000).text;

@@ -1,3 +1,5 @@
+import { flatChildren, flatParent, isPruned } from "./flat";
+
 let inputRoles: Record<string, string> = {
   button: "button",
   submit: "button",
@@ -79,6 +81,44 @@ export let contentRoles = new Set([
 
 let nameMax = 80;
 
+let svgTitle = (element: Element) =>
+  element.localName === "svg"
+    ? element.querySelector(":scope > title")?.textContent?.trim()
+    : "";
+
+// Text an element shows, as accessible name from content: shadow trees and slots included, hidden subtrees skipped, and a descendant's aria-label or an image's alt standing in for its content.
+function contentText(node: Node, parts: string[], budget: { left: number }) {
+  for (let child of flatChildren(node)) {
+    if (budget.left <= 0) return;
+
+    if (child.nodeType === Node.TEXT_NODE) {
+      let text = child.textContent ?? "";
+      parts.push(text);
+      budget.left -= text.length;
+      continue;
+    }
+
+    if (!(child instanceof Element) || isPruned(child)) continue;
+
+    let label =
+      child.getAttribute("aria-label")?.trim() ||
+      (child.localName === "img" ? child.getAttribute("alt")?.trim() : "") ||
+      svgTitle(child);
+
+    if (label) {
+      parts.push(` ${label} `);
+      budget.left -= label.length;
+      continue;
+    }
+
+    let start = parts.length;
+    contentText(child, parts, budget);
+    let title = child.getAttribute("title")?.trim();
+
+    if (title && !parts.slice(start).join("").trim()) parts.push(` ${title} `);
+  }
+}
+
 export function collapse(text: string | null | undefined, max = nameMax) {
   let clean = (text ?? "")
     .slice(0, max * 8)
@@ -86,6 +126,11 @@ export function collapse(text: string | null | undefined, max = nameMax) {
     .trim();
   return clean.length > max ? `${clean.slice(0, max - 3)}...` : clean;
 }
+
+// Inside an editor every descendant is contenteditable, but only the outermost is the text field.
+export let isEditableRoot = (element: Element) =>
+  (element as HTMLElement).isContentEditable &&
+  !(flatParent(element) as HTMLElement | null)?.isContentEditable;
 
 export function roleOf(element: Element) {
   let explicit = element.getAttribute("role")?.trim().split(/\s+/)[0];
@@ -101,7 +146,7 @@ export function roleOf(element: Element) {
       ? "listbox"
       : "combobox";
   if (tagRoles[tag]) return tagRoles[tag];
-  if ((element as HTMLElement).isContentEditable) return "textbox";
+  if (isEditableRoot(element)) return "textbox";
   return "generic";
 }
 
@@ -116,6 +161,7 @@ export function nameOf(element: Element, fromContent = true) {
   let input = element as HTMLInputElement;
   let isTextField =
     element.localName === "textarea" ||
+    isEditableRoot(element) ||
     (element.localName === "input" && !inputRoles[input.type]);
   let candidates = [
     () => labelledByText(element),
@@ -129,12 +175,15 @@ export function nameOf(element: Element, fromContent = true) {
         ? input.value || input.alt
         : "",
     () => (element.localName === "img" ? element.getAttribute("alt") : ""),
-    () =>
-      !fromContent || isTextField || element.localName === "select"
-        ? ""
-        : element.textContent,
-    () =>
-      fromContent ? element.querySelector("img[alt]")?.getAttribute("alt") : "",
+    () => svgTitle(element),
+    () => {
+      if (!fromContent || isTextField || element.localName === "select")
+        return "";
+
+      let parts: string[] = [];
+      contentText(element, parts, { left: nameMax * 8 });
+      return parts.join("");
+    },
     () => element.getAttribute("title"),
     () => element.getAttribute("placeholder"),
   ];
