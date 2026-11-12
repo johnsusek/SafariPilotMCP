@@ -63,7 +63,8 @@ site_mdn() {
   check "mdn: summary toggles with click" 'toggled summary' click $summary
   close_tab
   open_tab "https://developer.mozilla.org/en-US/play"
-  check "mdn: only editor roots are textboxes" '^\[1\] textbox' find --role textbox
+  check "mdn: editor roots are textboxes" '^\[[0-9]+\] textbox <div>' find --role textbox
+  (($(print -r -- "$output" | grep -c textbox) == 3)) && print "PASS mdn: only the 3 editor roots" || { print "FAIL mdn: only the 3 editor roots"; failures=$((failures + 1)) }
   check "mdn: editor takes keys" 'keydowns reached' key --ref $(ref "" textbox) --text "<p>x"
   close_tab
 }
