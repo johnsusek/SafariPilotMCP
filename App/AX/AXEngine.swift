@@ -2,7 +2,7 @@ import AppKit
 import ApplicationServices
 
 /// Finds the Safari window showing a tab and acts on page elements purely through AX: frame matching, AXPress, AXFocused, AXValue.
-@MainActor
+@AXActor
 enum AXEngine {
   struct Target {
     let app: AXNode

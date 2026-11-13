@@ -31,7 +31,7 @@ final class AppModel {
   var setupAlert: SetupAlert?
   private(set) var log: [LogEntry] = []
   /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
-  var knownTabs: [Int: TabInfo] = [:]
+  private(set) var knownTabs: [Int: TabInfo] = [:]
   private var started = false
 
   var extensionState: String {
@@ -138,6 +138,18 @@ final class AppModel {
       record(label, ok: false, summary: "\(error)")
       return CLIReply(ok: false, text: "\(error)", data: .object(["error": .string("\(error)")]))
     }
+  }
+
+  /// Keeps the TabInfo a background reply carried and forgets a closed tab.
+  func noteTabs(in response: JSONValue) throws {
+    if let value = response["tab"] {
+      let tab = try value.decode(TabInfo.self)
+      knownTabs[tab.id] = tab
+    }
+
+    if let tabs = response["tabs"] { knownTabs = try Dictionary(uniqueKeysWithValues: tabs.decode([TabInfo].self).map { ($0.id, $0) }) }
+
+    if let closed = response["closed"]?.number { knownTabs[Int(closed)] = nil }
   }
 
   func record(_ command: String, ok: Bool, summary: String) {

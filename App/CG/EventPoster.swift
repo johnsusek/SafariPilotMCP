@@ -2,7 +2,7 @@ import CoreGraphics
 import Foundation
 
 /// Builds Quartz input events and posts each one to a single pid, recording a line per event.
-@MainActor
+@AXActor
 struct EventPoster {
   let pid: pid_t
   /// Written to the public window-under-pointer fields of mouse events; nil leaves them unset.

@@ -2,15 +2,15 @@ import AppKit
 import ApplicationServices
 import Foundation
 
-/// Runs one app command against the background and AX, and renders it as text plus data.
-@MainActor
+/// Runs one app command against the background and AX, and renders it as text plus data. It runs on the AX actor and reaches the model, which is the main actor's, with awaits.
+@AXActor
 struct Commands {
   let model: AppModel
   let deadline: ContinuousClock.Instant
 
   func run(_ command: AppCommand) async throws -> CLIReply {
     switch command {
-    case .status: status()
+    case .status: await status()
     case let .ping(tabId): try await ping(tabId)
     case let .snapshot(tabId): try await snapshot(tabId)
     case .click(let tabId, let ref, .left, []): try await click(tabId, ref)
@@ -45,7 +45,7 @@ struct Commands {
   func call(_ command: BackgroundCommand) async throws -> JSONValue {
     let tabId = command.json["tabId"]?.number.map { Int($0) }
 
-    if let blocked = try dialogBlock(tabId) { throw Failure(description: blocked) }
+    if let blocked = try await dialogBlock(tabId) { throw Failure(description: blocked) }
 
     let remaining = deadline - .now
 
@@ -57,7 +57,7 @@ struct Commands {
         try? await Task.sleep(for: .milliseconds(250))
 
         do {
-          guard let blocked = try dialogBlock(tabId) else { continue }
+          guard let blocked = try await dialogBlock(tabId) else { continue }
 
           sending.cancel()
           return blocked
@@ -76,15 +76,7 @@ struct Commands {
 
     if response["ok"]?.bool != true { throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")") }
 
-    if let value = response["tab"] {
-      let tab = try value.decode(TabInfo.self)
-      model.knownTabs[tab.id] = tab
-    }
-
-    if let tabs = response["tabs"] { model.knownTabs = try Dictionary(uniqueKeysWithValues: tabs.decode([TabInfo].self).map { ($0.id, $0) }) }
-
-    if let closed = response["closed"]?.number { model.knownTabs[Int(closed)] = nil }
-
+    try await model.noteTabs(in: response)
     return response
   }
 
@@ -114,6 +106,7 @@ struct Commands {
     return "[\(element.ref)] \(element.role)\(name) <\(element.tag)>\(offscreen)\(disabled)"
   }
 
+  @MainActor
   private func status() -> CLIReply {
     let transport = model.transport
     let now = Date.now
@@ -244,7 +237,8 @@ struct Commands {
   /// Sizes past the window's screen are refused, since Safari keeps an oversized width and leaves the window partly off screen.
   private func resizeWindow(_ tabId: Int?, _ width: Int, _ height: Int) async throws -> CLIReply {
     let current = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
-    let room = try ScreenFit.room(for: current.windowFrame, screens: NSScreen.screens.map { ($0.frame, $0.visibleFrame) })
+    let screens = await MainActor.run { NSScreen.screens.map { ($0.frame, $0.visibleFrame) } }
+    let room = try ScreenFit.room(for: current.windowFrame, screens: screens)
 
     guard Double(width) <= room.width, Double(height) <= room.height else { throw Failure(description: "\(width) x \(height) does not fit the \(Int(room.width)) x \(Int(room.height)) points free on the window's screen") }
 

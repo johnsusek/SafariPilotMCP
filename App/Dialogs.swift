@@ -53,12 +53,13 @@ extension AXEngine {
 extension Commands {
   /// Safari's extension, background included, stops while any page shows a dialog and resumes once it closes (measured: a pending tabs query never answered).
   /// The message names the dialog only when it is over the given tab, so a dialog in a window the caller does not own stays private.
-  func dialogBlock(_ tabId: Int?) throws -> String? {
+  func dialogBlock(_ tabId: Int?) async throws -> String? {
     let scan = try AXEngine.scanDialogs()
 
     guard scan.contains(where: { $0.dialog != nil }) else { return nil }
 
-    let tab = tabId.flatMap { model.knownTabs[$0] }
+    let known = await model.knownTabs
+    let tab = tabId.flatMap { known[$0] }
 
     if let tab, let open = try AXEngine.dialog(for: tab, in: scan) {
       return "tab \(tab.id) shows \(open.dialog.line); Safari's extension, and so every page tool, waits until handle_dialog accepts or dismisses it"
@@ -76,7 +77,7 @@ extension Commands {
   /// The extension cannot answer while the dialog is open, so the tab's window is found from the TabInfo last seen for it.
   func answerDialog(_ tabId: Int?, _ accept: Bool, _ promptText: String?) async throws -> CLIReply {
     guard let tabId else { throw Failure(description: "dialog needs a tab id (--tab), since the extension that knows the active tab cannot answer while a dialog is open") }
-    guard let tab = model.knownTabs[tabId] else { throw Failure(description: "SafariPilot has not seen tab \(tabId) since it started, so it cannot tell which window is the tab's") }
+    guard let tab = await model.knownTabs[tabId] else { throw Failure(description: "SafariPilot has not seen tab \(tabId) since it started, so it cannot tell which window is the tab's") }
     guard let open = try AXEngine.dialog(for: tab) else { throw Failure(description: "no dialog is open in tab \(tab.id)'s window") }
 
     var lines: [String] = []
