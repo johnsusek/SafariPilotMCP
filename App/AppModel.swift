@@ -22,6 +22,7 @@ final class AppModel {
 
   let transport = Transport()
   let gate = ClientGate()
+  private let queue = CommandQueue()
   private(set) var axTrusted = AXIsProcessTrusted()
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
@@ -126,7 +127,11 @@ final class AppModel {
     let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
 
     do {
-      let reply = try await commands.run(request.command)
+      // status only reads app state, and handle_dialog only presses a dialog's button, which must not wait behind a command the dialog holds up.
+      let reply = switch request.command {
+      case .status, .dialog: try await commands.run(request.command)
+      default: try await queue.run { try await commands.run(request.command) }
+      }
       record(label, ok: reply.ok, summary: reply.text.components(separatedBy: "\n").first ?? "")
       return reply
     } catch {

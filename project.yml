@@ -117,6 +117,7 @@ targets:
       - App/ClaudeSetup.swift
       - App/ClientCredentials.swift
       - App/ApprovalQueue.swift
+      - App/CommandQueue.swift
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.Tests

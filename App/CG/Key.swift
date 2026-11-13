@@ -34,7 +34,10 @@ extension Commands {
     let presses = Array(repeating: chords, count: times).joined()
 
     for (index, chord) in presses.enumerated() {
-      if index > 0 { try await Task.sleep(for: .milliseconds(10)) }
+      if index > 0 {
+        try await Task.sleep(for: .milliseconds(10))
+        try await requireFocusKept(in: target, posted: index, of: chords.count * times)
+      }
 
       try await poster.key(chord)
     }
@@ -108,41 +111,66 @@ extension Commands {
     return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)", data: .object(data))
   }
 
-  /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area, inside it, or inside one of its frames.
-  private func requireKeyboardFocus(in target: AXEngine.Target, refocus: AXNode) async throws {
-    let focused = { target.app.value(kAXFocusedUIElementAttribute).map { AXNode(element: $0 as! AXUIElement) } }
-    let inPage = { (node: AXNode?) in
-      guard let node else { return false }
+  private func focused(in target: AXEngine.Target) -> AXNode? {
+    target.app.value(kAXFocusedUIElementAttribute).map { AXNode(element: $0 as! AXUIElement) }
+  }
 
-      if node.chain(upTo: target.webArea) != nil { return true }
+  /// Whether node is the tab's web area, inside it, or inside one of its frames.
+  private func inPage(_ node: AXNode?, of target: AXEngine.Target) -> Bool {
+    guard let node else { return false }
 
-      let window = node.value(kAXWindowAttribute).map { CFEqual($0, target.window.element) } ?? false
-      let ancestors = sequence(first: node, next: \.parent).prefix(64).map { (role: $0.role, frame: $0.frame) }
-      return KeyboardFocus.inFrameOfPage(sameWindow: window, ancestors: ancestors, webArea: target.webArea.frame)
+    if node.chain(upTo: target.webArea) != nil { return true }
+
+    let window = node.value(kAXWindowAttribute).map { CFEqual($0, target.window.element) } ?? false
+    let ancestors = sequence(first: node, next: \.parent).prefix(64).map { (role: $0.role, frame: $0.frame) }
+    return KeyboardFocus.inFrameOfPage(sameWindow: window, ancestors: ancestors, webArea: target.webArea.frame)
+  }
+
+  private func isMain(_ target: AXEngine.Target) -> Bool { target.window.value(kAXMainAttribute) as? Bool == true }
+
+  private func focusAncestry(in target: AXEngine.Target) -> String {
+    focused(in: target).map { sequence(first: $0, next: \.parent).prefix(6).map(\.summary).joined(separator: " < ") } ?? "nothing (Safari reports no focused element)"
+  }
+
+  /// Each key goes to whatever Safari has focused when it is posted, so a sequence stops once that is no longer the tab's page: the person clicked another Safari window
+  /// or the address bar, or the page navigated. No focus at all in the tab's main window still reaches the page, as for a window opened unfocused in the background.
+  /// Safari reports focus late while it moves, so it is read again for up to 250 ms before giving up.
+  private func requireFocusKept(in target: AXEngine.Target, posted: Int, of total: Int) async throws {
+    for _ in 0 ..< 5 {
+      let node = focused(in: target)
+
+      if node == nil, isMain(target) { return }
+
+      if inPage(node, of: target) { return }
+
+      try await Task.sleep(for: .milliseconds(50))
     }
 
-    if inPage(focused()) { return }
+    throw Failure(description: "posted \(posted) of \(total) key presses, then stopped: Safari's keyboard focus left the tab's page for \(focusAncestry(in: target)), so the rest were not sent")
+  }
+
+  /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area, inside it, or inside one of its frames.
+  private func requireKeyboardFocus(in target: AXEngine.Target, refocus: AXNode) async throws {
+    if inPage(focused(in: target), of: target) { return }
 
     var steps: [String] = []
-    let isMain = { target.window.value(kAXMainAttribute) as? Bool == true }
 
-    if !isMain() {
+    if !isMain(target) {
       steps.append("AXMain on \(target.window.summary): \(AXUIElementSetAttributeValue(target.window.element, kAXMainAttribute as CFString, kCFBooleanTrue).name)")
     }
 
     // A window Safari opened unfocused while in the background never reports a focused element, yet keys posted to Safari reach its page, and refocusing the web area would blur the page's focused field; the keydown count afterwards catches keys that went nowhere.
-    if focused() == nil, isMain() { return }
+    if focused(in: target) == nil, isMain(target) { return }
 
     steps.append("AXFocused on \(refocus.summary): \(AXUIElementSetAttributeValue(refocus.element, kAXFocusedAttribute as CFString, kCFBooleanTrue).name)")
 
     // Safari reports no focused element for a moment after focus first moves into a page, so poll before giving up.
     for _ in 0 ..< 20 {
-      if inPage(focused()) { return }
+      if inPage(focused(in: target), of: target) { return }
 
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    let ancestry = focused().map { sequence(first: $0, next: \.parent).prefix(6).map(\.summary).joined(separator: " < ") } ?? "nothing (Safari reports no focused element)"
-    throw Failure(description: "keyboard focus is outside the tab's page, on \(ancestry), after setting \(steps.joined(separator: ", ")); no keys were posted")
+    throw Failure(description: "keyboard focus is outside the tab's page, on \(focusAncestry(in: target)), after setting \(steps.joined(separator: ", ")); no keys were posted")
   }
 }
