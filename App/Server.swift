@@ -87,10 +87,23 @@ enum Server {
     let line = buffer[..<(end ?? buffer.endIndex)]
     let decoder = JSONDecoder()
     // A CLI request is decoded straight from the line, since a detour through JSONValue costs an upload two more full copies.
-    var reply: Data = switch try decoder.decode(Envelope.self, from: line).kind {
-    case "cli": try await JSONEncoder().encode(model.runCLI(decoder.decode(CLIRequest.self, from: line)))
-    case "hello": try await JSONEncoder().encode(model.gate.approve(decoder.decode(HelloRequest.self, from: line)))
-    default: try await JSONEncoder().encode(model.transport.handle(decoder.decode(JSONValue.self, from: line)))
+    var reply: Data
+    var closed: Task<Void, Never>?
+    defer { closed?.cancel() }
+
+    switch try decoder.decode(Envelope.self, from: line).kind {
+    case "cli": reply = try await JSONEncoder().encode(model.runCLI(decoder.decode(CLIRequest.self, from: line)))
+    case "hello": reply = try await JSONEncoder().encode(model.gate.approve(decoder.decode(HelloRequest.self, from: line)))
+    default:
+      // The relay sends nothing after its request, so a read that ends while its poll is held means the relay is gone (Safari quit or reloaded the extension),
+      // and the poll is dropped before a command is handed to it and lost. Cancelling the read ends it the same way, which is not a closed connection.
+      let poll = UUID()
+      closed = Task {
+        _ = try? await connection.receive(atMost: 1)
+
+        if !Task.isCancelled { model.transport.abandon(poll) }
+      }
+      reply = try await JSONEncoder().encode(model.transport.handle(decoder.decode(JSONValue.self, from: line), poll: poll))
     }
 
     reply.append(0x0A)

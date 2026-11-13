@@ -48,7 +48,8 @@ final class Transport {
     listenError = error
   }
 
-  func handle(_ message: JSONValue) async -> JSONValue {
+  /// poll names the open poll this message may become, for `abandon`.
+  func handle(_ message: JSONValue, poll key: UUID) async -> JSONValue {
     guard let instanceId = message["instance"]?["id"]?.string else { return .object(["error": .string("message without instance")]) }
 
     touch(instanceId, startedAt: message["instance"]?["startedAt"]?.number)
@@ -60,7 +61,7 @@ final class Transport {
         pending.removeValue(forKey: id)?.resume(returning: result["response"] ?? .null)
       }
 
-      return await poll(instanceId)
+      return await poll(instanceId, key)
     case "lifecycle":
       let at = message["at"]?.number.map { Date(timeIntervalSince1970: $0 / 1000) } ?? .now
       record(instanceId, event: message["event"]?.string ?? "?", at: at)
@@ -107,12 +108,19 @@ final class Transport {
     pending.removeValue(forKey: id)?.resume(throwing: CancellationError())
   }
 
-  private func poll(_ instanceId: String) async -> JSONValue {
+  /// The relay holding this poll closed its connection, so the poll can carry no command; it answers null, which reaches no one.
+  func abandon(_ key: UUID) {
+    guard let poll = openPolls.removeValue(forKey: key) else { return }
+
+    record(poll.instance, event: "poll connection closed", at: .now)
+    poll.continuation.resume(returning: .null)
+  }
+
+  private func poll(_ instanceId: String, _ key: UUID) async -> JSONValue {
     instances[instanceId]?.polls += 1
 
     if !queue.isEmpty { return .object(["command": queue.removeFirst()]) }
 
-    let key = UUID()
     let reply = await withCheckedContinuation { continuation in
       openPolls[key] = OpenPoll(instance: instanceId, openedAt: .now, continuation: continuation)
 
@@ -121,7 +129,9 @@ final class Transport {
         openPolls.removeValue(forKey: key)?.continuation.resume(returning: .object(["command": .null]))
       }
     }
-    lastSeen = .now
+
+    if reply != .null { lastSeen = .now }
+
     return reply
   }
 
