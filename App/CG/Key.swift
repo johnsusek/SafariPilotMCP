@@ -42,7 +42,7 @@ extension Commands {
       try await poster.key(chord)
     }
 
-    let pressed = chords.map(\.name).joined(separator: " ") + (times > 1 ? " x\(times)" : "")
+    let pressed = KeyChord.summary(chords) + (times > 1 ? " x\(times)" : "")
     let expected = times * chords.reduce(0) { $0 + $1.modifiers.count + 1 }
     var data: [String: JSONValue] = [
       "tabId": .number(Double(tab.id)),

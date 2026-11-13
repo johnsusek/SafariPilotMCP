@@ -22,6 +22,30 @@ struct KeyChord: Codable, Sendable, Equatable {
 
   var name: String { (modifiers.map(\.rawValue) + [key]).joined(separator: "+") }
 
+  /// Whether the press only types its character, shifted or not.
+  var typesCharacter: Bool { character != nil && modifiers.allSatisfy { $0 == .shift } }
+
+  /// Presses as replies and the activity log show them: named keys and modified chords by name, runs of typed characters as a count, so typed text is never spelled out on screen.
+  static func summary(_ chords: [KeyChord]) -> String {
+    var parts: [String] = []
+    var typed = 0
+
+    for chord in chords.map(Optional.some) + [nil] {
+      if let chord, chord.typesCharacter {
+        typed += 1
+        continue
+      }
+
+      if typed > 0 { parts.append(typed == 1 ? "1 character" : "\(typed) characters") }
+
+      typed = 0
+
+      if let chord { parts.append(chord.name) }
+    }
+
+    return parts.joined(separator: " ")
+  }
+
   static let namedKeys: [(name: String, code: UInt16)] = [
     ("Enter", 36), ("Tab", 48), ("Space", 49), ("Backspace", 51), ("Escape", 53), ("Delete", 117),
     ("Home", 115), ("End", 119), ("PageUp", 116), ("PageDown", 121),

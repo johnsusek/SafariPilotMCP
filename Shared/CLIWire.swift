@@ -119,6 +119,16 @@ enum AppCommand: Codable, Sendable, Equatable {
     return .javascript(tabId: tabId, code: text, frame: frame)
   }
 
+  /// The command as the activity log shows it: what a client typed into a field, pressed as text or answered a prompt with is given by its size, since the log is on screen.
+  var logLabel: String {
+    switch self {
+    case let .formInput(tabId, ref, .text(text)): "formInput(tabId: \(String(describing: tabId)), ref: \(ref), value: text of \(text.count) characters)"
+    case let .key(tabId, chords, ref, times): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), ref: \(String(describing: ref)), times: \(times))"
+    case let .dialog(tabId, accept, promptText?): "dialog(tabId: \(String(describing: tabId)), accept: \(accept), promptText: \(promptText.count) characters)"
+    default: String(describing: self)
+    }
+  }
+
   /// Measuring instruments for development; Release builds refuse them.
   var isDevTool: Bool {
     switch self {

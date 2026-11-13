@@ -312,6 +312,14 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try map("key", ["keys": .number(5)]) }
   }
 
+  @Test func logLabelsLeaveOutTypedText() throws {
+    #expect(try map("key", ["text": "hunter2\n"]).logLabel == "key(tabId: Optional(20), keys: 7 characters Enter, ref: nil, times: 1)")
+    #expect(try map("form_input", ["ref": .number(4), "value": "hunter2"]).logLabel == "formInput(tabId: Optional(20), ref: 4, value: text of 7 characters)")
+    #expect(try map("handle_dialog", ["action": "accept", "prompt_text": "hunter2"]).logLabel == "dialog(tabId: Optional(20), accept: true, promptText: 7 characters)")
+    #expect(try map("form_input", ["ref": .number(4), "value": .bool(true)]).logLabel.contains("checked(true)"))
+    #expect(try map("navigate", ["url": "https://a.test/"]).logLabel.contains("https://a.test/"))
+  }
+
   @Test func keyRefusalNamesSafariShortcuts() {
     #expect {
       try map("key", ["keys": "cmd+t"])

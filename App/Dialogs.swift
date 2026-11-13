@@ -87,9 +87,10 @@ extension Commands {
       let result = AXUIElementSetAttributeValue(field.element, kAXValueAttribute as CFString, promptText as CFString)
       let shown = field.string(kAXValueAttribute) ?? ""
 
-      guard result == .success, shown == promptText else { throw Failure(description: "AXValue on the prompt's text field returned \(result.name) and it reads \"\(shown)\", not \"\(promptText)\"; nothing was pressed") }
+      // The answer may be a secret and these lines reach the activity log, so they give sizes, not the text.
+      guard result == .success, shown == promptText else { throw Failure(description: "AXValue on the prompt's text field returned \(result.name) and it reads \(shown.count) characters, not the \(promptText.count) given; nothing was pressed") }
 
-      lines.append("typed \"\(promptText)\" into the prompt")
+      lines.append("typed \(promptText.count) characters into the prompt")
     }
 
     let button = accept ? open.buttons[open.buttons.count - 1] : open.buttons[0]

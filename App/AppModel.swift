@@ -117,7 +117,7 @@ final class AppModel {
   }
 
   func runCLI(_ request: CLIRequest) async -> CLIReply {
-    let label = String(describing: request.command)
+    let label = request.command.logLabel
 
     if let refusal = gate.refusal(for: request) {
       record(label, ok: false, summary: refusal)

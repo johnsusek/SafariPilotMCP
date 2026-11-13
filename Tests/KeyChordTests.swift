@@ -1,6 +1,12 @@
 import Testing
 
 struct KeyChordTests {
+  @Test func summaryCountsTypedCharactersAndNamesTheRest() throws {
+    let chords = try ["h", "I", "Space", "Enter", "ctrl+a", "x", "shift+Tab"].map(KeyChord.parse)
+    #expect(KeyChord.summary(chords) == "3 characters Enter ctrl+a 1 character shift+Tab")
+    #expect(KeyChord.summary([]) == "")
+  }
+
   @Test func typingMapsTextCharacters() throws {
     #expect(try KeyChord.typing("a") == KeyChord.parse("a"))
     #expect(try KeyChord.typing("Q") == KeyChord.parse("Q"))
