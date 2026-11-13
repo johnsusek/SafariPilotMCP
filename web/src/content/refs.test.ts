@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { existingRef, refFor, resolveRef } from "./refs";
 
 describe("refs", () => {
@@ -10,6 +10,18 @@ describe("refs", () => {
     expect(refFor(button)).toBe(ref);
     expect(refFor(document.createElement("a"))).not.toBe(ref);
     expect(resolveRef(ref)).toBe(button);
+  });
+
+  test("each document numbers its refs from a random thousand", async () => {
+    vi.resetModules();
+    vi.spyOn(Math, "random").mockReturnValue(0.4829);
+    let fresh = await import("./refs");
+    vi.restoreAllMocks();
+    let first = document.createElement("button");
+    let second = document.createElement("button");
+    expect([fresh.refFor(first), fresh.refFor(second)]).toEqual([
+      482001, 482002,
+    ]);
   });
 
   test("existingRef never allocates", () => {

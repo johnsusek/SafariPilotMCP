@@ -1,6 +1,7 @@
 import type { Failure } from "../shared/protocol";
 
-let nextRef = 1;
+// Each document numbers its refs from a random thousand, so a ref kept from an earlier page is unknown in the next one and cannot name another element there.
+let nextRef = 1 + Math.floor(Math.random() * 1000) * 1000;
 let refsByElement = new WeakMap<Element, number>();
 let elementsByRef = new Map<number, WeakRef<Element>>();
 
