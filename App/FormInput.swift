@@ -190,7 +190,7 @@ extension Commands {
     }
 
     // A zero seconds or milliseconds part may or may not appear in the value, so both sides drop it before comparing.
-    let trimmed = { (text: String?) in (text ?? "").replacing(/(:00)?(\.0+)?$/, with: "") }
+    let trimmed = { (text: String?) in (text ?? "").replacing(/(:\d{2})\.0+$/) { $0.1 }.replacing(/(\d{2}:\d{2}):00$/) { $0.1 } }
     let after = try await settled(tab.id, ref) { trimmed($0.value) == trimmed(value) }
     let matched = trimmed(after.value) == trimmed(value)
     let lines = [
