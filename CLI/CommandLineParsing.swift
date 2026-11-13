@@ -12,6 +12,7 @@ enum CommandLineParsing {
     ping                            title and URL of the tab
     snapshot                        interactive elements with refs
     click REF                       locate REF, then AXPress it; REF is 12, or 5:12 inside iframe 5's frame
+      [--action double_click|triple_click|right_click] [--modifiers ctrl+shift+alt+cmd]  synthetic DOM events instead
     form-input REF VALUE            set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     key [--ref REF] --text TEXT     type TEXT one key per character
@@ -55,7 +56,10 @@ enum CommandLineParsing {
     case "status": invocation = Invocation(command: .status)
     case "ping": invocation = Invocation(command: .ping(tabId: tabId))
     case "snapshot": invocation = Invocation(command: .snapshot(tabId: tabId))
-    case "click": invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF")))
+    case "click":
+      let action = try option("--action", &rest)
+      let modifiers = try option("--modifiers", &rest)
+      invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF"), actionName: action, modifierNames: modifiers))
     case "events": invocation = Invocation(command: .events(tabId: tabId, clear: flag("--clear", &rest)))
     case "tabs": invocation = Invocation(command: .tabs)
     case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first, windowId: nil))

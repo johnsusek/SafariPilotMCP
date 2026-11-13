@@ -683,7 +683,7 @@ describe("runPage reads", () => {
     });
   });
 
-  test("inspect, setColor and scroll route to the owning frame", async () => {
+  test("inspect, setColor, scroll and syntheticClick route to the owning frame", async () => {
     documents[200].answer = (request) =>
       request.op === "inspect" || request.op === "setColor"
         ? {
@@ -726,6 +726,33 @@ describe("runPage reads", () => {
     expect(await runPage(send, { op: "scrollIntoView", ref: "5:3:4" })).toEqual(
       { ok: true, moved: true, viewport: viewport() },
     );
+    documents[200].answer = (request) =>
+      request.op === "syntheticClick"
+        ? {
+            ok: true,
+            ref: request.ref,
+            target: "button",
+            dispatched: [{ type: "dblclick", canceled: false }],
+            focused: "body",
+          }
+        : undefined;
+    expect(
+      await runPage(send, {
+        op: "syntheticClick",
+        ref: "5:3:4",
+        action: "double_click",
+        modifiers: ["shift"],
+      }),
+    ).toMatchObject({ ok: true, ref: "5:3:4", target: "button" });
+    expect(calls.at(-1)).toEqual([
+      200,
+      {
+        op: "syntheticClick",
+        ref: 4,
+        action: "double_click",
+        modifiers: ["shift"],
+      },
+    ]);
     expect(await runPage(send, { op: "inspect", ref: "5.4" })).toMatchObject({
       ok: false,
       error: expect.stringMatching(/must look like 12/),

@@ -40,7 +40,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case status
   case ping(tabId: Int?)
   case snapshot(tabId: Int?)
-  case click(tabId: Int?, ref: PageRef)
+  /// A plain left click is an AXPress; any other action or any modifier dispatches synthetic DOM events.
+  case click(tabId: Int?, ref: PageRef, action: ClickAction = .left, modifiers: [KeyChord.Modifier] = [])
   case formInput(tabId: Int?, ref: PageRef, value: FormValue)
   case events(tabId: Int?, clear: Bool)
   case tabs
@@ -118,8 +119,28 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
+  }
+
+  /// actionName defaults to left_click; modifierNames are joined by +, like Claude in Chrome's "ctrl+shift", with meta meaning cmd.
+  static func click(tabId: Int?, ref: PageRef, actionName: String?, modifierNames: String?) throws -> AppCommand {
+    let actionName = actionName ?? ClickAction.left.rawValue
+
+    guard let action = ClickAction(rawValue: actionName) else { throw Failure(description: "action must be \(ClickAction.allCases.map(\.rawValue).joined(separator: ", ")), not \(actionName)") }
+
+    var modifiers: [KeyChord.Modifier] = []
+
+    for word in (modifierNames ?? "").split(separator: "+") {
+      let name = word.lowercased()
+
+      guard let modifier = name == "meta" ? .cmd : KeyChord.Modifier(rawValue: name) else { throw Failure(description: "modifiers takes ctrl, shift, alt and cmd (or meta) joined by +, not \(modifierNames ?? "")") }
+      guard !modifiers.contains(modifier) else { throw Failure(description: "modifier \(name) repeated in \(modifierNames ?? "")") }
+
+      modifiers.append(modifier)
+    }
+
+    return .click(tabId: tabId, ref: ref, action: action, modifiers: KeyChord.Modifier.allCases.filter(modifiers.contains))
   }
 
   /// "back" and "forward" walk history; anything else is a URL to load.
@@ -164,6 +185,11 @@ enum AppCommand: Codable, Sendable, Equatable {
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
+}
+
+/// Kinds of click, named like Claude in Chrome's computer actions.
+enum ClickAction: String, Codable, Sendable, CaseIterable {
+  case left = "left_click", double = "double_click", triple = "triple_click", right = "right_click"
 }
 
 /// A rectangle in image pixels from its top-left corner to its bottom-right corner.

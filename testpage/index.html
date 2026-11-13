@@ -103,6 +103,24 @@
       </div>
 
       <div class="row">
+        <span>Multi click</span>
+        <div id="multi-click" class="fake" @click="values.clickDetail = $event.detail" @dblclick="bump('dblclick')">Double or triple</div>
+        <output x-text="`dbl ${counts.dblclick} detail ${values.clickDetail}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Context menu</span>
+        <div id="context-menu" class="fake" @contextmenu.prevent="bump('contextmenu')" @auxclick="bump('auxclick')">Right click</div>
+        <output x-text="`menu ${counts.contextmenu} aux ${counts.auxclick}`"></output>
+      </div>
+
+      <div class="row">
+        <span>Modifier click</span>
+        <button id="modifier-click" type="button" @click="values.modifiers = modifiersOf($event)">Modifiers</button>
+        <output x-text="values.modifiers || 'none'"></output>
+      </div>
+
+      <div class="row">
         <span>Hover menu</span>
         <div class="menu">
           <button id="menu-trigger" type="button">Menu</button>

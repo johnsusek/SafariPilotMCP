@@ -51,6 +51,15 @@ struct PingResult: Codable, Sendable { let url: String; let title: String }
 struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
 /// Rects are in top-frame CSS px; sandboxed means the element's frame is sandboxed without allow-scripts, so no page listener can confirm a click or key there.
 struct LocateResult: Codable, Sendable { let ref: PageRef; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let viewport: Viewport; let sandboxed: Bool }
+/// target is what the events went to; dispatched lists their types in order, canceled when a page listener called preventDefault; focused is the active element afterwards.
+struct SyntheticClickResult: Codable, Sendable {
+  struct Dispatched: Codable, Sendable { let type: String; let canceled: Bool }
+
+  let ref: PageRef
+  let target: String
+  let dispatched: [Dispatched]
+  let focused: String
+}
 /// Events from every frame. origin is the top frame's performance.timeOrigin and origins each answering frame's, keyed by frame path; a different origin between two reads means that frame navigated or reloaded. busy lists frames that did not answer in time, which are not gone.
 struct EventsResult: Codable, Sendable {
   let events: [LoggedEvent]
@@ -97,6 +106,8 @@ enum ContentRequest: Equatable, Sendable {
   case inspect(ref: PageRef)
   /// Sets a color input from the page script, firing untrusted input and change events; answers with inspect's read-back.
   case setColor(ref: PageRef, value: String)
+  /// Dispatches untrusted pointer and mouse events for the click at the element's center and focuses as a press would.
+  case syntheticClick(ref: PageRef, action: ClickAction, modifiers: [KeyChord.Modifier])
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
   case pageText(maxChars: Int)
@@ -111,6 +122,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .events(clear, arm, watch): ["op": "events", "clear": .bool(clear), "arm": .bool(arm), "watch": watch.map { .string($0.description) } ?? .null]
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
     case let .setColor(ref, value): ["op": "setColor", "ref": .string(ref.description), "value": .string(value)]
+    case let .syntheticClick(ref, action, modifiers): ["op": "syntheticClick", "ref": .string(ref.description), "action": .string(action.rawValue), "modifiers": .array(modifiers.map { .string($0.rawValue) })]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]

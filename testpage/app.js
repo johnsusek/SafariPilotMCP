@@ -39,6 +39,9 @@ let counterNames = [
   "pointerDown",
   "mouseUp",
   "clickDiv",
+  "dblclick",
+  "contextmenu",
+  "auxclick",
   "menuItem",
   "drop",
   "inScroller",
@@ -58,9 +61,15 @@ function targetName(target) {
   return target.id ? `${target.localName}#${target.id}` : target.localName;
 }
 
+function modifiersOf(event) {
+  return ["ctrl", "shift", "alt", "meta"]
+    .filter((name) => event[`${name}Key`])
+    .join("+");
+}
+
 function detailOf(event) {
   if (event instanceof MouseEvent)
-    return `b${event.button} ${event.clientX},${event.clientY}`;
+    return `b${event.button} d${event.detail} ${event.clientX},${event.clientY} ${modifiersOf(event)}`.trim();
   if (event instanceof KeyboardEvent) return event.key;
   if (event instanceof InputEvent) return event.inputType;
   return "";
@@ -69,7 +78,15 @@ function detailOf(event) {
 document.addEventListener("alpine:init", () => {
   Alpine.data("lab", () => ({
     counts: Object.fromEntries(counterNames.map((name) => [name, 0])),
-    values: { text: "", textarea: "", select: "One", time: "", date: "" },
+    values: {
+      text: "",
+      textarea: "",
+      select: "One",
+      time: "",
+      date: "",
+      clickDetail: 0,
+      modifiers: "",
+    },
     log: [],
 
     init() {
@@ -92,6 +109,8 @@ document.addEventListener("alpine:init", () => {
       };
       this.log = [entry, ...this.log.slice(0, logLimit - 1)];
     },
+
+    modifiersOf,
 
     bump(name) {
       this.counts[name]++;

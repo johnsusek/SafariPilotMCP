@@ -1,12 +1,15 @@
 // The app sends a Command through the background's poll; the background answers with a CommandResponse.
 // tabId null means the active tab of the last focused window.
 import type {
+  ClickAction,
+  ClickResult,
   ContentResponse,
   ElementInfo,
   FrameEntry,
   InspectResult,
   LocateResult,
   LoggedEvent,
+  Modifier,
   Rect,
   Viewport,
 } from "./protocol";
@@ -24,6 +27,12 @@ export type PageRequest =
   | { op: "events"; clear: boolean; arm: boolean; watch: RefPath | null }
   | { op: "inspect"; ref: RefPath }
   | { op: "setColor"; ref: RefPath; value: string }
+  | {
+      op: "syntheticClick";
+      ref: RefPath;
+      action: ClickAction;
+      modifiers: Modifier[];
+    }
   | {
       op: "readPage";
       filter: "interactive" | "all";
@@ -57,6 +66,7 @@ export type PageEventsResult = {
   busy: RefPath[];
 };
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
+export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
 export type PageSnapshotResult = {
   ok: true;
@@ -136,6 +146,7 @@ export type CommandResponse =
   | PageEventsResult
   | PageLocateResult
   | PageInspectResult
+  | PageClickResult
   | PageFindResult
   | PageSnapshotResult
   | PageReadResult

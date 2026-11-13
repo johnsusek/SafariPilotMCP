@@ -4,6 +4,7 @@ import { find } from "./find";
 import { frameBox, hitFrame, listFrames } from "./frames";
 import { inspect, setColor } from "./inspect";
 import { locate } from "./locate";
+import { syntheticClick } from "./mouse";
 import { pageText } from "./pageText";
 import { scroll, scrollIntoView } from "./scroll";
 import { snapshot } from "./snapshot";
@@ -22,6 +23,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       return takeEvents(request.clear, request.arm, request.watch);
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "setColor") return setColor(request.ref, request.value);
+    if (request.op === "syntheticClick")
+      return syntheticClick(request.ref, request.action, request.modifiers);
     if (request.op === "readPage")
       return readPage(
         request.filter,

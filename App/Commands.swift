@@ -13,7 +13,8 @@ struct Commands {
     case .status: status()
     case let .ping(tabId): try await ping(tabId)
     case let .snapshot(tabId): try await snapshot(tabId)
-    case let .click(tabId, ref): try await click(tabId, ref)
+    case .click(let tabId, let ref, .left, []): try await click(tabId, ref)
+    case let .click(tabId, ref, action, modifiers): try await syntheticClick(tabId, ref, action, modifiers)
     case let .formInput(tabId, ref, value): try await formInput(tabId, ref, value)
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
@@ -329,6 +330,19 @@ struct Commands {
       "hitDescription": .string(located.hitDescription),
     ])
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
+  }
+
+  /// Double, triple, right and modifier clicks have no trusted background path, so the content script dispatches them; no AX is involved, so the tab stays where it is in its window.
+  private func syntheticClick(_ tabId: Int?, _ ref: PageRef, _ action: ClickAction, _ modifiers: [KeyChord.Modifier]) async throws -> CLIReply {
+    let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let located = try await locateHittable(tab.id, ref)
+    try refuseSandboxed(located, "a click")
+    let response = try await content(tab.id, .syntheticClick(ref: ref, action: action, modifiers: modifiers))
+    let result = try response.decode(SyntheticClickResult.self)
+    let held = modifiers.isEmpty ? "" : " with \(modifiers.map(\.rawValue).joined(separator: "+"))"
+    let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
+    let text = "dispatched a synthetic \(action.rawValue.split(separator: "_").joined(separator: " "))\(held) on ref \(ref) \(result.target) in tab \(tab.id) as untrusted events: \(events); browser defaults such as text selection and the context menu do not run; focus is on \(result.focused)"
+    return CLIReply(ok: true, text: text, data: response)
   }
 
   /// Dumps the AX windows and frames next to the content script's viewport so window matching and mapping can be calibrated in one run.
