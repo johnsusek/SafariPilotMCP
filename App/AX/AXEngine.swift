@@ -180,13 +180,6 @@ enum AXEngine {
     return pressed
   }
 
-  struct TypeOutcome {
-    let focused: AXNode
-    let focusResult: AXError
-    let valueNode: AXNode
-    let valueResult: AXError
-  }
-
   /// Sets AXFocused on the first element from the match up that allows it.
   static func focus(_ match: Match) throws -> (focused: AXNode, result: AXError) {
     guard let focused = match.chain.first(where: { $0.isSettable(kAXFocusedAttribute) }) else {
@@ -196,15 +189,13 @@ enum AXEngine {
     return (focused, AXUIElementSetAttributeValue(focused.element, kAXFocusedAttribute as CFString, kCFBooleanTrue))
   }
 
-  static func type(_ text: String, into match: Match) throws -> TypeOutcome {
-    let (focused, focusResult) = try focus(match)
-
-    guard let valueNode = match.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
-      throw Failure(description: "AXFocused set (\(focusResult.name)) but nothing has a settable AXValue:\n\(describe(match.chain))")
+  /// Sets AXValue on the first element from the match up that allows it.
+  static func setValue(_ text: String, in match: Match) throws -> (node: AXNode, result: AXError) {
+    guard let node = match.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
+      throw Failure(description: "nothing from the match up to the web area has a settable AXValue:\n\(describe(match.chain))")
     }
 
-    let valueResult = AXUIElementSetAttributeValue(valueNode.element, kAXValueAttribute as CFString, text as CFString)
-    return TypeOutcome(focused: focused, focusResult: focusResult, valueNode: valueNode, valueResult: valueResult)
+    return (node, AXUIElementSetAttributeValue(node.element, kAXValueAttribute as CFString, text as CFString))
   }
 
   /// Opens a popup select's native menu with AXPress and presses the `occurrence`th AXMenuItem titled `label`; WebKit exposes the menu under the window only while it is open, and a closed popup has no AX children.

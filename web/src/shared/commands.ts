@@ -6,6 +6,7 @@ import type {
   ConsoleEntry,
   ContentResponse,
   ElementInfo,
+  FocusResult,
   FrameEntry,
   InspectResult,
   LocateResult,
@@ -30,6 +31,7 @@ export type PageRequest =
   | { op: "events"; clear: boolean; arm: boolean; watch: RefPath | null }
   | { op: "inspect"; ref: RefPath }
   | { op: "setColor"; ref: RefPath; value: string }
+  | { op: "focus"; ref: RefPath }
   | {
       op: "syntheticClick";
       ref: RefPath;
@@ -89,6 +91,7 @@ export type PageConsoleResult = {
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
 export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
 export type PageUploadResult = Omit<UploadResult, "ref"> & { ref: RefPath };
+export type PageFocusResult = Omit<FocusResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
 export type PageSnapshotResult = {
   ok: true;
@@ -171,6 +174,7 @@ export type CommandResponse =
   | PageInspectResult
   | PageClickResult
   | PageUploadResult
+  | PageFocusResult
   | PageFindResult
   | PageSnapshotResult
   | PageReadResult

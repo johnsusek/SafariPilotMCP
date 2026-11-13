@@ -16,6 +16,7 @@ import type {
   EventsResult,
   Failure,
   FindResult,
+  FocusResult,
   FrameBoxResult,
   InspectResult,
   PageTextResult,
@@ -438,10 +439,17 @@ async function dispatch(
     return scrolled.ok ? scrolled : inFrame(scrolled, path);
   }
 
-  if (request.op === "syntheticClick" || request.op === "upload") {
+  if (
+    request.op === "syntheticClick" ||
+    request.op === "upload" ||
+    request.op === "focus"
+  ) {
     let acted = await send(frameId, { ...request, ref: path.local });
     return acted.ok
-      ? { ...(acted as ClickResult | UploadResult), ref: request.ref }
+      ? {
+          ...(acted as ClickResult | UploadResult | FocusResult),
+          ref: request.ref,
+        }
       : inFrame(acted, path);
   }
 

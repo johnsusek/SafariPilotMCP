@@ -2,6 +2,7 @@ import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installReader, takeConsole } from "./console";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
+import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
 import { inspect, setColor } from "./inspect";
 import { locate } from "./locate";
@@ -26,6 +27,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       return takeEvents(request.clear, request.arm, request.watch);
     if (request.op === "inspect") return inspect(request.ref);
     if (request.op === "setColor") return setColor(request.ref, request.value);
+    if (request.op === "focus") return focusRef(request.ref);
     if (request.op === "syntheticClick")
       return syntheticClick(request.ref, request.action, request.modifiers);
     if (request.op === "upload") return upload(request.ref, request.files);

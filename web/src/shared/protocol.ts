@@ -71,6 +71,8 @@ export type ContentRequest =
   | { op: "inspect"; ref: number }
   // Sets a color input's value and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
   | { op: "setColor"; ref: number; value: string }
+  // Focuses ref, or its nearest ancestor that takes focus, with element.focus().
+  | { op: "focus"; ref: number }
   // Dispatches untrusted pointer and mouse events at the element's center and focuses as a press would, with no other default actions.
   | {
       op: "syntheticClick";
@@ -174,6 +176,8 @@ export type ClickResult = {
   dispatched: { type: string; canceled: boolean }[];
   focused: string;
 };
+// focus: focused is the element that took focus, ref or an ancestor.
+export type FocusResult = { ok: true; ref: number; focused: string };
 // upload: target is the file input that took the files, or what the drop events went to; via says which; files are read back from
 // the input or the DataTransfer; dispatched lists the events in order, canceled when a listener called preventDefault.
 export type UploadResult = {
@@ -283,6 +287,7 @@ export type ContentResponse =
   | EventsResult
   | InspectResult
   | ClickResult
+  | FocusResult
   | UploadResult
   | ReadPageResult
   | FindResult

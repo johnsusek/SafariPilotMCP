@@ -47,22 +47,22 @@ extension Commands {
   private func setText(_ tab: TabInfo, _ ref: PageRef, _ secure: Bool, _ text: String) async throws -> CLIReply {
     let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
-    let outcome = try AXEngine.type(text, into: match)
+    let focus = try await content(tab.id, .focus(ref: ref)).decode(FocusResult.self)
+    let (valueNode, valueResult) = try AXEngine.setValue(text, in: match)
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
     let after = try await settled(tab.id, ref) { $0.value == expected }
     let matched = after.value == expected
     let lines = [
-      "AXFocused=true on \(outcome.focused.summary): \(outcome.focusResult.name)",
-      "AXValue on \(outcome.valueNode.summary): \(outcome.valueResult.name)",
+      "focused \(focus.focused) from the page",
+      "AXValue on \(valueNode.summary): \(valueResult.name)",
       "read back: \(after.value.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
     ] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .string(ref.description),
-      "focusedRole": .string(outcome.focused.role),
-      "focusResult": .string(outcome.focusResult.name),
-      "valueRole": .string(outcome.valueNode.role),
-      "valueResult": .string(outcome.valueResult.name),
+      "focused": .string(focus.focused),
+      "valueRole": .string(valueNode.role),
+      "valueResult": .string(valueResult.name),
       "readBack": after.value.map { .string($0) } ?? .null,
     ])
     return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)

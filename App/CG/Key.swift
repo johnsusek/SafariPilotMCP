@@ -12,12 +12,9 @@ extension Commands {
       let located = try await locateHittable(tab.id, ref, coveredOK: true)
       try refuseSandboxed(located, "a key press")
       let match = try await AXEngine.resolve(located, tab: tab)
-      let (focused, result) = try AXEngine.focus(match)
-
-      guard result == .success else { throw Failure(description: "AXFocused=true on \(focused.summary) for ref \(ref) failed: \(result.name)") }
-
+      _ = try await content(tab.id, .focus(ref: ref))
       target = match.target
-      focusNode = focused
+      focusNode = match.chain.first { $0.isSettable(kAXFocusedAttribute) } ?? target.webArea
     } else {
       target = try await AXEngine.target(for: tab)
       focusNode = target.webArea
