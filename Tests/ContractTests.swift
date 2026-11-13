@@ -39,6 +39,9 @@ struct ContractTests {
     #expect(throws: (any Error).self) { try decode(EventsResult.self, #"{"ok":true,"events":[]}"#) }
     #expect(try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":true,"value":null,"secure":false,"kind":"other","checked":null,"selectedIndex":null,"options":null}"#).hover)
     let select = try decode(InspectResult.self, #"{"ok":true,"ref":4,"hover":false,"value":"1","secure":false,"kind":"select","checked":null,"selectedIndex":0,"options":[{"value":"1","label":"One","disabled":false}]}"#)
+    let clicked = try decode(SyntheticClickResult.self, #"{"ok":true,"ref":"5:12","target":"button","dispatched":[{"type":"pointerdown","canceled":false},{"type":"contextmenu","canceled":true}],"focused":"body"}"#)
+    #expect(clicked.ref == PageRef(frames: [5], local: 12))
+    #expect(clicked.dispatched.map(\.canceled) == [false, true])
     #expect(select.kind == .select)
     #expect(select.options == [SelectOption(value: "1", label: "One", disabled: false)])
   }
@@ -58,6 +61,7 @@ struct ContractTests {
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
     #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])
+    #expect(ContentRequest.syntheticClick(ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]).json == ["op": "syntheticClick", "ref": "5:12", "action": "double_click", "modifiers": .array(["cmd", "shift"])])
     #expect(BackgroundCommand.resize(tabId: 4, width: 1200, height: 800).json == ["type": "resize", "tabId": .number(4), "width": .number(1200), "height": .number(800)])
   }
 

@@ -49,6 +49,14 @@ export type LoggedEvent = {
   onTarget?: boolean;
 };
 
+// Click kinds named like Claude in Chrome's computer actions, and the keys held during a click.
+export type ClickAction =
+  | "left_click"
+  | "double_click"
+  | "triple_click"
+  | "right_click";
+export type Modifier = "cmd" | "shift" | "alt" | "ctrl";
+
 export type ContentRequest =
   | { op: "ping" }
   | { op: "snapshot" }
@@ -59,6 +67,13 @@ export type ContentRequest =
   | { op: "inspect"; ref: number }
   // Sets a color input's value and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
   | { op: "setColor"; ref: number; value: string }
+  // Dispatches untrusted pointer and mouse events at the element's center and focuses as a press would, with no other default actions.
+  | {
+      op: "syntheticClick";
+      ref: number;
+      action: ClickAction;
+      modifiers: Modifier[];
+    }
   // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
   | {
       op: "readPage";
@@ -134,6 +149,15 @@ export type LocateResult = {
   viewport: Viewport;
   // With a clip: up to 8 points on the element, best first, for the background to test against the ancestor frames.
   candidates: Point[];
+};
+// syntheticClick: target is what the events went to (the deepest element at the point when inside ref, else ref), dispatched the
+// event types in order, canceled when a listener called preventDefault, and focused the active element afterwards.
+export type ClickResult = {
+  ok: true;
+  ref: number;
+  target: string;
+  dispatched: { type: string; canceled: boolean }[];
+  focused: string;
 };
 // origin is performance.timeOrigin, which changes when the page navigates or reloads.
 export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
@@ -212,6 +236,7 @@ export type ContentResponse =
   | LocateResult
   | EventsResult
   | InspectResult
+  | ClickResult
   | ReadPageResult
   | FindResult
   | PageTextResult

@@ -49,6 +49,31 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try CommandLineParsing.parse(["click", "5.12"]) }
   }
 
+  @Test func clickTakesActionAndModifiers() throws {
+    #expect(try map("click", ["ref": .number(4), "action": "left_click", "modifiers": ""]) == .click(tabId: 20, ref: 4))
+    #expect(try map("click", ["ref": .number(4), "action": "double_click"]) == .click(tabId: 20, ref: 4, action: .double))
+    #expect(try map("click", ["ref": .number(4), "action": "triple_click"]) == .click(tabId: 20, ref: 4, action: .triple))
+    #expect(try map("click", ["ref": "5:12", "action": "right_click", "modifiers": "ctrl+shift"]) == .click(tabId: 20, ref: PageRef(frames: [5], local: 12), action: .right, modifiers: [.shift, .ctrl]))
+    #expect(try map("click", ["ref": .number(4), "modifiers": "alt+Meta"]) == .click(tabId: 20, ref: 4, action: .left, modifiers: [.cmd, .alt]))
+    let click = Tools.definitions.first { $0.name == "click" }!
+    #expect(click.properties["action"]?["enum"] == .array(["left_click", "double_click", "triple_click", "right_click"]))
+    #expect(click.properties["modifiers"]?["type"] == "string")
+  }
+
+  @Test func clickRefusesBadActionsAndModifiers() throws {
+    let bad: [[String: JSONValue]] = [["action": "middle_click"], ["action": .number(2)], ["modifiers": "shift+win"], ["modifiers": "cmd+meta"], ["modifiers": .array(["shift"])]]
+
+    for arguments in bad {
+      #expect(throws: Failure.self, "\(arguments)") { try map("click", arguments.merging(["ref": .number(4)]) { $1 }) }
+    }
+  }
+
+  @Test func clickActionAndModifiersCrossTheWire() throws {
+    let command = AppCommand.click(tabId: 3, ref: PageRef(frames: [5], local: 2), action: .right, modifiers: [.cmd, .alt])
+    #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(command)) == command)
+    #expect(command.targetTab == 3)
+  }
+
   @Test func refSchemaTakesIntegerOrString() {
     let click = Tools.definitions.first { $0.name == "click" }!
     #expect(click.properties["ref"]?["type"] == .array(["integer", "string"]))
@@ -268,6 +293,13 @@ struct CommandLineParsingTests {
     #expect(try parse("--tab 4 click 12").command == .click(tabId: 4, ref: 12))
     #expect(try parse("click 12 --tab 4").command == .click(tabId: 4, ref: 12))
     #expect(try parse("ping").command == .ping(tabId: nil))
+  }
+
+  @Test func clickTakesActionAndModifiers() throws {
+    #expect(try parse("click 5:12 --action double_click --modifiers shift+cmd").command == .click(tabId: nil, ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]))
+    #expect(try parse("--tab 3 click 12 --modifiers ctrl").command == .click(tabId: 3, ref: 12, action: .left, modifiers: [.ctrl]))
+    #expect(throws: Failure.self) { try parse("click 12 --action double") }
+    #expect(throws: Failure.self) { try parse("click 12 --modifiers") }
   }
 
   @Test func freeTextIsJoined() throws {

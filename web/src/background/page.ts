@@ -8,6 +8,7 @@ import type {
 } from "../shared/commands";
 import { toTop } from "../shared/frameGeometry";
 import type {
+  ClickResult,
   ContentResponse,
   ElementInfo,
   EventsResult,
@@ -368,6 +369,13 @@ async function dispatch(
   if (request.op === "scroll") {
     let scrolled = await send(frameId, { ...request, ref: path.local });
     return scrolled.ok ? scrolled : inFrame(scrolled, path);
+  }
+
+  if (request.op === "syntheticClick") {
+    let clicked = await send(frameId, { ...request, ref: path.local });
+    return clicked.ok
+      ? { ...(clicked as ClickResult), ref: request.ref }
+      : inFrame(clicked, path);
   }
 
   let inspected = await send(
