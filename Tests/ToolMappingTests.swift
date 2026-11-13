@@ -308,6 +308,7 @@ struct ToolMappingTests {
     #expect(throws: Failure.self) { try map("key") }
     #expect(throws: Failure.self) { try map("key", ["keys": "Enter", "repeat": .number(0)]) }
     #expect(throws: Failure.self) { try map("key", ["keys": "Enter Tab", "repeat": .number(51)]) }
+    #expect(throws: Failure.self) { try map("key", ["keys": "Enter Tab", "repeat": .number(4_611_686_018_427_387_904)]) }
     #expect(throws: Failure.self) { try map("key", ["keys": .number(5)]) }
   }
 

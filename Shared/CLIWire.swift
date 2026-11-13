@@ -204,8 +204,6 @@ enum AppCommand: Codable, Sendable, Equatable {
     default: throw Failure(description: "key takes either keys or text, not \(keys == nil ? "neither" : "both")")
     }
 
-    let presses = chords.count * times
-
     guard !chords.isEmpty else { throw Failure(description: "key needs at least one key, such as Enter or shift+Tab, or some text") }
 
     if let chord = chords.first(where: { $0.modifiers.contains(.cmd) }) {
@@ -213,7 +211,8 @@ enum AppCommand: Codable, Sendable, Equatable {
     }
 
     guard times >= 1 else { throw Failure(description: "repeat must be at least 1, not \(times)") }
-    guard presses <= maxKeyPresses else { throw Failure(description: "\(chords.count) keys x \(times) repeats is \(presses) presses; the limit is \(maxKeyPresses)") }
+    // Divided rather than multiplied, so a huge repeat cannot overflow.
+    guard times <= maxKeyPresses / chords.count else { throw Failure(description: "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
