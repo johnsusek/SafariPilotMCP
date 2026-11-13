@@ -138,15 +138,22 @@ enum MCPServer {
 
   static func text(_ text: String) -> Tool.Content { .text(text: text, annotations: nil, _meta: nil) }
 
-  /// Sends a command under this process's approved session, asking for approval first when there is none;
-  /// a refused session is dropped so the next command asks again.
+  /// Sends a command under this process's approved session, asking for approval first when there is none.
+  /// A refused session (the app relaunched and forgot it, or the person disconnected it) is dropped, and the command, which never ran, is sent once more under a new one.
   private static func exchange(_ command: AppCommand) async throws -> CLIReply {
+    let send = { (key: String) in try await blocking { try AppClient.send(command, timeout: CLIRequest.defaultTimeout, session: key) } }
     let key = try await approval.session()
-    let reply = try await blocking { try AppClient.send(command, timeout: CLIRequest.defaultTimeout, session: key) }
+    let reply = try await send(key)
 
-    if reply.data["unapproved"]?.bool == true { await approval.drop(key) }
+    guard reply.data["unapproved"]?.bool == true else { return reply }
 
-    return reply
+    await approval.drop(key)
+    let renewed = try await approval.session()
+    let retried = try await send(renewed)
+
+    if retried.data["unapproved"]?.bool == true { await approval.drop(renewed) }
+
+    return retried
   }
 
   /// Wire.exchange blocks for up to its whole timeout, so it runs on a dispatch thread instead of the cooperative pool.
