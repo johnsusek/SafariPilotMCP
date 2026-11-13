@@ -106,8 +106,13 @@ enum MCPServer {
       guard reply.ok, reply.data["dialog"] == nil else { return ([text(reply.text)], reply.ok) }
 
       // A click or key press can open a popup; adopt it now so the caller hears about it.
-      let opened = try await refresh().adopted.map { "opened tab \($0.id) \($0.url)" }
-      return ([text(([reply.text] + opened).joined(separator: "\n"))], true)
+      // The action already happened, so a failed listing, as when its page opens a dialog a moment later, is reported beside it and not in its place.
+      do {
+        let opened = try await refresh().adopted.map { "opened tab \($0.id) \($0.url)" }
+        return ([text(([reply.text] + opened).joined(separator: "\n"))], true)
+      } catch {
+        return ([text("\(reply.text)\ntabs could not be listed afterwards to look for popups: \(error)")], true)
+      }
     } catch {
       log("\(name) failed: \(error)")
       return ([text("\(error)")], false)
