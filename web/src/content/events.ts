@@ -50,6 +50,9 @@ let capacity = 1500;
 let buffer: LoggedEvent[] = [];
 let targets = new WeakMap<LoggedEvent, EventTarget>();
 let armed = false;
+// Set by the first take. An action is always checked between two takes, so a page SafariPilot never reads pays one early return
+// per event and keeps no log of what its user typed.
+let recording = false;
 
 export function record(entry: LoggedEvent) {
   buffer.push(entry);
@@ -102,6 +105,7 @@ export function takeEvents(
 
   if (clear) buffer = [];
 
+  recording = true;
   installLogger();
   setArmed(false);
   setArmed(arm);
@@ -157,6 +161,8 @@ export function toLogged(event: Event): LoggedEvent {
 }
 
 function logListener(event: Event) {
+  if (!recording) return;
+
   let entry = toLogged(event);
   let target = targetOf(event);
 

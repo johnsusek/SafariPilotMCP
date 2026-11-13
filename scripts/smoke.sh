@@ -165,6 +165,8 @@ site_frames() {
   close_tab
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color"
   local well=$(ref "Foreground color" button)
+  # A frame logs nothing before its first events read.
+  safaripilot --tab $tab events --clear >/dev/null
   check "frames: color input set by name" 'read back: "#008000"' form-input $well green
   check "frames: color change logged" 'change UNTRUSTED' events
   close_tab

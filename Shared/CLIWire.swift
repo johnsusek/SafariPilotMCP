@@ -76,7 +76,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
   case debugAX(tabId: Int?, ref: PageRef?)
-  /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call.
+  /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call; a frame logs nothing before its first read.
   case debugFrames(tabId: Int?)
   /// windowFields sets the window-under-pointer fields on mouse posts.
   case debugCG(tabId: Int?, probe: CGProbe, windowFields: Bool)

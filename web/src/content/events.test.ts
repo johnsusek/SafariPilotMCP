@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { installLogger, record, recordCoalesced, takeEvents } from "./events";
 import { inspect } from "./inspect";
 import { refFor } from "./refs";
@@ -24,6 +24,18 @@ describe("ring buffer", () => {
     expect(events[1499].target).toBe("t1519");
     expect(takeEvents(true, false).events.length).toBe(1500);
     expect(takeEvents(false, false).events).toEqual([]);
+  });
+
+  test("records nothing until the first take", async () => {
+    vi.resetModules();
+    let fresh = await import("./events");
+    fresh.installLogger();
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(fresh.takeEvents(true, false).events).toEqual([]);
+    document.body.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    expect(
+      fresh.takeEvents(true, false).events.map((event) => event.type),
+    ).toEqual(["click"]);
   });
 
   test("replies with the document's time origin", () => {
