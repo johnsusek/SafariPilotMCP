@@ -49,6 +49,7 @@ final class AppModel {
         axTrusted = AXIsProcessTrusted()
         loginItem = SMAppService.mainApp.status
         await refreshExtensionState()
+        gate.dropExited()
         desktopAdded = ClaudeSetup.isAdded(config: try? Data(contentsOf: ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath) { gate.knows(credential: $0) }
         try? await Task.sleep(for: .seconds(3))
       }

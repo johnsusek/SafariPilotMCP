@@ -4,13 +4,14 @@ import SwiftUI
 import UserNotifications
 
 /// Approves MCP clients the way iMCP does: a dialog per new client, credentials that skip it once trusted,
-/// and a session key per approved MCP process that every command must carry until the app quits or the session is revoked.
+/// and a session key per approved MCP process that every command must carry until the app quits, the session is revoked or that process exits.
 @Observable @MainActor
 final class ClientGate {
   struct Session: Identifiable {
     let id: String
     let name: String
     let recordId: String?
+    let pid: pid_t
     let since: Date
   }
 
@@ -55,7 +56,7 @@ final class ClientGate {
 
     if let record, record.trusted {
       notify("\(name) connected")
-      return HelloReply(session: open(name: name, recordId: record.id), text: "approved: trusted client \(record.name)")
+      return HelloReply(session: open(name: name, recordId: record.id, pid: hello.pid), text: "approved: trusted client \(record.name)")
     }
 
     let request = Request(name: name, record: record, unrecognizedCredential: hello.credential != nil && record == nil)
@@ -78,7 +79,7 @@ final class ClientGate {
     if let refusal { return HelloReply(session: nil, text: "SafariPilot refused \(name): \(refusal)") }
     guard approved else { return HelloReply(session: nil, text: "The user did not allow \(name) to use Safari through SafariPilot.") }
 
-    return HelloReply(session: open(name: name, recordId: store?.record(for: hello.credential)?.id), text: "approved")
+    return HelloReply(session: open(name: name, recordId: store?.record(for: hello.credential)?.id, pid: hello.pid), text: "approved")
   }
 
   /// Why a command may not run, or nil when it may. Debug builds let session-less requests through for the dev CLI and smoke tests.
@@ -96,6 +97,13 @@ final class ClientGate {
   }
 
   func revoke(_ session: Session) { sessions.removeAll { $0.id == session.id } }
+
+  /// Ends the sessions whose MCP server process is gone, so Connected lists live clients and a dead one's key stops working.
+  func dropExited() {
+    let live = sessions.filter { kill($0.pid, 0) == 0 || errno != ESRCH }
+
+    if live.count < sessions.count { sessions = live }
+  }
 
   /// Removes a trusted client; its credential stops working and its sessions end.
   func remove(_ record: ClientRecord) {
@@ -120,9 +128,9 @@ final class ClientGate {
     return try store.issue(name: name, trusted: false)
   }
 
-  private func open(name: String, recordId: String?) -> String {
+  private func open(name: String, recordId: String?, pid: pid_t) -> String {
     let key = String(decoding: Wire.newToken(), as: UTF8.self)
-    sessions.append(Session(id: key, name: name, recordId: recordId, since: .now))
+    sessions.append(Session(id: key, name: name, recordId: recordId, pid: pid, since: .now))
     return key
   }
 

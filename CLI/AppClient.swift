@@ -11,7 +11,7 @@ enum AppClient {
 
   /// Blocking until the person answers the approval dialog; returns the session key or throws why not.
   static func hello(clientName: String, clientVersion: String, credential: String?) throws -> String {
-    let request = try JSONEncoder().encode(HelloRequest(clientName: clientName, clientVersion: clientVersion, credential: credential))
+    let request = try JSONEncoder().encode(HelloRequest(clientName: clientName, clientVersion: clientVersion, credential: credential, pid: ProcessInfo.processInfo.processIdentifier))
     let reply = try JSONDecoder().decode(HelloReply.self, from: Wire.exchange(request, timeoutSeconds: HelloRequest.timeoutSeconds))
 
     guard let session = reply.session else { throw Failure(description: reply.text) }

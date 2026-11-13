@@ -19,6 +19,8 @@ struct HelloRequest: Codable, Sendable {
   let clientName: String
   let clientVersion: String
   let credential: String?
+  /// The MCP server's process id; the app ends the session once that process is gone.
+  let pid: Int32
 
   /// The environment variable in the client's MCP settings that carries its credential.
   static let credentialVariable = "SAFARIPILOT_CREDENTIAL"
