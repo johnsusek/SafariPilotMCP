@@ -28,9 +28,21 @@ struct WindowMatchingTests {
     #expect(try WindowMatching.match(tab: tab("https://a.test/", frame: CSSRect(left: 2, top: 25, width: 1200, height: 800)), candidates: candidates) == 0)
   }
 
-  @Test func singleUrlMatchIgnoresWindowFrame() throws {
-    let candidates = [window(["https://a.test/"], at: CGRect(x: 0, y: 25, width: 1200, height: 800))]
+  @Test func singleUrlMatchStandsWhenNoWindowIsAtTheTabsFrame() throws {
+    let candidates = [window(["https://a.test/"], at: CGRect(x: 0, y: 25, width: 1200, height: 800)), window(["https://b.test/"], at: CGRect(x: 300, y: 100, width: 900, height: 700))]
     #expect(try WindowMatching.match(tab: tab("https://a.test/", frame: CSSRect(left: 900, top: 900, width: 10, height: 10)), candidates: candidates) == 0)
+    #expect(try WindowMatching.match(tab: tab("https://a.test/", frame: CSSRect(left: 2, top: 25, width: 1200, height: 800)), candidates: candidates) == 0)
+  }
+
+  @Test func loneMatchInAnotherWindowWaitsForTheTabsOwn() {
+    let candidates = [window(["https://a.test/"], at: CGRect(x: 0, y: 25, width: 1200, height: 800)), window([], at: CGRect(x: 300, y: 100, width: 900, height: 700))]
+
+    #expect {
+      try WindowMatching.match(tab: tab("https://a.test/", frame: CSSRect(left: 300, top: 100, width: 900, height: 700)), candidates: candidates)
+    } throws: { error in
+      guard case let .noMatch(text) = error as? WindowMatchError else { return false }
+      return text.contains("not at tab 5's windowFrame")
+    }
   }
 
   @Test func duplicateUrlWithoutFrameIsAmbiguous() {
