@@ -33,6 +33,7 @@ enum CommandLineParsing {
     resize WIDTH HEIGHT             resize the tab's window in points
     javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
     file-upload REF PATH...         give files to the file input REF (or the one it labels or holds), or drop them on REF
+    console [--errors] [--pattern REGEX] [--limit N] [--clear]  console messages from every frame, newest N (default 50, up to 200)
     dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
@@ -79,6 +80,10 @@ enum CommandLineParsing {
 
       invocation = try Invocation(command: .resize(tabId: tabId, width: integer(rest[0], "WIDTH"), height: integer(rest[1], "HEIGHT")))
     case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
+    case "console":
+      let pattern = try option("--pattern", &rest)
+      let limit = try option("--limit", &rest).map { try integer($0, "--limit") }
+      invocation = try Invocation(command: .console(tabId: tabId, onlyErrors: flag("--errors", &rest), pattern: pattern, limit: limit, clear: flag("--clear", &rest)))
     case "dialog":
       // --text takes every word after it verbatim.
       let textStart = rest.firstIndex(of: "--text")

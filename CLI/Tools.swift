@@ -54,6 +54,13 @@ enum Tools {
       "ref": ref("Ref of the file input, a label or element holding one, or a drop zone, such as 12 or \"5:12\" inside the frame of iframe 5."),
       "paths": .object(["type": "array", "items": .object(["type": "string"]), "minItems": .number(1), "description": .string("Absolute paths of the files, at most \(UploadFile.megabytes(UploadFile.maxUploadBytes)) together; a file input without the multiple attribute takes one.")]),
     ], required: ["ref", "paths"]),
+    ToolDefinition(name: "read_console_messages", description: "Returns the console messages (log, info, warn, error and debug calls, uncaught errors and unhandled promise rejections) that a tab's frames recorded since they loaded, oldest first, as untrusted page data.", properties: [
+      "tabId": tabId,
+      "onlyErrors": property("boolean", "Return only errors and exceptions; defaults to false."),
+      "pattern": property("string", "Case-insensitive JavaScript regular expression the message text must match, such as \"error|warn\" or \"MyApp\"."),
+      "limit": property("integer", "Most recent matching messages to return, from 1 to \(AppCommand.consoleLimits.upperBound); defaults to \(AppCommand.defaultConsoleLimit)."),
+      "clear": property("boolean", "Empty the recorded messages after reading, so the next call returns only newer ones; defaults to false."),
+    ]),
     ToolDefinition(name: "handle_dialog", description: "Accepts or dismisses the alert, confirm or prompt dialog open in a tab by pressing its OK or Cancel button through Accessibility, first typing prompt_text into a prompt when given.", properties: ["tabId": tabId, "action": property("string", "\"accept\" presses OK (an alert's Close) and \"dismiss\" presses Cancel.", oneOf: ["accept", "dismiss"]), "prompt_text": property("string", "Text to put in a prompt's field before accepting it.")], required: ["action"]),
     ToolDefinition(name: "wait", description: "Waits a number of seconds, up to \(Int(maxWait)), for the page to change.", properties: ["seconds": property("number", "Seconds to wait, up to \(Int(maxWait)).")], required: ["seconds"]),
     ToolDefinition(name: "browser_batch", description: "Runs several tool calls in order in one round trip and returns each one's output, stopping at the first failure.", properties: ["actions": .object([
@@ -120,6 +127,7 @@ enum Tools {
     case "form_input": return try .formInput(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"), value: arguments.require(arguments.formValue("value"), "value"))
     case "screenshot": return try .screenshot(tabId: page(), corners: arguments.numbers("region"), scale: arguments.number("scale"))
     case "file_upload": return try .fileUpload(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"), paths: arguments.require(arguments.strings("paths"), "paths"))
+    case "read_console_messages": return try .console(tabId: page(), onlyErrors: arguments.bool("onlyErrors") ?? false, pattern: arguments.string("pattern"), limit: arguments.integer("limit"), clear: arguments.bool("clear") ?? false)
     case "handle_dialog": return try .dialog(tabId: page(), action: arguments.require(arguments.string("action"), "action"), promptText: arguments.string("prompt_text"))
     case "scroll_to": return try .scrollTo(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"))
     case "resize_window": return try .resize(tabId: page(), width: arguments.require(arguments.integer("width"), "width"), height: arguments.require(arguments.integer("height"), "height"))
@@ -147,6 +155,12 @@ struct ToolArguments {
     guard let value = values[key], value != .null else { return nil }
     guard let text = value.string else { throw Failure(description: "\(key) must be a string, not \(value)") }
     return text
+  }
+
+  func bool(_ key: String) throws -> Bool? {
+    guard let value = values[key], value != .null else { return nil }
+    guard let flag = value.bool else { throw Failure(description: "\(key) must be true or false, not \(value)") }
+    return flag
   }
 
   func number(_ key: String) throws -> Double? {

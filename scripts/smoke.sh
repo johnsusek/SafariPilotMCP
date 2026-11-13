@@ -182,8 +182,16 @@ site_reddit() {
   close_tab
 }
 
+site_facebook() {
+  open_tab "https://www.facebook.com/"
+  sleep 2
+  check "facebook: self-XSS warning read from the console" 'facebook.com/selfxss' console --pattern selfxss
+  check "facebook: only errors leaves the warning out" '^No matching console messages\.$' console --errors --pattern selfxss
+  close_tab
+}
+
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit facebook)
 
 for site in $sites; do
   site_$site

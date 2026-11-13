@@ -69,6 +69,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case javascript(tabId: Int?, code: String, frame: PageRef?)
   /// Gives the files to a file input, or drops them on any other element; the CLI or MCP process read them, so their bytes travel in the command.
   case fileUpload(tabId: Int?, ref: PageRef, files: [UploadFile])
+  /// The newest limit console messages from every frame, of errors and exceptions only when onlyErrors, whose text matches pattern; clear empties the buffers after reading.
+  case consoleMessages(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
   case debugAX(tabId: Int?, ref: PageRef?)
@@ -81,6 +83,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   static let scrollStep = 100.0
   static let maxKeyPresses = 100
   static let scaleRange = 0.1...1.0
+  static let consoleLimits = 1...200
+  static let defaultConsoleLimit = 50
 
   /// corners are four numbers x0, y0, x1, y1 with the second corner below and right of the first.
   static func screenshot(tabId: Int?, corners region: [Double]?, scale: Double?) throws -> AppCommand {
@@ -126,7 +130,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -160,6 +164,15 @@ enum AppCommand: Codable, Sendable, Equatable {
     guard ["accept", "dismiss"].contains(action) else { throw Failure(description: "action must be accept or dismiss, not \(action)") }
 
     return .dialog(tabId: tabId, accept: action == "accept", promptText: promptText)
+  }
+
+  /// An empty pattern matches everything, so it is sent as none.
+  static func console(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int?, clear: Bool) throws -> AppCommand {
+    let limit = limit ?? defaultConsoleLimit
+
+    guard consoleLimits.contains(limit) else { throw Failure(description: "limit must be from 1 to 200, not \(limit)") }
+
+    return .consoleMessages(tabId: tabId, onlyErrors: onlyErrors, pattern: pattern?.isEmpty == false ? pattern : nil, limit: limit, clear: clear)
   }
 
   /// "back" and "forward" walk history; anything else is a URL to load.

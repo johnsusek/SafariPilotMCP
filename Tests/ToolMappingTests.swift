@@ -230,6 +230,20 @@ struct ToolMappingTests {
     }
   }
 
+  @Test func readConsoleMessagesMapsFiltersAndLimits() throws {
+    #expect(try map("read_console_messages") == .consoleMessages(tabId: 20, onlyErrors: false, pattern: nil, limit: 50, clear: false))
+    #expect(try map("read_console_messages", ["tabId": .number(7), "onlyErrors": .bool(true), "pattern": "MyApp", "limit": .number(200), "clear": .bool(true)]) == .consoleMessages(tabId: 7, onlyErrors: true, pattern: "MyApp", limit: 200, clear: true))
+    #expect(try map("read_console_messages", ["pattern": ""]) == .consoleMessages(tabId: 20, onlyErrors: false, pattern: nil, limit: 50, clear: false))
+    #expect(AppCommand.consoleMessages(tabId: 7, onlyErrors: false, pattern: nil, limit: 1, clear: false).targetTab == 7)
+    #expect(throws: Failure.self) { try map("read_console_messages", ["limit": .number(201)]) }
+    #expect(throws: Failure.self) { try map("read_console_messages", ["limit": .number(0)]) }
+    #expect(throws: Failure.self) { try map("read_console_messages", ["onlyErrors": "yes"]) }
+    #expect(try CommandLineParsing.parse(["--tab", "3", "console", "--errors", "--pattern", "boom|fail", "--limit", "5", "--clear"]).command == .consoleMessages(tabId: 3, onlyErrors: true, pattern: "boom|fail", limit: 5, clear: true))
+    #expect(try CommandLineParsing.parse(["console"]).command == .consoleMessages(tabId: nil, onlyErrors: false, pattern: nil, limit: 50, clear: false))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["console", "--limit", "many"]) }
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["console", "--verbose"]) }
+  }
+
   @Test func javascriptMapsTextAndFrame() throws {
     #expect(try map("javascript", ["text": "document.title"]) == .javascript(tabId: 20, code: "document.title", frame: nil))
     #expect(try map("javascript", ["tabId": .number(7), "text": "1", "frame": "5:3"]) == .javascript(tabId: 7, code: "1", frame: PageRef(frames: [5], local: 3)))

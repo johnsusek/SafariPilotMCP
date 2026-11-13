@@ -90,6 +90,7 @@ document.addEventListener("alpine:init", () => {
       modifiers: "",
       dialog: "",
       files: {},
+      console: "",
     },
     log: [],
 
@@ -142,6 +143,22 @@ document.addEventListener("alpine:init", () => {
 
     synthetic() {
       document.getElementById("native").click();
+    },
+
+    // One message at each level, then an uncaught error and an unhandled rejection, for read_console_messages.
+    consoleBurst() {
+      let cycle = { name: "lab" };
+      cycle.self = cycle;
+      console.log("lab log %s", "formatted", cycle);
+      console.info("lab info");
+      console.warn("lab warn");
+      console.error("lab error", new Error("lab error object"));
+      console.debug("lab debug");
+      Promise.reject(new Error("lab rejection"));
+      setTimeout(() => {
+        throw new Error("lab uncaught");
+      });
+      this.values.console = "logged";
     },
   }));
 });

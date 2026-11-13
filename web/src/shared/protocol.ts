@@ -98,7 +98,15 @@ export type ContentRequest =
   // reveal scrolls the iframe into view when part of it is outside the viewport.
   | { op: "frameBox"; ref: number; reveal: boolean }
   // Whether each point lands on the iframe itself, in this frame's coordinates.
-  | { op: "hitFrame"; ref: number; points: Point[] };
+  | { op: "hitFrame"; ref: number; points: Point[] }
+  // This frame's newest limit console messages matching onlyErrors and pattern (a case-insensitive regular expression); clear empties its buffer after reading.
+  | {
+      op: "console";
+      onlyErrors: boolean;
+      pattern: string | null;
+      limit: number;
+      clear: boolean;
+    };
 
 // timeout marks a frame that did not answer in time, as opposed to one that is gone.
 export type Failure = { ok: false; error: string; timeout?: true };
@@ -246,6 +254,27 @@ export type PageTextResult = {
 // when ref is null. moved is false when nothing could scroll. scrollIntoView answers the same way.
 export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
 
+// exception is an uncaught error or an unhandled promise rejection.
+export type ConsoleLevel =
+  "log" | "info" | "warn" | "error" | "debug" | "exception";
+// time is epoch ms, url the frame's document URL when logged, source the caller's url:line:column when known.
+export type ConsoleEntry = {
+  level: ConsoleLevel;
+  text: string;
+  time: number;
+  url: string;
+  source: string | null;
+};
+// capturing is false when the frame has no main-world capture (it loaded before the extension); matched counts matches before limit,
+// dropped the oldest entries a full buffer let go since the last clear.
+export type ConsoleResult = {
+  ok: true;
+  capturing: boolean;
+  entries: ConsoleEntry[];
+  matched: number;
+  dropped: number;
+};
+
 export type ContentResponse =
   | Failure
   | PingResult
@@ -261,4 +290,5 @@ export type ContentResponse =
   | ScrollResult
   | FramesResult
   | FrameBoxResult
-  | HitFrameResult;
+  | HitFrameResult
+  | ConsoleResult;
