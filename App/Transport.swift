@@ -79,22 +79,32 @@ final class Transport {
     command["id"] = .string(id)
     let envelope = JSONValue.object(command)
 
-    return try await withCheckedThrowingContinuation { continuation in
-      pending[id] = continuation
+    return try await withTaskCancellationHandler {
+      try await withCheckedThrowingContinuation { continuation in
+        pending[id] = continuation
 
-      if let (key, poll) = openPolls.max(by: { $0.value.openedAt < $1.value.openedAt }) {
-        openPolls.removeValue(forKey: key)
-        poll.continuation.resume(returning: .object(["command": envelope]))
-      } else {
-        queue.append(envelope)
-        nudge()
-      }
+        if let (key, poll) = openPolls.max(by: { $0.value.openedAt < $1.value.openedAt }) {
+          openPolls.removeValue(forKey: key)
+          poll.continuation.resume(returning: .object(["command": envelope]))
+        } else {
+          queue.append(envelope)
+          nudge()
+        }
 
-      Task {
-        try? await Task.sleep(for: timeout)
-        expire(id)
+        Task {
+          try? await Task.sleep(for: timeout)
+          expire(id)
+        }
       }
+    } onCancel: {
+      Task { @MainActor in self.cancel(id) }
     }
+  }
+
+  /// A delivered command still runs once the background gets to it; its late result is dropped.
+  private func cancel(_ id: String) {
+    queue.removeAll { $0["id"]?.string == id }
+    pending.removeValue(forKey: id)?.resume(throwing: CancellationError())
   }
 
   private func poll(_ instanceId: String) async -> JSONValue {

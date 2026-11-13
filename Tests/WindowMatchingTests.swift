@@ -78,6 +78,27 @@ struct WindowMatchingTests {
     }
   }
 
+  func titled(_ title: String, at frame: CGRect) -> WindowCandidate { WindowCandidate(title: title, frame: frame, minimized: false, urls: []) }
+
+  @Test func byFrameFindsTheTabsWindowWithoutWebAreas() throws {
+    let candidates = [titled("Other", at: CGRect(x: 0, y: 25, width: 1200, height: 800)), titled("Lab", at: CGRect(x: 100, y: 151, width: 1293, height: 1256))]
+    #expect(try WindowMatching.byFrame(tab: tab("https://a.test/", frame: CSSRect(left: 100, top: 151, width: 1293, height: 1256)), candidates: candidates) == 1)
+  }
+
+  @Test func byFrameBreaksTiesByTitle() throws {
+    let frame = CGRect(x: 0, y: 25, width: 1200, height: 800)
+    let page = tab("https://a.test/", frame: CSSRect(left: 0, top: 25, width: 1200, height: 800))
+    #expect(try WindowMatching.byFrame(tab: page, candidates: [titled("Mine", at: frame), titled("Page", at: frame)]) == 1)
+    #expect(throws: WindowMatchError.self) { try WindowMatching.byFrame(tab: page, candidates: [titled("Page", at: frame), titled("Page", at: frame)]) }
+    #expect(throws: WindowMatchError.self) { try WindowMatching.byFrame(tab: page, candidates: [titled("A", at: frame), titled("B", at: frame)]) }
+  }
+
+  @Test func byFrameNeedsAWindowFrameNearby() {
+    let candidates = [titled("Page", at: CGRect(x: 0, y: 25, width: 1200, height: 800))]
+    #expect(throws: WindowMatchError.self) { try WindowMatching.byFrame(tab: tab("https://a.test/"), candidates: candidates) }
+    #expect(throws: WindowMatchError.self) { try WindowMatching.byFrame(tab: tab("https://a.test/", frame: CSSRect(left: 500, top: 25, width: 1200, height: 800)), candidates: candidates) }
+  }
+
   @Test func distanceSumsEdgeOffsets() {
     #expect(WindowMatching.distance(CGRect(x: 10, y: 20, width: 100, height: 50), CSSRect(left: 12, top: 17, width: 100, height: 60)) == 15)
   }

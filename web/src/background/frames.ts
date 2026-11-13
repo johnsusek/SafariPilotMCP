@@ -43,7 +43,7 @@ export function parsePath(ref: RefPath): Path {
   return { frames: parts.slice(0, -1), local: parts.at(-1)! };
 }
 
-// Answers with a failure once ms pass, so a page stuck in a dialog such as alert() cannot hold the background's only poll.
+// Answers with a failure once ms pass, so a busy page cannot hold the background's only poll.
 export async function withTimeout<Answer>(
   answer: Promise<Answer>,
   ms: number,

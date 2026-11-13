@@ -64,6 +64,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case resizeWindow(tabId: Int?, width: Int, height: Int)
   /// Runs code in the page's main world, in the frame of iframe ref frame when given; the last expression comes back as JSON.
   case javascript(tabId: Int?, code: String, frame: PageRef?)
+  /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
+  case dialog(tabId: Int?, accept: Bool, promptText: String?)
   case debugAX(tabId: Int?, ref: PageRef?)
   /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call.
   case debugFrames(tabId: Int?)
@@ -119,7 +121,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -141,6 +143,13 @@ enum AppCommand: Codable, Sendable, Equatable {
     }
 
     return .click(tabId: tabId, ref: ref, action: action, modifiers: KeyChord.Modifier.allCases.filter(modifiers.contains))
+  }
+
+  /// "accept" or "dismiss", as Playwright's dialog.accept() and dialog.dismiss().
+  static func dialog(tabId: Int?, action: String, promptText: String?) throws -> AppCommand {
+    guard ["accept", "dismiss"].contains(action) else { throw Failure(description: "action must be accept or dismiss, not \(action)") }
+
+    return .dialog(tabId: tabId, accept: action == "accept", promptText: promptText)
   }
 
   /// "back" and "forward" walk history; anything else is a URL to load.

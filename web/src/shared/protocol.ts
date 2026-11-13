@@ -51,10 +51,7 @@ export type LoggedEvent = {
 
 // Click kinds named like Claude in Chrome's computer actions, and the keys held during a click.
 export type ClickAction =
-  | "left_click"
-  | "double_click"
-  | "triple_click"
-  | "right_click";
+  "left_click" | "double_click" | "triple_click" | "right_click";
 export type Modifier = "cmd" | "shift" | "alt" | "ctrl";
 
 export type ContentRequest =

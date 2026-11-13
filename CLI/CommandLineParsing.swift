@@ -30,6 +30,7 @@ enum CommandLineParsing {
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
     resize WIDTH HEIGHT             resize the tab's window in points
     javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
+    dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
     debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
@@ -75,6 +76,14 @@ enum CommandLineParsing {
 
       invocation = try Invocation(command: .resize(tabId: tabId, width: integer(rest[0], "WIDTH"), height: integer(rest[1], "HEIGHT")))
     case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
+    case "dialog":
+      // --text takes every word after it verbatim.
+      let textStart = rest.firstIndex(of: "--text")
+      let text = textStart.map { rest[($0 + 1)...].joined(separator: " ") }
+
+      if let textStart { rest.removeSubrange(textStart...) }
+
+      invocation = try Invocation(command: .dialog(tabId: tabId, action: rest.first ?? "missing", promptText: text))
     case "screenshot":
       let region = try option("--region", &rest).map { text in
         try text.split(separator: ",").map { word in

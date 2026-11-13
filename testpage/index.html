@@ -30,6 +30,17 @@
       </div>
 
       <div class="row">
+        <span>Dialogs</span>
+        <span>
+          <button id="alert" type="button" @click="alert('Alert from the lab'); values.dialog = 'alert closed'">Alert</button>
+          <button id="confirm" type="button" @click="values.dialog = `confirm ${confirm('Confirm from the lab?')}`">Confirm</button>
+          <button id="prompt" type="button" @click="values.dialog = `prompt ${JSON.stringify(prompt('Prompt from the lab', 'default'))}`">Prompt</button>
+          <button id="alerts" type="button" @click="alert('First of two'); alert('Second of two'); values.dialog = 'both alerts closed'">Two alerts</button>
+        </span>
+        <output x-text="values.dialog"></output>
+      </div>
+
+      <div class="row">
         <span>Link</span>
         <a id="link" href="#link" @click.prevent="bump('link')">Link</a>
         <output x-text="counts.link"></output>

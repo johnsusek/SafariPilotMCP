@@ -36,7 +36,7 @@ async function sendToContent(
   return await withTimeout(
     response,
     contentTimeoutMs,
-    `no answer from ${where} within ${contentTimeoutMs / 1000} s; a dialog such as alert() may be open in the page`,
+    `no answer from ${where} within ${contentTimeoutMs / 1000} s; the page is busy`,
   );
 }
 

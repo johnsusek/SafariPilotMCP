@@ -102,7 +102,8 @@ enum MCPServer {
       default: return ([text(reply.text)], reply.ok)
       }
 
-      guard reply.ok else { return ([text(reply.text)], false) }
+      // A dialog the click or key press opened stops the extension, so tabs cannot be listed until it closes.
+      guard reply.ok, reply.data["dialog"] == nil else { return ([text(reply.text)], reply.ok) }
 
       // A click or key press can open a popup; adopt it now so the caller hears about it.
       let opened = try await refresh().adopted.map { "opened tab \($0.id) \($0.url)" }

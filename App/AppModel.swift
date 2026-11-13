@@ -29,6 +29,8 @@ final class AppModel {
   private(set) var loginItem = SMAppService.mainApp.status
   var setupAlert: SetupAlert?
   private(set) var log: [LogEntry] = []
+  /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
+  var knownTabs: [Int: TabInfo] = [:]
   private var started = false
 
   var extensionState: String {

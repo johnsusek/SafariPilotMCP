@@ -56,6 +56,21 @@ enum WindowMatching {
     return index
   }
 
+  /// Index of the window holding the tab by its windowFrame, the window title (the active tab's title) breaking ties; for when the tab's web area is gone from AX, as while a dialog replaces it.
+  static func byFrame(tab: TabInfo, candidates: [WindowCandidate]) throws(WindowMatchError) -> Int {
+    guard let target = tab.windowFrame else { throw .unreachable("tab \(tab.id) has no windowFrame to find its window by") }
+
+    let close = candidates.indices.filter { candidates[$0].frame.map { distance($0, target) <= tolerance } ?? false }
+    let titled = close.count > 1 ? close.filter { candidates[$0].title == tab.title } : close
+    let found = candidates.isEmpty ? "no Safari windows" : candidates.map(\.summary).joined(separator: "; ")
+    let frameText = "(\(target.left), \(target.top), \(target.width) x \(target.height))"
+
+    guard !titled.isEmpty else { throw .noMatch("no Safari window titled \"\(tab.title)\" is within \(Int(tolerance)) pt of tab \(tab.id)'s windowFrame \(frameText); found: \(found)") }
+    guard titled.count == 1 else { throw .ambiguous("\(titled.count) Safari windows titled \"\(tab.title)\" are within \(Int(tolerance)) pt of tab \(tab.id)'s windowFrame \(frameText); found: \(found)") }
+
+    return titled[0]
+  }
+
   /// Summed edge offset under which a windows.Window frame counts as the same window as an AX frame.
   static let tolerance = 40.0
 

@@ -5,7 +5,7 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title"]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept"]
 
     // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
@@ -110,6 +110,17 @@ struct ToolMappingTests {
     for (name, arguments) in bad { #expect(throws: Failure.self, "\(name) \(arguments)") { try map(name, arguments) } }
 
     #expect(throws: Failure.self) { try Tools.waitSeconds(["seconds": .number(11)]) }
+  }
+
+  @Test func handleDialogMapsAcceptOrDismiss() throws {
+    #expect(try map("handle_dialog", ["action": "accept"]) == .dialog(tabId: 20, accept: true, promptText: nil))
+    #expect(try map("handle_dialog", ["action": "dismiss", "tabId": .number(3)]) == .dialog(tabId: 3, accept: false, promptText: nil))
+    #expect(try map("handle_dialog", ["action": "accept", "prompt_text": "Ada"]) == .dialog(tabId: 20, accept: true, promptText: "Ada"))
+    #expect(throws: Failure.self) { try map("handle_dialog", ["action": "ok"]) }
+    #expect(throws: Failure.self) { try map("handle_dialog") }
+    #expect(try CommandLineParsing.parse(["dialog", "accept", "--text", "two", "words"]).command == .dialog(tabId: nil, accept: true, promptText: "two words"))
+    #expect(try CommandLineParsing.parse(["--tab", "4", "dialog", "dismiss"]).command == .dialog(tabId: 4, accept: false, promptText: nil))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["dialog"]) }
   }
 
   @Test func findTakesNameAndRole() throws {

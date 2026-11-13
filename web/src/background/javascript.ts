@@ -3,7 +3,7 @@ import type { JavascriptResult } from "../shared/commands";
 import type { Failure } from "../shared/protocol";
 import { type Send, parsePath, walkPath, withTimeout } from "./frames";
 
-// As long as a content send: alert() or a promise that never settles must not hold the background's only poll.
+// As long as a content send: a promise that never settles must not hold the background's only poll.
 export let javascriptTimeoutMs = 15000;
 
 // The body of an async function that returns the code's last expression, so top-level await works and the value comes back as in a REPL.
@@ -113,6 +113,6 @@ export async function runJavascript(
   return await withTimeout(
     injected,
     javascriptTimeoutMs,
-    `the code did not finish within ${javascriptTimeoutMs / 1000} s; it may be waiting on a promise that never settles, or a dialog such as alert() is open`,
+    `the code did not finish within ${javascriptTimeoutMs / 1000} s; it may be waiting on a promise that never settles`,
   );
 }

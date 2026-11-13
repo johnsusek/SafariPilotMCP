@@ -86,6 +86,7 @@ document.addEventListener("alpine:init", () => {
       date: "",
       clickDetail: 0,
       modifiers: "",
+      dialog: "",
     },
     log: [],
 
