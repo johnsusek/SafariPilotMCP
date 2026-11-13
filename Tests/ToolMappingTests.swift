@@ -88,11 +88,6 @@ struct ToolMappingTests {
     #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20, region: nil, scale: 1))
   }
 
-  @Test func tabCreateUsesTheSessionWindow() throws {
-    let session = TabSession(owned: [20], current: 20, window: 4)
-    #expect(try Tools.command(name: "tab_create", arguments: [:], session: session) == .tabCreate(url: nil, windowId: 4))
-  }
-
   @Test func tierOneToolsMap() throws {
     #expect(try map("scroll_to", ["ref": .number(9)]) == .scrollTo(tabId: 20, ref: 9))
     #expect(try map("resize_window", ["width": .number(1200), "height": .number(800)]) == .resizeWindow(tabId: 20, width: 1200, height: 800))
@@ -146,7 +141,7 @@ struct ToolMappingTests {
     }
 
     #expect(try map("tabs_list", session: nil) == .tabs)
-    #expect(try map("tab_create", session: nil) == .tabCreate(url: nil, windowId: nil))
+    #expect(try map("tab_create", session: nil) == .tabCreate(url: nil))
   }
 
   @Test func sessionFollowsTabCreateAndClose() {
@@ -154,16 +149,16 @@ struct ToolMappingTests {
     let failed = CLIReply(ok: false, text: "", data: .object(["error": "no"]))
     let closed = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "closed": .number(31)]))
     var session = TabSession(owned: [8], current: 8)
-    session.record(.tabCreate(url: nil, windowId: nil), reply: failed)
+    session.record(.tabCreate(url: nil), reply: failed)
     #expect(session == TabSession(owned: [8], current: 8))
-    session.record(.tabCreate(url: nil, windowId: nil), reply: created)
-    #expect(session == TabSession(owned: [8, 31], current: 31, window: 4))
+    session.record(.tabCreate(url: nil), reply: created)
+    #expect(session == TabSession(owned: [8, 31], current: 31))
     session.record(.click(tabId: 8, ref: 1), reply: created)
-    #expect(session == TabSession(owned: [8, 31], current: 31, window: 4))
+    #expect(session == TabSession(owned: [8, 31], current: 31))
     session.record(.tabClose(tabId: 8), reply: closed)
-    #expect(session == TabSession(owned: [31], current: 31, window: 4))
+    #expect(session == TabSession(owned: [31], current: 31))
     session.record(.tabClose(tabId: 31), reply: closed)
-    #expect(session == TabSession(owned: [], current: nil, window: 4))
+    #expect(session == TabSession(owned: [], current: nil))
   }
 
   func tab(_ id: Int, opener: Int? = nil) -> TabInfo { TabInfo(id: id, windowId: 1, active: false, url: "https://\(id).test/", title: "", windowFrame: nil, openerId: opener) }
@@ -186,7 +181,7 @@ struct ToolMappingTests {
     #expect(AppCommand.click(tabId: 4, ref: 1).targetTab == 4)
     #expect(AppCommand.tabClose(tabId: 6).targetTab == 6)
     #expect(AppCommand.tabs.targetTab == nil)
-    #expect(AppCommand.tabCreate(url: nil, windowId: nil).targetTab == nil)
+    #expect(AppCommand.tabCreate(url: nil).targetTab == nil)
   }
 
   @Test func integersAcceptDigitStrings() throws {
@@ -330,8 +325,8 @@ struct ToolMappingTests {
 
   @Test func tabToolsMap() throws {
     #expect(try map("tabs_list") == .tabs)
-    #expect(try map("tab_create") == .tabCreate(url: nil, windowId: nil))
-    #expect(try map("tab_create", ["url": "https://example.com"]) == .tabCreate(url: "https://example.com", windowId: nil))
+    #expect(try map("tab_create") == .tabCreate(url: nil))
+    #expect(try map("tab_create", ["url": "https://example.com"]) == .tabCreate(url: "https://example.com"))
     #expect(try map("tab_close", ["tabId": .number(3)]) == .tabClose(tabId: 3))
   }
 }

@@ -20,7 +20,17 @@ let tab = (id: number, windowId: number, active: boolean) =>
     title: `T${id}`,
   }) as chrome.tabs.Tab;
 
+let stored: Record<string, unknown>;
+
 let fakeBrowser = () => ({
+  storage: {
+    session: {
+      get: vi.fn(async (key: string) => ({ [key]: stored[key] })),
+      set: vi.fn(async (items: Record<string, unknown>) => {
+        Object.assign(stored, items);
+      }),
+    },
+  },
   tabs: {
     query: vi.fn(async (filter: { active?: boolean }) =>
       filter.active
@@ -74,6 +84,7 @@ let frame = { left: 10, top: 20, width: 800, height: 600 };
 beforeEach(() => {
   tabs = [tab(5, 1, true), tab(6, 1, false), tab(7, 2, true)];
   listeners = new Set();
+  stored = {};
   fake = fakeBrowser();
   vi.stubGlobal("browser", fake);
 });
@@ -203,17 +214,14 @@ describe("runCommand", () => {
     expect(await pending).toMatchObject({ ok: false });
   });
 
-  test("tabCreate with a url opens in the given window and waits", async () => {
+  test("tabCreate with a url opens in the pilot window and waits", async () => {
+    stored.pilotWindow = 1;
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       fireComplete(8);
       return tabs.at(-1);
     });
-    let result = await run({
-      type: "tabCreate",
-      url: "https://new",
-      windowId: 1,
-    });
+    let result = await run({ type: "tabCreate", url: "https://new" });
     expect(fake.tabs.create).toHaveBeenCalledWith({
       windowId: 1,
       url: "https://new",
@@ -227,11 +235,12 @@ describe("runCommand", () => {
 
   test("tabCreate answers with a tab still loading after the timeout, so its caller can own it", async () => {
     vi.useFakeTimers();
+    stored.pilotWindow = 1;
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       return tabs.at(-1);
     });
-    let pending = run({ type: "tabCreate", url: "https://slow", windowId: 1 });
+    let pending = run({ type: "tabCreate", url: "https://slow" });
     await vi.advanceTimersByTimeAsync(loadTimeoutMs);
     expect(await pending).toMatchObject({
       ok: true,
@@ -241,21 +250,40 @@ describe("runCommand", () => {
     expect(listeners.size).toBe(0);
   });
 
-  test("tabCreate opens an unfocused window when it has none or it is closed", async () => {
+  test("tabCreate opens an unfocused pilot window when none is open, then reuses it", async () => {
     fake.windows.create.mockImplementation(async () => {
       tabs.push(tab(9, 3, true));
       return { id: 3, tabs: [tabs.at(-1)!] };
     });
-    fake.windows.get.mockRejectedValueOnce(new Error("No window with id: 4"));
-    await run({ type: "tabCreate", url: null, windowId: 4 });
-    let result = await run({ type: "tabCreate", url: null, windowId: null });
-    expect(fake.windows.create).toHaveBeenCalledTimes(2);
+    fake.tabs.create.mockImplementation(async () => {
+      tabs.push(tab(10, 3, true));
+      return tabs.at(-1);
+    });
+    let first = await run({ type: "tabCreate", url: null });
+    let second = await run({ type: "tabCreate", url: null });
+    expect(fake.windows.create).toHaveBeenCalledOnce();
     expect(fake.windows.create).toHaveBeenCalledWith({
       url: undefined,
       focused: false,
     });
+    expect(fake.tabs.create).toHaveBeenCalledWith({
+      windowId: 3,
+      url: undefined,
+    });
+    expect(first).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
+    expect(second).toMatchObject({ ok: true, tab: { id: 10, windowId: 3 } });
+  });
+
+  test("tabCreate replaces a closed pilot window", async () => {
+    stored.pilotWindow = 4;
+    fake.windows.get.mockRejectedValueOnce(new Error("No window with id: 4"));
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 3, true));
+      return { id: 3, tabs: [tabs.at(-1)!] };
+    });
+    await run({ type: "tabCreate", url: null });
     expect(fake.tabs.create).not.toHaveBeenCalled();
-    expect(result).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
+    expect(stored.pilotWindow).toBe(3);
   });
 
   test("tabSelect activates without focusing the window, tabClose reports the id", async () => {

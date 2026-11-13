@@ -126,8 +126,8 @@ export type Command =
   | { type: "tabs" }
   // Resolves the target tab without side effects.
   | { type: "tab"; tabId: number | null }
-  // Opens a tab in windowId, or in a new unfocused window when it is null or closed; with a url, answers once it has loaded, or as loading after a timeout.
-  | { type: "tabCreate"; url: string | null; windowId: number | null }
+  // Opens a tab in the pilot window, or in a new unfocused one when it is closed; with a url, answers once it has loaded, or as loading after a timeout.
+  | { type: "tabCreate"; url: string | null }
   // Makes the tab the active tab of its window.
   | { type: "tabSelect"; tabId: number }
   | { type: "tabClose"; tabId: number }

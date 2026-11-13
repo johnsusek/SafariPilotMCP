@@ -67,7 +67,7 @@ enum CommandLineParsing {
       invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF"), actionName: action, modifierNames: modifiers))
     case "events": invocation = Invocation(command: .events(tabId: tabId, clear: flag("--clear", &rest)))
     case "tabs": invocation = Invocation(command: .tabs)
-    case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first, windowId: nil))
+    case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first))
     case "tab-select": invocation = try Invocation(command: .tabSelect(tabId: integer(rest.first, "ID")))
     case "tab-close": invocation = try Invocation(command: .tabClose(tabId: integer(rest.first, "ID")))
     case "read-page":

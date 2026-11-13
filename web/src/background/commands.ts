@@ -136,17 +136,19 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };
 
   if (command.type === "tabCreate") {
-    // windowId is the caller's own window; with none, or once it is closed, a new unfocused window holds the tab.
+    // Every session shares one pilot window; session storage forgets it when Safari quits or the extension reloads, which renumber windows.
     let url = command.url ?? undefined;
+    let { pilotWindow } = await browser.storage.session.get("pilotWindow");
     let window =
-      command.windowId === null
-        ? null
-        : await browser.windows.get(command.windowId).catch(() => null);
+      typeof pilotWindow === "number"
+        ? await browser.windows.get(pilotWindow).catch(() => null)
+        : null;
     let create = async () => {
       if (window)
         return (await browser.tabs.create({ windowId: window.id, url })).id!;
 
       let created = await browser.windows.create({ url, focused: false });
+      await browser.storage.session.set({ pilotWindow: created!.id });
       return created!.tabs![0].id!;
     };
 

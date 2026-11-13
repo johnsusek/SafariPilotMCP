@@ -50,8 +50,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case formInput(tabId: Int?, ref: PageRef, value: FormValue)
   case events(tabId: Int?, clear: Bool)
   case tabs
-  /// Opens the tab in windowId, or in a new window when it is nil or closed.
-  case tabCreate(url: String?, windowId: Int?)
+  /// Opens the tab in SafariPilot's window, or in a new one when none is open.
+  case tabCreate(url: String?)
   case tabSelect(tabId: Int)
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)
