@@ -60,6 +60,17 @@ struct SyntheticClickResult: Codable, Sendable {
   let dispatched: [Dispatched]
   let focused: String
 }
+/// via says whether a file input took the files or they were dropped on target; files are read back from the page; dispatched lists the events in order, canceled when a listener called preventDefault.
+struct UploadResult: Codable, Sendable {
+  enum Via: String, Codable, Sendable { case input, drop }
+  struct Sent: Codable, Sendable, Equatable { let name: String; let size: Int; let type: String }
+
+  let ref: PageRef
+  let target: String
+  let via: Via
+  let files: [Sent]
+  let dispatched: [SyntheticClickResult.Dispatched]
+}
 /// Events from every frame. origin is the top frame's performance.timeOrigin and origins each answering frame's, keyed by frame path; a different origin between two reads means that frame navigated or reloaded. busy lists frames that did not answer in time, which are not gone.
 struct EventsResult: Codable, Sendable {
   let events: [LoggedEvent]
@@ -108,6 +119,8 @@ enum ContentRequest: Equatable, Sendable {
   case setColor(ref: PageRef, value: String)
   /// Dispatches untrusted pointer and mouse events for the click at the element's center and focuses as a press would.
   case syntheticClick(ref: PageRef, action: ClickAction, modifiers: [KeyChord.Modifier])
+  /// Gives a file input (ref, a label for one, or the only one inside ref) the files and fires untrusted input and change, or drops them on any other element.
+  case upload(ref: PageRef, files: [UploadFile])
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
   case pageText(maxChars: Int)
@@ -123,6 +136,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
     case let .setColor(ref, value): ["op": "setColor", "ref": .string(ref.description), "value": .string(value)]
     case let .syntheticClick(ref, action, modifiers): ["op": "syntheticClick", "ref": .string(ref.description), "action": .string(action.rawValue), "modifiers": .array(modifiers.map { .string($0.rawValue) })]
+    case let .upload(ref, files): ["op": "upload", "ref": .string(ref.description), "files": .array(files.map { .object(["name": .string($0.name), "mimeType": .string($0.mimeType), "lastModified": .number($0.lastModified), "data": .string($0.data)]) })]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]

@@ -11,6 +11,8 @@ import type {
   LoggedEvent,
   Modifier,
   Rect,
+  UploadFile,
+  UploadResult,
   Viewport,
 } from "./protocol";
 
@@ -33,6 +35,7 @@ export type PageRequest =
       action: ClickAction;
       modifiers: Modifier[];
     }
+  | { op: "upload"; ref: RefPath; files: UploadFile[] }
   | {
       op: "readPage";
       filter: "interactive" | "all";
@@ -67,6 +70,7 @@ export type PageEventsResult = {
 };
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
 export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
+export type PageUploadResult = Omit<UploadResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
 export type PageSnapshotResult = {
   ok: true;
@@ -147,6 +151,7 @@ export type CommandResponse =
   | PageLocateResult
   | PageInspectResult
   | PageClickResult
+  | PageUploadResult
   | PageFindResult
   | PageSnapshotResult
   | PageReadResult

@@ -4,3 +4,7 @@ declare let browser: typeof chrome & {
     getFrameId(target: Element | Window): number;
   };
 };
+// Safari 18.2+; lib ES2022 does not declare it yet.
+interface Uint8ArrayConstructor {
+  fromBase64(text: string): Uint8Array<ArrayBuffer>;
+}

@@ -8,12 +8,17 @@
     <button id="button" type="button">Child button</button>
     <input id="field" aria-label="Child field" />
     <output id="count">0</output>
+    <input id="file" type="file" aria-label="Child file" />
+    <output id="file-shown">none</output>
     <script>
       let params = new URLSearchParams(location.search);
       document.title = `Frame ${params.get("name")}`;
       document.getElementById("button").textContent = `${params.get("name")} button`;
       document.getElementById("field").setAttribute("aria-label", `${params.get("name")} field`);
       document.getElementById("button").addEventListener("click", () => document.getElementById("count").textContent++);
+      document.getElementById("file").addEventListener("change", (event) => {
+        document.getElementById("file-shown").textContent = Array.from(event.target.files, (file) => `${file.name} ${file.size} B`).join(" | ");
+      });
 
       if (params.get("nest")) {
         let inner = document.createElement("iframe");

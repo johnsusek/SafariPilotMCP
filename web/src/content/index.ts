@@ -9,6 +9,7 @@ import { pageText } from "./pageText";
 import { scroll, scrollIntoView } from "./scroll";
 import { snapshot } from "./snapshot";
 import { readPage } from "./tree";
+import { upload } from "./upload";
 
 installLogger();
 
@@ -25,6 +26,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "setColor") return setColor(request.ref, request.value);
     if (request.op === "syntheticClick")
       return syntheticClick(request.ref, request.action, request.modifiers);
+    if (request.op === "upload") return upload(request.ref, request.files);
     if (request.op === "readPage")
       return readPage(
         request.filter,

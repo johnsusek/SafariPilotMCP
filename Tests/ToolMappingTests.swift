@@ -5,7 +5,10 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept"]
+    let file = FileManager.default.temporaryDirectory.appending(path: "sample-\(UUID().uuidString).txt")
+    try Data("sample".utf8).write(to: file)
+    defer { try? FileManager.default.removeItem(at: file) }
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept", "paths": .array([.string(file.path)])]
 
     // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {

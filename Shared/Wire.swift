@@ -68,6 +68,15 @@ enum Wire {
     return .success(Data(buffer[(newline + 1)...]))
   }
 
+  /// The first line break at or after offset, found with memchr: a generic byte scan of a multi-megabyte file_upload line took most of the upload's time.
+  static func newline(in data: Data, from offset: Int = 0) -> Data.Index? {
+    data.withUnsafeBytes { bytes in
+      guard offset < bytes.count, let base = bytes.baseAddress, let found = memchr(base + offset, 0x0A, bytes.count - offset) else { return nil }
+
+      return data.startIndex + base.distance(to: UnsafeRawPointer(found))
+    }
+  }
+
   /// Blocking exchange; callers on an actor wrap it in a detached task.
   static func exchange(_ request: Data, timeoutSeconds: Int = 120) throws -> Data {
     let token = try readToken()
@@ -106,7 +115,7 @@ enum Wire {
       if buffer[0 ..< count].contains(0x0A) { break }
     }
 
-    let line = reply.prefix { $0 != 0x0A }
+    let line = reply[..<(newline(in: reply) ?? reply.endIndex)]
 
     if line.starts(with: rejection) {
       throw Failure(description: "SafariPilot.app rejected the connection: \(String(decoding: line.dropFirst(rejection.count), as: UTF8.self))")

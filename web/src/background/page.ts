@@ -18,6 +18,7 @@ import type {
   InspectResult,
   PageTextResult,
   ReadPageResult,
+  UploadResult,
 } from "../shared/protocol";
 import {
   inFrame,
@@ -371,11 +372,11 @@ async function dispatch(
     return scrolled.ok ? scrolled : inFrame(scrolled, path);
   }
 
-  if (request.op === "syntheticClick") {
-    let clicked = await send(frameId, { ...request, ref: path.local });
-    return clicked.ok
-      ? { ...(clicked as ClickResult), ref: request.ref }
-      : inFrame(clicked, path);
+  if (request.op === "syntheticClick" || request.op === "upload") {
+    let acted = await send(frameId, { ...request, ref: path.local });
+    return acted.ok
+      ? { ...(acted as ClickResult | UploadResult), ref: request.ref }
+      : inFrame(acted, path);
   }
 
   let inspected = await send(

@@ -77,6 +77,34 @@ describe("treeText", () => {
     expect(text).not.toContain("hunter2");
   });
 
+  test("file inputs show their type, what they take and the chosen files", () => {
+    let { text } = render(
+      '<input type="file" aria-label="Photos" multiple accept="image/*"><input id="one" type="file" aria-label="Resume"><input id="bare" type="file">',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        'button "Photos" type=file multiple accept="image/*"',
+        'button "Resume" type=file',
+        "button type=file",
+      ].join("\n"),
+    );
+    let transfer = new DataTransfer();
+    transfer.items.add(new File(["a"], "cv.pdf"));
+
+    for (let id of ["one", "bare"])
+      (document.getElementById(id) as HTMLInputElement).files = transfer.files;
+
+    // A file input's value is a fake path, never its name.
+    expect(
+      withoutRefs(treeText(document.body, "all", 10000).text)
+        .split("\n")
+        .slice(1),
+    ).toEqual([
+      'button "Resume" type=file value="cv.pdf"',
+      'button type=file value="cv.pdf"',
+    ]);
+  });
+
   test("long values and offsite links are shortened", () => {
     let { text } = render(
       `<textarea aria-label="Note">${"x".repeat(100)}</textarea><a href="https://example.org/a/b?c=1">Out</a>`,

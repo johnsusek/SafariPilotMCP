@@ -20,6 +20,8 @@ let loggedTypes = [
   "change",
   "submit",
   "dragstart",
+  "dragenter",
+  "dragleave",
   "drop",
   "dragend",
 ];
@@ -87,6 +89,7 @@ document.addEventListener("alpine:init", () => {
       clickDetail: 0,
       modifiers: "",
       dialog: "",
+      files: {},
     },
     log: [],
 
@@ -113,12 +116,27 @@ document.addEventListener("alpine:init", () => {
 
     modifiersOf,
 
+    // Each file as name, size, type and its first 8 bytes in hex, so an upload shows what arrived byte for byte.
+    async showFiles(name, files) {
+      let lines = await Promise.all(
+        Array.from(files, async (file) => {
+          let head = new Uint8Array(await file.slice(0, 8).arrayBuffer());
+          let hex = Array.from(head, (byte) =>
+            byte.toString(16).padStart(2, "0"),
+          ).join(" ");
+          return `${file.name} ${file.size} B ${file.type || "no type"} [${hex}]`;
+        }),
+      );
+      this.values.files[name] = lines.join(" | ") || "none";
+    },
+
     bump(name) {
       this.counts[name]++;
     },
 
     reset() {
       for (let name of counterNames) this.counts[name] = 0;
+      this.values.files = {};
       this.log = [];
     },
 

@@ -53,6 +53,13 @@ export type LoggedEvent = {
 export type ClickAction =
   "left_click" | "double_click" | "triple_click" | "right_click";
 export type Modifier = "cmd" | "shift" | "alt" | "ctrl";
+// A local file handed to the page: data is its bytes in base64, lastModified epoch ms, mimeType "" when unknown (as browsers report it).
+export type UploadFile = {
+  name: string;
+  mimeType: string;
+  lastModified: number;
+  data: string;
+};
 
 export type ContentRequest =
   | { op: "ping" }
@@ -71,6 +78,9 @@ export type ContentRequest =
       action: ClickAction;
       modifiers: Modifier[];
     }
+  // Gives a file input (ref, the label of one, or the only one inside ref) the files through a DataTransfer and fires untrusted input and change;
+  // on any other element dispatches untrusted dragenter, dragover and drop carrying them.
+  | { op: "upload"; ref: number; files: UploadFile[] }
   // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
   | {
       op: "readPage";
@@ -156,6 +166,16 @@ export type ClickResult = {
   dispatched: { type: string; canceled: boolean }[];
   focused: string;
 };
+// upload: target is the file input that took the files, or what the drop events went to; via says which; files are read back from
+// the input or the DataTransfer; dispatched lists the events in order, canceled when a listener called preventDefault.
+export type UploadResult = {
+  ok: true;
+  ref: number;
+  target: string;
+  via: "input" | "drop";
+  files: { name: string; size: number; type: string }[];
+  dispatched: { type: string; canceled: boolean }[];
+};
 // origin is performance.timeOrigin, which changes when the page navigates or reloads.
 export type EventsResult = { ok: true; events: LoggedEvent[]; origin: number };
 
@@ -234,6 +254,7 @@ export type ContentResponse =
   | EventsResult
   | InspectResult
   | ClickResult
+  | UploadResult
   | ReadPageResult
   | FindResult
   | PageTextResult

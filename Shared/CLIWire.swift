@@ -1,3 +1,6 @@
+import Foundation
+import UniformTypeIdentifiers
+
 /// CLI to app: the app does the work and returns both readable text and structured data.
 struct CLIRequest: Codable, Sendable {
   var kind = "cli"
@@ -64,6 +67,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case resizeWindow(tabId: Int?, width: Int, height: Int)
   /// Runs code in the page's main world, in the frame of iframe ref frame when given; the last expression comes back as JSON.
   case javascript(tabId: Int?, code: String, frame: PageRef?)
+  /// Gives the files to a file input, or drops them on any other element; the CLI or MCP process read them, so their bytes travel in the command.
+  case fileUpload(tabId: Int?, ref: PageRef, files: [UploadFile])
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
   case debugAX(tabId: Int?, ref: PageRef?)
@@ -121,7 +126,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -143,6 +148,11 @@ enum AppCommand: Codable, Sendable, Equatable {
     }
 
     return .click(tabId: tabId, ref: ref, action: action, modifiers: KeyChord.Modifier.allCases.filter(modifiers.contains))
+  }
+
+  /// Reads the files at paths, refusing them all when one is missing, not absolute, a directory, or together they pass maxUploadBytes.
+  static func fileUpload(tabId: Int?, ref: PageRef, paths: [String]) throws -> AppCommand {
+    .fileUpload(tabId: tabId, ref: ref, files: try UploadFile.read(paths))
   }
 
   /// "accept" or "dismiss", as Playwright's dialog.accept() and dialog.dismiss().
@@ -199,6 +209,65 @@ enum AppCommand: Codable, Sendable, Equatable {
 /// Kinds of click, named like Claude in Chrome's computer actions.
 enum ClickAction: String, Codable, Sendable, CaseIterable {
   case left = "left_click", double = "double_click", triple = "triple_click", right = "right_click"
+}
+
+/// A local file for file_upload: data is its bytes in base64, as the page script takes them; lastModified is epoch ms and mimeType "" when the extension has none, as browsers report it.
+struct UploadFile: Codable, Sendable, Equatable, CustomStringConvertible, CustomDebugStringConvertible {
+  let name: String
+  let mimeType: String
+  let lastModified: Double
+  let size: Int
+  let data: String
+
+  /// All files of one call together. Safari 27's tabs.sendMessage refuses messages over 64 MiB, which base64 reaches at 48 MiB of files; 32 MiB leaves a third of it spare.
+  static let maxUploadBytes = 32 * 1_048_576
+
+  /// The activity log prints commands, so the bytes stay out of the description.
+  var description: String { "\(name) (\(size) bytes)" }
+  var debugDescription: String { description }
+
+  static func megabytes(_ bytes: Int) -> String { String(format: "%.1f MB", Double(bytes) / 1_048_576) }
+
+  /// Sizes are checked before anything is read, so an oversized file is never loaded.
+  static func read(_ paths: [String]) throws -> [UploadFile] {
+    guard !paths.isEmpty else { throw Failure(description: "file_upload needs at least one path") }
+
+    var total = 0
+    var found: [(url: URL, size: Int, modified: Date)] = []
+
+    for path in paths {
+      guard path.hasPrefix("/") else { throw Failure(description: "\(path) is not an absolute path; nothing was uploaded") }
+
+      let url = URL(filePath: path)
+      let attributes: [FileAttributeKey: Any]
+
+      // A symlink is uploaded as its target's bytes under the link's name.
+      do { attributes = try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path) } catch { throw Failure(description: "cannot read \(path), so nothing was uploaded: \(error.localizedDescription)") }
+
+      guard attributes[.type] as? FileAttributeType == .typeRegular else { throw Failure(description: "\(path) is not a regular file; nothing was uploaded") }
+
+      let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
+      total += size
+
+      guard total <= maxUploadBytes else {
+        let together = found.isEmpty ? "is \(megabytes(size))" : "brings the files to \(megabytes(total))"
+        throw Failure(description: "\(url.lastPathComponent) \(together), over file_upload's limit of \(megabytes(maxUploadBytes)) for all files of one call; nothing was uploaded")
+      }
+
+      found.append((url, size, attributes[.modificationDate] as? Date ?? .now))
+    }
+
+    return try found.map { url, size, modified in
+      let data: Data
+
+      do { data = try Data(contentsOf: url) } catch { throw Failure(description: "cannot read \(url.path), so nothing was uploaded: \(error.localizedDescription)") }
+
+      guard data.count == size else { throw Failure(description: "\(url.path) changed size while being read; nothing was uploaded") }
+
+      let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? ""
+      return UploadFile(name: url.lastPathComponent, mimeType: mimeType, lastModified: (modified.timeIntervalSince1970 * 1000).rounded(), size: size, data: data.base64EncodedString())
+    }
+  }
 }
 
 /// A rectangle in image pixels from its top-left corner to its bottom-right corner.

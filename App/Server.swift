@@ -46,8 +46,10 @@ enum Server {
   private static func serve(_ connection: NetworkConnection<TCP>, token: Data, model: AppModel) async throws {
     var buffer = Data()
     var authenticated = false
+    var scanned = 0
+    var end: Data.Index?
 
-    while true {
+    while end == nil {
       let (content, metadata) = try await connection.receive(atMost: 1 << 20)
       buffer.append(content)
 
@@ -56,6 +58,7 @@ enum Server {
         case let .success(rest):
           buffer = rest
           authenticated = true
+          scanned = 0
         case let .failure(failure):
           model.record("connection", ok: false, summary: "rejected: \(failure)")
           try await connection.send(Wire.rejection + Data("\(failure)\n".utf8), endOfStream: true)
@@ -63,7 +66,13 @@ enum Server {
         }
       }
 
-      if metadata.endOfStream || (authenticated && buffer.contains(0x0A)) { break }
+      // Only the new bytes are scanned, since an upload's line runs to tens of megabytes.
+      if authenticated {
+        end = Wire.newline(in: buffer, from: scanned)
+        scanned = buffer.count
+      }
+
+      if metadata.endOfStream { break }
     }
 
     guard authenticated else {
@@ -71,7 +80,7 @@ enum Server {
       return
     }
 
-    let message = try JSONDecoder().decode(JSONValue.self, from: buffer.prefix { $0 != 0x0A })
+    let message = try JSONDecoder().decode(JSONValue.self, from: buffer[..<(end ?? buffer.endIndex)])
     let reply: Data = switch message["kind"]?.string {
     case "cli": try await JSONEncoder().encode(model.runCLI(message.decode(CLIRequest.self)))
     case "hello": try await JSONEncoder().encode(model.gate.approve(message.decode(HelloRequest.self)))

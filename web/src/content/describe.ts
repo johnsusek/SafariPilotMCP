@@ -234,7 +234,9 @@ export function nameOf(element: Element, fromContent = true) {
         ? [...new Set(Array.from(input.labels, shownText))].join(" ")
         : "",
     () =>
-      element.localName === "input" && inputRoles[input.type] === "button"
+      element.localName === "input" &&
+      inputRoles[input.type] === "button" &&
+      input.type !== "file"
         ? input.value || input.alt
         : "",
     () => (element.localName === "img" ? element.getAttribute("alt") : ""),

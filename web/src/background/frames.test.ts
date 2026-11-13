@@ -683,7 +683,7 @@ describe("runPage reads", () => {
     });
   });
 
-  test("inspect, setColor, scroll and syntheticClick route to the owning frame", async () => {
+  test("inspect, setColor, scroll, syntheticClick and upload route to the owning frame", async () => {
     documents[200].answer = (request) =>
       request.op === "inspect" || request.op === "setColor"
         ? {
@@ -753,6 +753,24 @@ describe("runPage reads", () => {
         modifiers: ["shift"],
       },
     ]);
+    let files = [
+      { name: "a.txt", mimeType: "text/plain", lastModified: 1, data: "YQ==" },
+    ];
+    documents[200].answer = (request) =>
+      request.op === "upload"
+        ? {
+            ok: true,
+            ref: request.ref,
+            target: "input#file",
+            via: "input",
+            files: [{ name: "a.txt", size: 1, type: "text/plain" }],
+            dispatched: [{ type: "change", canceled: false }],
+          }
+        : undefined;
+    expect(
+      await runPage(send, { op: "upload", ref: "5:3:4", files }),
+    ).toMatchObject({ ok: true, ref: "5:3:4", via: "input" });
+    expect(calls.at(-1)).toEqual([200, { op: "upload", ref: 4, files }]);
     expect(await runPage(send, { op: "inspect", ref: "5.4" })).toMatchObject({
       ok: false,
       error: expect.stringMatching(/must look like 12/),

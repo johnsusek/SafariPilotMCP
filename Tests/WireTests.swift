@@ -36,6 +36,17 @@ struct WireTests {
     #expect(rest == Data("{}".utf8))
   }
 
+  @Test func newlineIsFoundFromAnOffsetInSlices() {
+    let line = Data("ab\ncd\n".utf8)
+    #expect(Wire.newline(in: line) == 2)
+    #expect(Wire.newline(in: line, from: 3) == 5)
+    #expect(Wire.newline(in: line, from: 6) == nil)
+    #expect(Wire.newline(in: Data("abc".utf8)) == nil)
+    let slice = line.dropFirst(3)
+    #expect(Wire.newline(in: slice) == 5)
+    #expect(slice[..<Wire.newline(in: slice)!] == Data("cd".utf8))
+  }
+
   @Test func wrongOrMissingTokenIsRejected() {
     let bareJSON = Data(#"{"kind":"cli","command":"click"}"#.utf8) + Data([0x0A])
     #expect(rejection(Wire.authenticate(Wire.newToken() + Data([0x0A]), token: token)) == "token mismatch")

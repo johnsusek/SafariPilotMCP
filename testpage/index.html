@@ -152,6 +152,31 @@
       </div>
 
       <div class="row">
+        <span>Files</span>
+        <input id="files-many" type="file" multiple @change="showFiles('many', $event.target.files)" />
+        <output x-text="values.files.many"></output>
+      </div>
+
+      <div class="row">
+        <span>One file</span>
+        <input id="files-one" type="file" accept="image/*" @change="showFiles('one', $event.target.files)" />
+        <output x-text="values.files.one"></output>
+      </div>
+
+      <div class="row">
+        <span>Hidden file</span>
+        <label id="files-label" class="fake" for="files-hidden">Choose</label>
+        <input id="files-hidden" type="file" multiple hidden @change="showFiles('hidden', $event.target.files)" />
+        <output x-text="values.files.hidden"></output>
+      </div>
+
+      <div class="row">
+        <span>File drop</span>
+        <div id="file-drop" class="fake" @dragover.prevent @drop.prevent="showFiles('drop', $event.dataTransfer.files)">Drop files</div>
+        <output x-text="values.files.drop"></output>
+      </div>
+
+      <div class="row">
         <span>In scroller</span>
         <div class="scroller">
           <div class="spacer-small"></div>

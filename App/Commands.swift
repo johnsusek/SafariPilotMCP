@@ -30,6 +30,7 @@ struct Commands {
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
     case let .javascript(tabId, code, frame): try await javascript(tabId, code, frame)
+    case let .fileUpload(tabId, ref, files): try await fileUpload(tabId, ref, files)
     case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
@@ -392,6 +393,29 @@ struct Commands {
     let result = try response.decode(SyntheticClickResult.self)
     let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
     let text = "dispatched a synthetic \(action.rawValue.split(separator: "_").joined(separator: " "))\(held) on ref \(ref) \(result.target) in tab \(tab.id) as untrusted events: \(events); browser defaults such as text selection and the context menu do not run; focus is on \(result.focused)"
+    return CLIReply(ok: true, text: text, data: response)
+  }
+
+  /// Safari's open panel cannot be driven in the background, so the content script hands the page File objects instead; no AX is involved, so the tab stays where it is in its window.
+  private func fileUpload(_ tabId: Int?, _ ref: PageRef, _ files: [UploadFile]) async throws -> CLIReply {
+    let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let response: JSONValue
+
+    // A change or drop listener that opens a dialog keeps the page from answering until handle_dialog closes it.
+    do { response = try await content(tab.id, .upload(ref: ref, files: files)) } catch {
+      guard let open = try AXEngine.dialog(for: tab) else { throw error }
+
+      let text = "handed \(files.map(\.name).joined(separator: ", ")) to ref \(ref) in tab \(tab.id), which opened \(open.dialog.line); handle_dialog accepts or dismisses it"
+      return try CLIReply(ok: true, text: text, data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
+    }
+
+    let result = try response.decode(UploadResult.self)
+    let sent = result.files.map { "\($0.name) (\($0.size) bytes\($0.type.isEmpty ? "" : ", \($0.type)"))" }.joined(separator: ", ")
+    let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
+    let text = switch result.via {
+    case .input: "set \(result.target) for ref \(ref) in tab \(tab.id) to \(sent) and dispatched untrusted \(events)"
+    case .drop: "dropped \(sent) on \(result.target) for ref \(ref) in tab \(tab.id) as untrusted \(events)\(result.dispatched.last?.canceled == true ? "" : "; no drop listener called preventDefault, so the page may have ignored it")"
+    }
     return CLIReply(ok: true, text: text, data: response)
   }
 

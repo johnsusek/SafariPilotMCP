@@ -1,3 +1,5 @@
+import Foundation
+
 /// A parsed CLI invocation; outputPath is where screenshot writes its PNG.
 struct Invocation: Equatable {
   let command: AppCommand
@@ -30,6 +32,7 @@ enum CommandLineParsing {
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
     resize WIDTH HEIGHT             resize the tab's window in points
     javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
+    file-upload REF PATH...         give files to the file input REF (or the one it labels or holds), or drop them on REF
     dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
@@ -116,6 +119,12 @@ enum CommandLineParsing {
 
       // CODE is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .javascript(tabId: tabId, text: rest.joined(separator: " "), frame: frame))
+    case "file-upload":
+      guard rest.count >= 2 else { throw Failure(description: "file-upload needs REF and at least one PATH") }
+
+      // Paths are taken verbatim, relative ones from the current directory, so they skip the stray option check below.
+      let paths = rest.dropFirst().map { URL(filePath: $0, relativeTo: URL.currentDirectory()).standardizedFileURL.path }
+      return try Invocation(command: .fileUpload(tabId: tabId, ref: ref(rest[0], "REF"), paths: paths))
     case "find":
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")

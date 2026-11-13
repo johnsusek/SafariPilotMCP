@@ -220,6 +220,10 @@ function valueOf(element: Element) {
   if (tag !== "input") return "";
 
   let input = element as HTMLInputElement;
+
+  if (input.type === "file")
+    return Array.from(input.files ?? [], (file) => file.name).join(", ");
+
   return textInputTypes.has(input.type) ? input.value : "";
 }
 
@@ -277,6 +281,15 @@ function statesOf(element: Element, role: string) {
 
   if (html.required === true || aria("required") === "true")
     states.push("required");
+
+  // file_upload targets these, so they say what they are and what they take.
+  if (element instanceof HTMLInputElement && element.type === "file") {
+    states.push("type=file");
+
+    if (element.multiple) states.push("multiple");
+
+    if (element.accept) states.push(`accept=${JSON.stringify(element.accept)}`);
+  }
 
   let value = collapse(valueOf(element), valueMax);
 
