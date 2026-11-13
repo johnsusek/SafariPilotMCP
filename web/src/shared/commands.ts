@@ -126,7 +126,7 @@ export type Command =
   | { type: "tabs" }
   // Resolves the target tab without side effects.
   | { type: "tab"; tabId: number | null }
-  // Opens a tab in windowId, or in a new unfocused window when it is null or closed; with a url, answers once it has loaded.
+  // Opens a tab in windowId, or in a new unfocused window when it is null or closed; with a url, answers once it has loaded, or as loading after a timeout.
   | { type: "tabCreate"; url: string | null; windowId: number | null }
   // Makes the tab the active tab of its window.
   | { type: "tabSelect"; tabId: number }
@@ -149,7 +149,8 @@ export type Command =
     };
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
-export type TabResult = { ok: true; tab: TabInfo };
+// loading is set by commands that wait for a load: true when a created tab was still loading after the timeout.
+export type TabResult = { ok: true; tab: TabInfo; loading?: boolean };
 export type ClosedResult = { ok: true; closed: number };
 export type ScreenshotResult = { ok: true; dataUrl: string; tab: TabInfo };
 

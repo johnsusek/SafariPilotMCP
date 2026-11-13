@@ -101,7 +101,8 @@ struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
 struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
-struct TabResult: Codable, Sendable { let tab: TabInfo }
+/// loading is true when a created tab was still loading after the background's load timeout.
+struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool? }
 struct ClosedResult: Codable, Sendable { let closed: Int }
 struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
 /// One console message: level is log, info, warn, error, debug or exception (an uncaught error or unhandled rejection); time is epoch ms, url the frame's document when logged, source the caller's url:line:column when known, frame the frame's path, "" for the top one.

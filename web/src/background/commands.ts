@@ -6,7 +6,7 @@ import type {
 } from "../shared/protocol";
 import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
 import { runJavascript } from "./javascript";
-import { loadAfter } from "./load";
+import { loadAfter, loadTimeoutMs } from "./load";
 import type { NativeCommand } from "./native";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
@@ -89,9 +89,20 @@ async function frameNode(
   return node;
 }
 
-async function loadedTab(start: () => Promise<number>) {
-  let tabId = await loadAfter(start);
-  return { ok: true as const, tab: await tabInfo(await resolveTab(tabId)) };
+// A navigation that is still loading after the timeout fails; a created tab is answered as loading instead, since it exists and its caller must come to own it.
+async function loadedTab(start: () => Promise<number>, created = false) {
+  let { tabId, loaded } = await loadAfter(start);
+
+  if (!loaded && !created)
+    throw new Error(
+      `tab ${tabId} did not finish loading within ${loadTimeoutMs / 1000} s`,
+    );
+
+  return {
+    ok: true as const,
+    tab: await tabInfo(await resolveTab(tabId)),
+    loading: !loaded,
+  };
 }
 
 async function sender(tabId: number | null): Promise<Send> {
@@ -139,7 +150,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       return created!.tabs![0].id!;
     };
 
-    if (command.url !== null) return await loadedTab(create);
+    if (command.url !== null) return await loadedTab(create, true);
 
     return { ok: true, tab: await tabInfo(await resolveTab(await create())) };
   }

@@ -1,6 +1,7 @@
 export let loadTimeoutMs = 15000;
 
 // Listens before start() runs, so a load that completes before start() resolves (or before its tab id is known) still counts.
+// loaded is false when the tab was still loading after loadTimeoutMs.
 export async function loadAfter(start: () => Promise<number>) {
   let completed = new Set<number>();
   let notify = (_tabId: number) => {};
@@ -16,23 +17,15 @@ export async function loadAfter(start: () => Promise<number>) {
   try {
     let tabId = await start();
 
-    if (completed.has(tabId)) return tabId;
+    if (completed.has(tabId)) return { tabId, loaded: true };
 
-    await new Promise<void>((resolve, reject) => {
+    let loaded = await new Promise<boolean>((resolve) => {
       notify = (loadedId) => {
-        if (loadedId === tabId) resolve();
+        if (loadedId === tabId) resolve(true);
       };
-      timer = setTimeout(
-        () =>
-          reject(
-            new Error(
-              `tab ${tabId} did not finish loading within ${loadTimeoutMs / 1000} s`,
-            ),
-          ),
-        loadTimeoutMs,
-      );
+      timer = setTimeout(() => resolve(false), loadTimeoutMs);
     });
-    return tabId;
+    return { tabId, loaded };
   } finally {
     clearTimeout(timer);
     browser.tabs.onUpdated.removeListener(listener);

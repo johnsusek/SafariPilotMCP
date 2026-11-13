@@ -177,8 +177,10 @@ struct Commands {
   }
 
   private func tabReply(_ verb: String, _ response: JSONValue) throws -> CLIReply {
-    let tab = try response.decode(TabResult.self).tab
-    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)", data: response)
+    let result = try response.decode(TabResult.self)
+    let tab = result.tab
+    let loading = result.loading == true ? "; the page is still loading" : ""
+    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)\(loading)", data: response)
   }
 
   private func tabClose(_ tabId: Int) async throws -> CLIReply {

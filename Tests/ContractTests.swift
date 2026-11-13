@@ -18,6 +18,8 @@ struct ContractTests {
 
   @Test func tabClosedAndScreenshotResultsDecode() throws {
     #expect(try decode(TabResult.self, #"{"ok":true,"tab":\#(tab)}"#).tab.id == 12)
+    #expect(try decode(TabResult.self, #"{"ok":true,"tab":\#(tab)}"#).loading == nil)
+    #expect(try decode(TabResult.self, #"{"ok":true,"tab":\#(tab),"loading":true}"#).loading == true)
     #expect(try decode(ClosedResult.self, #"{"ok":true,"closed":12}"#).closed == 12)
     #expect(try decode(ScreenshotResult.self, #"{"ok":true,"dataUrl":"data:image/png;base64,AAAA","tab":\#(tab)}"#).tab.windowId == 3)
   }

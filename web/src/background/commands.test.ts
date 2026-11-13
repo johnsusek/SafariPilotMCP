@@ -221,7 +221,24 @@ describe("runCommand", () => {
     expect(result).toMatchObject({
       ok: true,
       tab: { id: 8, windowFrame: frame },
+      loading: false,
     });
+  });
+
+  test("tabCreate answers with a tab still loading after the timeout, so its caller can own it", async () => {
+    vi.useFakeTimers();
+    fake.tabs.create.mockImplementation(async () => {
+      tabs.push(tab(8, 1, true));
+      return tabs.at(-1);
+    });
+    let pending = run({ type: "tabCreate", url: "https://slow", windowId: 1 });
+    await vi.advanceTimersByTimeAsync(loadTimeoutMs);
+    expect(await pending).toMatchObject({
+      ok: true,
+      tab: { id: 8 },
+      loading: true,
+    });
+    expect(listeners.size).toBe(0);
   });
 
   test("tabCreate opens an unfocused window when it has none or it is closed", async () => {
