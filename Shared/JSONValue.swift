@@ -11,6 +11,8 @@ enum JSONValue: Codable, Sendable, Equatable, ExpressibleByStringLiteral {
 
   init(stringLiteral value: String) { self = .string(value) }
 
+  init(encoding value: some Encodable) throws { self = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(value)) }
+
   init(from decoder: Decoder) throws {
     let container = try decoder.singleValueContainer()
 

@@ -65,6 +65,12 @@ extension Commands {
     let deadline = ContinuousClock.now + .milliseconds(1500)
     try await Task.sleep(for: .milliseconds(150))
 
+    // A dialog stops Safari's extension until it closes, so the page's log cannot be read; the dialog shows the keys arrived.
+    if let open = try AXEngine.dialog(for: tab) {
+      data["dialog"] = try JSONValue(encoding: open.dialog)
+      return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id), which opened \(open.dialog.line); handle_dialog accepts or dismisses it", data: .object(data))
+    }
+
     while true {
       var after: JSONValue?
       var readError = ""
@@ -88,7 +94,7 @@ extension Commands {
 
     data["navigated"] = .bool(false)
     data["delivered"] = .number(Double(keydowns.count))
-    data["keydowns"] = try JSONDecoder().decode(JSONValue.self, from: JSONEncoder().encode(keydowns))
+    data["keydowns"] = try JSONValue(encoding: keydowns)
     let logged = keydowns.map { "  \(describe($0))" }
 
     if keydowns.count < expected {

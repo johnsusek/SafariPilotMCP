@@ -28,6 +28,7 @@ struct Commands {
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
+    case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
@@ -36,14 +37,49 @@ struct Commands {
     }
   }
 
-  private func call(_ command: BackgroundCommand) async throws -> JSONValue {
+  /// Safari's extension stops while any page shows a dialog, so nothing is sent while one is open, and the wait ends as soon as one opens.
+  func call(_ command: BackgroundCommand) async throws -> JSONValue {
+    let tabId = command.json["tabId"]?.number.map { Int($0) }
+
+    if let blocked = try dialogBlock(tabId) { throw Failure(description: blocked) }
+
     let remaining = deadline - .now
 
     guard remaining > .zero else { throw Failure(description: "timed out before sending \(command.type)") }
 
-    let response = try await model.transport.send(command.json, timeout: remaining)
+    let sending = Task { try await model.transport.send(command.json, timeout: remaining) }
+    let watching = Task { () -> String? in
+      while !Task.isCancelled {
+        try? await Task.sleep(for: .milliseconds(250))
+
+        do {
+          guard let blocked = try dialogBlock(tabId) else { continue }
+
+          sending.cancel()
+          return blocked
+        } catch {
+          sending.cancel()
+          return "\(error)"
+        }
+      }
+
+      return nil
+    }
+    defer { watching.cancel() }
+    let response: JSONValue
+
+    do { response = try await sending.value } catch is CancellationError { throw Failure(description: await watching.value ?? "\(command.type) was cancelled") }
 
     if response["ok"]?.bool != true { throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")") }
+
+    if let value = response["tab"] {
+      let tab = try value.decode(TabInfo.self)
+      model.knownTabs[tab.id] = tab
+    }
+
+    if let tabs = response["tabs"] { model.knownTabs = try Dictionary(uniqueKeysWithValues: tabs.decode([TabInfo].self).map { ($0.id, $0) }) }
+
+    if let closed = response["closed"]?.number { model.knownTabs[Int(closed)] = nil }
 
     return response
   }
@@ -283,12 +319,17 @@ struct Commands {
     var lines = ["pressed \(pressed.summary) via AXPress (\(pressed.depth) up from match) in tab \(tab.id)"]
 
     guard let after else {
-      lines[0] += ", then the page stopped answering: it is navigating, or the click opened a dialog such as alert() that blocks it until dismissed"
+      if let open = try AXEngine.dialog(for: tab) {
+        lines[0] += ", which opened \(open.dialog.line); handle_dialog accepts or dismisses it"
+        return try CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
+      }
+
+      lines[0] += ", then the page stopped answering, most likely because it is navigating"
       return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
     }
 
     if after.busy.contains(frame) {
-      lines[0] += ", then the frame of iframe \(frame) did not answer within 2 s: it is busy, or the click opened a dialog such as alert() there"
+      lines[0] += ", then the frame of iframe \(frame) did not answer within 2 s: it is busy"
       return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
     }
 

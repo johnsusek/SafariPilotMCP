@@ -26,31 +26,43 @@ enum AXEngine {
     var node: AXNode { chain[0] }
   }
 
-  /// Finds the window showing the tab among all of Safari's AX windows; the tab must already be active in its window.
-  static func target(for tab: TabInfo) async throws -> Target {
+  static func safari() throws -> AXNode {
     guard AXIsProcessTrusted() else { throw Failure(description: "Accessibility permission not granted to SafariPilot.app") }
     guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(description: "Safari is not running") }
     guard !safari.isHidden else { throw Failure(description: "Safari is hidden; unhide it so AX can reach its windows") }
 
     let app = AXNode(element: AXUIElementCreateApplication(safari.processIdentifier))
     AXUIElementSetMessagingTimeout(app.element, 3)
+    return app
+  }
+
+  static func windows(of app: AXNode) throws -> [AXNode] {
+    let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init)
+    let roles = windows.map(\.role)
+
+    // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
+    guard roles.allSatisfy({ $0 == kAXWindowRole }) else {
+      throw Failure(description: "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
+    }
+
+    return windows
+  }
+
+  static func candidate(_ window: AXNode, urls: [String]) -> WindowCandidate {
+    WindowCandidate(title: window.string(kAXTitleAttribute) ?? "", frame: window.frame, minimized: window.value(kAXMinimizedAttribute) as? Bool == true, urls: urls)
+  }
+
+  /// Finds the window showing the tab among all of Safari's AX windows; the tab must already be active in its window.
+  static func target(for tab: TabInfo) async throws -> Target {
+    let app = try safari()
 
     // WebKit builds a page's AX tree lazily and a just-selected tab takes a moment to appear, so a miss is retried for 1 s.
     var attempt = 0
 
     while true {
-      let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init)
-      let roles = windows.map(\.role)
-
-      // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
-      guard roles.allSatisfy({ $0 == kAXWindowRole }) else {
-        throw Failure(description: "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
-      }
-
+      let windows = try windows(of: app)
       let webAreas = windows.map { findWebAreas(in: $0) }
-      let candidates = zip(windows, webAreas).map { window, areas in
-        WindowCandidate(title: window.string(kAXTitleAttribute) ?? "", frame: window.frame, minimized: window.value(kAXMinimizedAttribute) as? Bool == true, urls: areas.map { $0.string("AXURL") ?? "?" })
-      }
+      let candidates = zip(windows, webAreas).map { window, areas in candidate(window, urls: areas.map { $0.string("AXURL") ?? "?" }) }
 
       do {
         let index = try WindowMatching.match(tab: tab, candidates: candidates)
