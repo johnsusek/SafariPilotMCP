@@ -43,6 +43,10 @@ enum Server {
     }
   }
 
+  private struct Envelope: Decodable {
+    let kind: String?
+  }
+
   private static func serve(_ connection: NetworkConnection<TCP>, token: Data, model: AppModel) async throws {
     var buffer = Data()
     var authenticated = false
@@ -80,14 +84,16 @@ enum Server {
       return
     }
 
-    let message = try JSONDecoder().decode(JSONValue.self, from: buffer[..<(end ?? buffer.endIndex)])
-    let reply: Data = switch message["kind"]?.string {
-    case "cli": try await JSONEncoder().encode(model.runCLI(message.decode(CLIRequest.self)))
-    case "hello": try await JSONEncoder().encode(model.gate.approve(message.decode(HelloRequest.self)))
-    default:
-      try await JSONEncoder().encode(model.transport.handle(message))
+    let line = buffer[..<(end ?? buffer.endIndex)]
+    let decoder = JSONDecoder()
+    // A CLI request is decoded straight from the line, since a detour through JSONValue costs an upload two more full copies.
+    var reply: Data = switch try decoder.decode(Envelope.self, from: line).kind {
+    case "cli": try await JSONEncoder().encode(model.runCLI(decoder.decode(CLIRequest.self, from: line)))
+    case "hello": try await JSONEncoder().encode(model.gate.approve(decoder.decode(HelloRequest.self, from: line)))
+    default: try await JSONEncoder().encode(model.transport.handle(decoder.decode(JSONValue.self, from: line)))
     }
 
-    try await connection.send(reply + Data([0x0A]), endOfStream: true)
+    reply.append(0x0A)
+    try await connection.send(reply, endOfStream: true)
   }
 }
