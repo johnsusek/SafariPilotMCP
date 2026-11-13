@@ -46,6 +46,11 @@ let fakeBrowser = () => ({
       removeListener: (listener: Listener) => listeners.delete(listener),
     },
   },
+  scripting: {
+    executeScript: vi.fn(async () => [
+      { frameId: 0, result: { ok: true, json: "2" } },
+    ]),
+  },
   windows: {
     get: vi.fn(async (id: number) =>
       id === 1 ? { id, left: 10, top: 20, width: 800, height: 600 } : { id },
@@ -244,5 +249,29 @@ describe("runCommand", () => {
       closed: 6,
     });
     expect(fake.tabs.remove).toHaveBeenCalledWith(6);
+  });
+
+  test("javascript runs in the resolved tab, and a syntax error fails the command", async () => {
+    expect(
+      await run({
+        type: "javascript",
+        tabId: null,
+        code: "1 + 1",
+        frame: null,
+      }),
+    ).toEqual({ ok: true, json: "2" });
+    expect(fake.scripting.executeScript).toHaveBeenCalledWith(
+      expect.objectContaining({
+        target: { tabId: 5, frameIds: [0] },
+        world: "MAIN",
+        args: ["return (1 + 1);"],
+      }),
+    );
+    expect(
+      await run({ type: "javascript", tabId: 6, code: "1 +", frame: null }),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(/^javascript failed: SyntaxError: /),
+    });
   });
 });

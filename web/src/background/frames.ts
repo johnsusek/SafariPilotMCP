@@ -44,11 +44,11 @@ export function parsePath(ref: RefPath): Path {
 }
 
 // Answers with a failure once ms pass, so a page stuck in a dialog such as alert() cannot hold the background's only poll.
-export async function withTimeout(
-  answer: Promise<ContentResponse>,
+export async function withTimeout<Answer>(
+  answer: Promise<Answer>,
   ms: number,
   error: string,
-): Promise<ContentResponse> {
+): Promise<Answer | Failure> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timeout = new Promise<Failure>((resolve) => {
     timer = setTimeout(() => resolve({ ok: false, error, timeout: true }), ms);

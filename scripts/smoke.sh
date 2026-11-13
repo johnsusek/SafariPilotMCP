@@ -37,6 +37,9 @@ site_wikipedia() {
   open_tab "https://en.wikipedia.org/wiki/Usage_share_of_web_browsers"
   check "wikipedia: logo link named from its images" 'link "Wikipedia The Free Encyclopedia"' read-page --max-chars 800
   check "wikipedia: table named by caption" 'table "Usage share of mobile browsers"' find --role table
+  check "wikipedia: javascript sees page globals" '^"object"$' javascript "typeof mw"
+  check "wikipedia: javascript awaits and returns JSON" '^\{"answer":42\}$' javascript "let answer = await new Promise((resolve) => setTimeout(() => resolve(6 * 7), 50)); ({ answer })"
+  check "wikipedia: javascript throws fail" 'the code threw Error: boom' javascript "throw new Error('boom')"
   close_tab
 }
 
@@ -54,6 +57,7 @@ site_github() {
   check "github: enter searches" 'keydowns reached|navigated' key Enter --ref $search
   sleep 3
   check "github: results listed" 'link "AX' find "AX" --role link
+  check "github: javascript refused by the page CSP" "Content-Security-Policy" javascript "1"
   close_tab
 }
 
@@ -146,6 +150,7 @@ site_frames() {
   check "frames: live sample inlined" '\[ref=[0-9]+:[0-9]+\]' read-page --max-chars 20000
   check "frames: cross-origin button clicked" 'click on \[[0-9]+:[0-9]+\]' click $(ref "Add to favorites" button)
   check "frames: frame text in page text" '\[frame [0-9]+ [^]]*mdnplay.dev\]' text
+  check "frames: javascript in a frame" 'mdnplay.dev' javascript --frame $(ref "" iframe) "location.hostname"
   close_tab
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/text"
   local field=$(ref "Name (4 to 8 characters)" textbox)

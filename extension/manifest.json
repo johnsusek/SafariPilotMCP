@@ -17,6 +17,6 @@
       "run_at": "document_start"
     }
   ],
-  "permissions": ["nativeMessaging", "tabs", "alarms", "activeTab"],
+  "permissions": ["nativeMessaging", "tabs", "alarms", "activeTab", "scripting"],
   "host_permissions": ["<all_urls>"]
 }

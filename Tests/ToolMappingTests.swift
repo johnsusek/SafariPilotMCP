@@ -5,7 +5,7 @@ struct ToolMappingTests {
   func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600)]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title"]
 
     // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
@@ -189,6 +189,19 @@ struct ToolMappingTests {
     } throws: { error in
       (error as? Failure)?.description == "action 1: browser_batch cannot be nested"
     }
+  }
+
+  @Test func javascriptMapsTextAndFrame() throws {
+    #expect(try map("javascript", ["text": "document.title"]) == .javascript(tabId: 20, code: "document.title", frame: nil))
+    #expect(try map("javascript", ["tabId": .number(7), "text": "1", "frame": "5:3"]) == .javascript(tabId: 7, code: "1", frame: PageRef(frames: [5], local: 3)))
+    #expect(AppCommand.javascript(tabId: 7, code: "1", frame: nil).targetTab == 7)
+    #expect(throws: Failure.self) { try map("javascript") }
+    #expect(throws: Failure.self) { try map("javascript", ["text": " \n"]) }
+    #expect(throws: Failure.self) { try map("javascript", ["text": .number(1)]) }
+    #expect(try CommandLineParsing.parse(["--tab", "3", "javascript", "document.querySelectorAll('a').length", "--json-ish"]).command == .javascript(tabId: 3, code: "document.querySelectorAll('a').length --json-ish", frame: nil))
+    #expect(try CommandLineParsing.parse(["javascript", "--frame", "5", "location.href"]).command == .javascript(tabId: nil, code: "location.href", frame: 5))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["javascript"]) }
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["javascript", "--frame", "5.1", "1"]) }
   }
 
   @Test func removedToolsAreUnknown() {

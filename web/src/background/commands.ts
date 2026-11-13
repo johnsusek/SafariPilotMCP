@@ -5,6 +5,7 @@ import type {
   FramesResult,
 } from "../shared/protocol";
 import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
+import { runJavascript } from "./javascript";
 import { loadAfter } from "./load";
 import type { NativeCommand } from "./native";
 import { runPage } from "./page";
@@ -109,6 +110,16 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       ok: true,
       tree: await frameNode(await sender(command.tabId), 0, 0),
     };
+
+  if (command.type === "javascript") {
+    let tab = await resolveTab(command.tabId);
+    return await runJavascript(
+      tab.id,
+      await sender(tab.id),
+      command.code,
+      command.frame,
+    );
+  }
 
   if (command.type === "tab")
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };

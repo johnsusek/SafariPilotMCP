@@ -82,6 +82,8 @@ struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
 struct TabResult: Codable, Sendable { let tab: TabInfo }
 struct ClosedResult: Codable, Sendable { let closed: Int }
 struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
+/// json is the code's last expression as JSON, nil when it has none (undefined, a function or a symbol).
+struct JavascriptResult: Codable, Sendable { let json: String? }
 
 enum ReadFilter: String, Codable, Sendable { case interactive, all }
 enum HistoryDirection: String, Codable, Sendable { case back, forward }
@@ -131,6 +133,7 @@ enum BackgroundCommand: Equatable, Sendable {
   case screenshot(tabId: Int?)
   case resize(tabId: Int?, width: Int, height: Int)
   case frames(tabId: Int?)
+  case javascript(tabId: Int?, code: String, frame: PageRef?)
 
   var json: [String: JSONValue] {
     let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
@@ -147,6 +150,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .screenshot(tabId): return ["type": "screenshot", "tabId": id(tabId)]
     case let .resize(tabId, width, height): return ["type": "resize", "tabId": id(tabId), "width": .number(Double(width)), "height": .number(Double(height))]
     case let .frames(tabId): return ["type": "frames", "tabId": id(tabId)]
+    case let .javascript(tabId, code, frame): return ["type": "javascript", "tabId": id(tabId), "code": .string(code), "frame": frame.map { .string($0.description) } ?? .null]
     }
   }
 

@@ -22,6 +22,15 @@ struct ContractTests {
     #expect(try decode(ScreenshotResult.self, #"{"ok":true,"dataUrl":"data:image/png;base64,AAAA","tab":\#(tab)}"#).tab.windowId == 3)
   }
 
+  @Test func javascriptEncodesAndDecodes() throws {
+    #expect(BackgroundCommand.javascript(tabId: 4, code: "document.title", frame: PageRef(frames: [5], local: 3)).json == ["type": "javascript", "tabId": .number(4), "code": "document.title", "frame": "5:3"])
+    #expect(BackgroundCommand.javascript(tabId: nil, code: "1", frame: nil).json["frame"] == .null)
+    #expect(try decode(JavascriptResult.self, #"{"ok":true,"json":"{\"a\":1}"}"#).json == #"{"a":1}"#)
+    #expect(try decode(JavascriptResult.self, #"{"ok":true,"json":null}"#).json == nil)
+    let command = AppCommand.javascript(tabId: 2, code: "await 1", frame: 5)
+    #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(command)) == command)
+  }
+
   @Test func contentResultsDecode() throws {
     let element = #"{"ref":4,"tag":"button","role":"button","name":"Go","rect":{"left":1,"top":2,"width":3,"height":4},"inViewport":true}"#
     #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"[4] button Go","truncated":true}"#).truncated)

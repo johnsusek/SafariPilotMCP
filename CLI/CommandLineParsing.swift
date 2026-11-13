@@ -28,6 +28,7 @@ enum CommandLineParsing {
     scroll-to REF                   center REF in the view
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
     resize WIDTH HEIGHT             resize the tab's window in points
+    javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
     debug-cg key KEYS [--ref REF]   post a key press as CGEvents and report what the page logged
@@ -97,6 +98,11 @@ enum CommandLineParsing {
 
       // Free text is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .formInput(tabId: tabId, ref: ref(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
+    case "javascript":
+      let frame = try rest.first == "--frame" ? option("--frame", &rest).map { try Self.ref($0, "--frame") } : nil
+
+      // CODE is taken verbatim, so it skips the stray option check below.
+      return try Invocation(command: .javascript(tabId: tabId, text: rest.joined(separator: " "), frame: frame))
     case "find":
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")

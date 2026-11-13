@@ -61,6 +61,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// region is in the full screenshot's pixels; scale shrinks the result.
   case screenshot(tabId: Int?, region: PixelRect?, scale: Double)
   case resizeWindow(tabId: Int?, width: Int, height: Int)
+  /// Runs code in the page's main world, in the frame of iframe ref frame when given; the last expression comes back as JSON.
+  case javascript(tabId: Int?, code: String, frame: PageRef?)
   case debugAX(tabId: Int?, ref: PageRef?)
   /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call.
   case debugFrames(tabId: Int?)
@@ -98,6 +100,11 @@ enum AppCommand: Codable, Sendable, Equatable {
     return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth)
   }
 
+  static func javascript(tabId: Int?, text: String, frame: PageRef?) throws -> AppCommand {
+    guard !text.allSatisfy(\.isWhitespace) else { throw Failure(description: "javascript needs some code to run") }
+    return .javascript(tabId: tabId, code: text, frame: frame)
+  }
+
   /// Measuring instruments for development; Release builds refuse them.
   var isDevTool: Bool {
     switch self {
@@ -111,7 +118,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 

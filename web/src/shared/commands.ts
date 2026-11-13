@@ -104,7 +104,14 @@ export type Command =
   // Fails when the tab is not the active tab of its window; the app selects it first.
   | { type: "screenshot"; tabId: number | null }
   // Walks the tab's frames from the top one: what each frame's content script answers and the trusted clicks and keydowns it logged since the last walk.
-  | { type: "frames"; tabId: number | null };
+  | { type: "frames"; tabId: number | null }
+  // Runs code in the main world of the top frame, or of the frame of iframe ref frame.
+  | {
+      type: "javascript";
+      tabId: number | null;
+      code: string;
+      frame: RefPath | null;
+    };
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 export type TabResult = { ok: true; tab: TabInfo };
@@ -121,6 +128,8 @@ export type FrameNode = {
   frames: (FrameEntry & { frame: FrameNode | null })[];
 };
 export type FramesTree = { ok: true; tree: FrameNode };
+// json is the code's last expression as JSON, null when JSON.stringify gives undefined (undefined, a function or a symbol).
+export type JavascriptResult = { ok: true; json: string | null };
 
 export type CommandResponse =
   | ContentResponse
@@ -134,4 +143,5 @@ export type CommandResponse =
   | TabResult
   | ClosedResult
   | ScreenshotResult
-  | FramesTree;
+  | FramesTree
+  | JavascriptResult;

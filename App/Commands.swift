@@ -28,6 +28,7 @@ struct Commands {
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
+    case let .javascript(tabId, code, frame): try await javascript(tabId, code, frame)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
@@ -186,6 +187,11 @@ struct Commands {
     let result = try response.decode(ScrollResult.self)
     let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
     return CLIReply(ok: true, text: "\(result.moved ? "scrolled ref \(ref) into view" : "ref \(ref) was already in view"); \(position)", data: response)
+  }
+
+  private func javascript(_ tabId: Int?, _ code: String, _ frame: PageRef?) async throws -> CLIReply {
+    let response = try await call(.javascript(tabId: tabId, code: code, frame: frame))
+    return try CLIReply(ok: true, text: response.decode(JavascriptResult.self).json ?? "undefined", data: response)
   }
 
   /// Safari may clamp the size to the screen, so the reply reports the frame it actually got.
