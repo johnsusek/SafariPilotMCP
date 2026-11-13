@@ -1,4 +1,5 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
+import { installReader, takeConsole } from "./console";
 import { installLogger, takeEvents } from "./events";
 import { find } from "./find";
 import { frameBox, hitFrame, listFrames } from "./frames";
@@ -11,6 +12,7 @@ import { snapshot } from "./snapshot";
 import { readPage } from "./tree";
 
 installLogger();
+installReader();
 
 async function handle(request: ContentRequest): Promise<ContentResponse> {
   try {
@@ -41,6 +43,13 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "frames") return listFrames();
     if (request.op === "frameBox") return frameBox(request.ref, request.reveal);
     if (request.op === "hitFrame") return hitFrame(request.ref, request.points);
+    if (request.op === "console")
+      return takeConsole(
+        request.onlyErrors,
+        request.pattern,
+        request.limit,
+        request.clear,
+      );
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

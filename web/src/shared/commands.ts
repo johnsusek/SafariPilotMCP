@@ -3,6 +3,7 @@
 import type {
   ClickAction,
   ClickResult,
+  ConsoleEntry,
   ContentResponse,
   ElementInfo,
   FrameEntry,
@@ -43,7 +44,14 @@ export type PageRequest =
   | { op: "find"; name: string; role: string }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: RefPath | null; left: number; top: number }
-  | { op: "scrollIntoView"; ref: RefPath };
+  | { op: "scrollIntoView"; ref: RefPath }
+  | {
+      op: "console";
+      onlyErrors: boolean;
+      pattern: string | null;
+      limit: number;
+      clear: boolean;
+    };
 
 // Page-wide results: refs are paths and rects are in top-frame CSS px.
 export type PageElement = Omit<ElementInfo, "ref"> & { ref: RefPath };
@@ -64,6 +72,16 @@ export type PageEventsResult = {
   origin: number;
   origins: Record<RefPath, number>;
   busy: RefPath[];
+};
+// Console messages from every frame read, oldest first, each tagged with its frame path ("" for the top one). matched counts matches across frames before limit,
+// dropped is keyed by frame path, and unread lists frames whose console could not be read, with why.
+export type PageConsoleEntry = ConsoleEntry & { frame: RefPath };
+export type PageConsoleResult = {
+  ok: true;
+  entries: PageConsoleEntry[];
+  matched: number;
+  dropped: Record<RefPath, number>;
+  unread: { path: RefPath; label: string; reason: string }[];
 };
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
 export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
@@ -144,6 +162,7 @@ export type JavascriptResult = { ok: true; json: string | null };
 export type CommandResponse =
   | ContentResponse
   | PageEventsResult
+  | PageConsoleResult
   | PageLocateResult
   | PageInspectResult
   | PageClickResult

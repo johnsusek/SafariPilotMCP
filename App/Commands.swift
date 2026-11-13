@@ -30,6 +30,7 @@ struct Commands {
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
     case let .javascript(tabId, code, frame): try await javascript(tabId, code, frame)
+    case let .consoleMessages(tabId, onlyErrors, pattern, limit, clear): try await consoleMessages(tabId, onlyErrors, pattern, limit, clear)
     case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
     case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
@@ -229,6 +230,11 @@ struct Commands {
   private func javascript(_ tabId: Int?, _ code: String, _ frame: PageRef?) async throws -> CLIReply {
     let response = try await call(.javascript(tabId: tabId, code: code, frame: frame))
     return try CLIReply(ok: true, text: response.decode(JavascriptResult.self).json ?? "undefined", data: response)
+  }
+
+  private func consoleMessages(_ tabId: Int?, _ onlyErrors: Bool, _ pattern: String?, _ limit: Int, _ clear: Bool) async throws -> CLIReply {
+    let response = try await content(tabId, .console(onlyErrors: onlyErrors, pattern: pattern, limit: limit, clear: clear))
+    return try CLIReply(ok: true, text: response.decode(ConsoleResult.self).text(cleared: clear), data: response)
   }
 
   /// Safari may clamp the size to the screen, so the reply reports the frame it actually got.

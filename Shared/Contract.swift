@@ -91,6 +91,17 @@ struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
 struct TabResult: Codable, Sendable { let tab: TabInfo }
 struct ClosedResult: Codable, Sendable { let closed: Int }
 struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
+/// One console message: level is log, info, warn, error, debug or exception (an uncaught error or unhandled rejection); time is epoch ms, url the frame's document when logged, source the caller's url:line:column when known, frame the frame's path, "" for the top one.
+struct ConsoleEntry: Codable, Sendable, Equatable { let level: String; let text: String; let time: Double; let url: String; let source: String?; let frame: String }
+/// Messages from every frame read, oldest first; matched counts matches before limit, dropped the oldest messages each frame's full buffer let go, keyed by frame path, and unread the frames whose console could not be read.
+struct ConsoleResult: Codable, Sendable {
+  struct Unread: Codable, Sendable, Equatable { let path: String; let label: String; let reason: String }
+
+  let entries: [ConsoleEntry]
+  let matched: Int
+  let dropped: [String: Int]
+  let unread: [Unread]
+}
 /// json is the code's last expression as JSON, nil when it has none (undefined, a function or a symbol).
 struct JavascriptResult: Codable, Sendable { let json: String? }
 
@@ -113,6 +124,8 @@ enum ContentRequest: Equatable, Sendable {
   case pageText(maxChars: Int)
   case scroll(ref: PageRef?, left: Double, top: Double)
   case scrollIntoView(ref: PageRef)
+  /// The newest limit console messages, of errors and exceptions only when onlyErrors, whose text matches pattern (a case-insensitive JavaScript regular expression); clear empties every read frame's buffer afterwards.
+  case console(onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
 
   var json: [String: JSONValue] {
     switch self {
@@ -128,6 +141,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .string($0.description) } ?? .null, "left": .number(left), "top": .number(top)]
     case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .string(ref.description)]
+    case let .console(onlyErrors, pattern, limit, clear): ["op": "console", "onlyErrors": .bool(onlyErrors), "pattern": pattern.map { .string($0) } ?? .null, "limit": .number(Double(limit)), "clear": .bool(clear)]
     }
   }
 }

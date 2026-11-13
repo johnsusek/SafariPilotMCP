@@ -2,6 +2,7 @@ import { clip } from "../content/pageText";
 import { intersect } from "../content/geometry";
 import type {
   CommandResponse,
+  PageConsoleResult,
   PageElement,
   PageEvent,
   PageRequest,
@@ -9,6 +10,7 @@ import type {
 import { toTop } from "../shared/frameGeometry";
 import type {
   ClickResult,
+  ConsoleResult,
   ContentResponse,
   ElementInfo,
   EventsResult,
@@ -125,6 +127,68 @@ async function pageText(send: Send, maxChars: number) {
       ({ reply }) => reply.ok && (reply as PageTextResult).truncated,
     );
   return { ...page, text: whole.text, truncated };
+}
+
+// Merges every reached frame's newest matches by time and keeps the newest limit; the regular expression is checked here so a bad one fails once, not per frame.
+async function consoleMessages(
+  send: Send,
+  request: PageRequest & { op: "console" },
+) {
+  if (request.pattern !== null) {
+    try {
+      new RegExp(request.pattern, "i");
+    } catch (error) {
+      return {
+        ok: false as const,
+        error: `pattern is not a valid regular expression: ${(error as Error).message}`,
+      };
+    }
+  }
+
+  let answers = await fanOut(send, request);
+
+  if (!Array.isArray(answers)) return answers;
+
+  if (!answers[0].reply.ok) return answers[0].reply;
+
+  let result: PageConsoleResult = {
+    ok: true,
+    entries: [],
+    matched: 0,
+    dropped: {},
+    unread: [],
+  };
+
+  for (let { frame, reply } of answers) {
+    let unread = (reason: string) =>
+      result.unread.push({ path: frame.path, label: frame.label, reason });
+
+    if (!reply.ok) {
+      unread(reply.error);
+      continue;
+    }
+
+    let taken = reply as ConsoleResult;
+
+    if (!taken.capturing) {
+      unread(
+        "no console capture answered; the frame loaded before SafariPilot's extension (reload the page) or runs no scripts",
+      );
+      continue;
+    }
+
+    result.matched += taken.matched;
+
+    if (taken.dropped) result.dropped[frame.path] = taken.dropped;
+
+    result.entries.push(
+      ...taken.entries.map((entry) => ({ ...entry, frame: frame.path })),
+    );
+  }
+
+  result.entries.sort((first, second) => first.time - second.time);
+  result.entries = result.entries.slice(-request.limit);
+  return result;
 }
 
 // The watched ref's frame is read even when the fan-out's caps leave it out, since an action there is verified by its events; a frame that is gone is left out.
@@ -320,6 +384,8 @@ async function dispatch(
   if (request.op === "locate") return await locatePath(send, request.ref);
 
   if (request.op === "events") return await events(send, request);
+
+  if (request.op === "console") return await consoleMessages(send, request);
 
   if (request.op === "readPage") return await readPage(send, request);
 

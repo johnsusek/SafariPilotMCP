@@ -602,6 +602,80 @@ describe("runPage reads", () => {
     ]);
   });
 
+  test("console merges frames by time, keeps the newest limit and names unread frames", async () => {
+    let message = (text: string, time: number) => ({
+      level: "log" as const,
+      text,
+      time,
+      url: "u",
+      source: null,
+    });
+    let request = {
+      op: "console" as const,
+      onlyErrors: false,
+      pattern: "a",
+      limit: 2,
+      clear: true,
+    };
+    documents[0].answer = (asked) =>
+      asked.op === "console"
+        ? {
+            ok: true,
+            capturing: true,
+            entries: [message("top a", 5), message("top b", 9)],
+            matched: 4,
+            dropped: 3,
+          }
+        : undefined;
+    documents[100].answer = (asked) =>
+      asked.op === "console"
+        ? {
+            ok: true,
+            capturing: true,
+            entries: [message("frame", 7)],
+            matched: 1,
+            dropped: 0,
+          }
+        : undefined;
+    documents[200].answer = (asked) =>
+      asked.op === "console"
+        ? {
+            ok: true,
+            capturing: false,
+            entries: [],
+            matched: 0,
+            dropped: 0,
+          }
+        : undefined;
+    expect(await runPage(send, request)).toEqual({
+      ok: true,
+      entries: [
+        { ...message("frame", 7), frame: "5" },
+        { ...message("top b", 9), frame: "" },
+      ],
+      matched: 5,
+      dropped: { "": 3 },
+      unread: [
+        {
+          path: "5:3",
+          label: "f200.test",
+          reason: expect.stringMatching(/^no console capture/),
+        },
+      ],
+    });
+    expect(calls).toContainEqual([100, request]);
+    calls = [];
+    expect(
+      await runPage(send, { ...request, pattern: "(unclosed" }),
+    ).toMatchObject({
+      ok: false,
+      error: expect.stringMatching(
+        /^pattern is not a valid regular expression/,
+      ),
+    });
+    expect(calls).toEqual([]);
+  });
+
   test("read_page skips frames smaller than tracking-pixel size without spending the frame budget", async () => {
     documents[0].answer = (request) =>
       request.op === "readPage"
