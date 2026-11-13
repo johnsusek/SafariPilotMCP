@@ -198,11 +198,15 @@ private final class GateWindows: NSObject, NSWindowDelegate {
     window.contentView = NSHostingView(rootView: content().padding(20).frame(width: 380))
     window.isReleasedWhenClosed = false
     window.delegate = self
+    window.level = .floating
+    window.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
     window.center()
     windows[key] = window
     self.onClose[key] = onClose
+    // macOS refuses activation requests from a background app, so the window must order itself above the active app.
     NSApp.activate()
-    window.makeKeyAndOrderFront(nil)
+    window.orderFrontRegardless()
+    window.makeKey()
   }
 
   /// Closes without running the close handler, since the caller already settled the request.
