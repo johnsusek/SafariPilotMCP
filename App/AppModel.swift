@@ -33,6 +33,9 @@ final class AppModel {
   /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
   private(set) var knownTabs: [Int: TabInfo] = [:]
   private var started = false
+  /// Commands that may touch Safari, running or recently ended, for naming the one that brought Safari forward.
+  private var inFlight: [UUID: (label: String, start: Date)] = [:]
+  private var lastEnded: (label: String, start: Date, end: Date)?
 
   var extensionState: String {
     if let extensionError { return "unknown (\(extensionError))" }
@@ -45,6 +48,12 @@ final class AppModel {
 
     started = true
     Task { await Server.run(model: self) }
+    NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { note in
+      let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
+      guard app?.bundleIdentifier == "com.apple.Safari" else { return }
+
+      MainActor.assumeIsolated { self.noteSafariActivated() }
+    }
     Task {
       while true {
         axTrusted = AXIsProcessTrusted()
@@ -125,6 +134,13 @@ final class AppModel {
     }
 
     let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
+    let id = UUID()
+
+    if case .status = request.command {} else { inFlight[id] = (label, .now) }
+
+    defer {
+      if let entry = inFlight.removeValue(forKey: id) { lastEnded = (entry.label, entry.start, .now) }
+    }
 
     do {
       // status only reads app state, and handle_dialog only presses a dialog's button, which must not wait behind a command the dialog holds up.
@@ -150,6 +166,21 @@ final class AppModel {
     if let tabs = response["tabs"] { knownTabs = try Dictionary(uniqueKeysWithValues: tabs.decode([TabInfo].self).map { ($0.id, $0) }) }
 
     if let closed = response["closed"]?.number { knownTabs[Int(closed)] = nil }
+  }
+
+  /// Logs Safari coming to the front during a command or within 2 s of one ending; outside that window it is taken as the user's own switch.
+  private func noteSafariActivated() {
+    let now = Date.now
+    let seconds = { (from: Date) in (now.timeIntervalSince(from)).formatted(.number.precision(.fractionLength(2))) }
+
+    if let running = inFlight.values.min(by: { $0.start < $1.start }) {
+      record("Safari came forward", ok: false, summary: "\(seconds(running.start)) s into \(running.label)")
+      return
+    }
+
+    guard let ended = lastEnded, now.timeIntervalSince(ended.end) < 2 else { return }
+
+    record("Safari came forward", ok: false, summary: "\(seconds(ended.end)) s after \(ended.label) ended (\(seconds(ended.start)) s after it started)")
   }
 
   func record(_ command: String, ok: Bool, summary: String) {
