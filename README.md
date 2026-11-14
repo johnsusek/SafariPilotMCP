@@ -4,11 +4,9 @@
 
 Let Claude use Safari on your Mac, just like Claude in Chrome.
 
-Claude works in its own tabs, in the background. It doesn't take over the cursor, doesn't bring Safari to the front, and the tabs you already have open stay private.
+SafariPilot lets Claude work in the Safari you already use, signed in to your accounts, while you keep using your Mac. Claude opens its own tabs and works there in the background: Safari stays behind your other windows, your cursor stays put, and the tabs you have open stay private.
 
-Other ways to hand Safari to an AI each give something up. Apple's built-in server runs in a window of its own, apart from your browsing, and is made for testing your own site. Open-source servers reach your signed-in Safari, but they mostly act through scripted events that many sites ignore, take over the cursor or bring Safari forward for real input, and let any app on your Mac connect without asking.
-
-SafariPilot gives up none of that. Every click and key is real input, sent while you keep using your Mac. Each new client needs your approval, and passwords, card numbers, tokens and cookies are hidden from what Claude reads in pages, URLs and network logs.
+Every click and keystroke is real input, the kind sites treat as coming from a person, and each one is checked after it lands. Nothing connects without your say, since each new client asks for your approval first. Passwords, card numbers, tokens and cookies stay hidden from everything Claude reads in pages, URLs and network logs.
 
 ## Features
 
