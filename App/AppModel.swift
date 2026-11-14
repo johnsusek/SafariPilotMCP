@@ -15,11 +15,6 @@ final class AppModel {
     let summary: String
   }
 
-  struct SetupAlert {
-    let title: String
-    let message: String
-  }
-
   let transport = Transport()
   /// The build stamped into the app extension this app embeds, read once at launch, since an install replaces the bundle under a running app.
   let build = BuildIdentity.read(appex: Bundle.main.builtInPlugInsURL!.appending(path: "SafariPilotExtension.appex"))
@@ -32,7 +27,6 @@ final class AppModel {
   private(set) var extensionError: String?
   private(set) var desktopAdded = false
   private(set) var loginItem = SMAppService.mainApp.status
-  var setupAlert: SetupAlert?
   /// Off refuses every MCP client and every command but status, while the app keeps running.
   var serverEnabled = UserDefaults.standard.object(forKey: "serverEnabled") as? Bool ?? true {
     didSet { UserDefaults.standard.set(serverEnabled, forKey: "serverEnabled") }
@@ -103,15 +97,22 @@ final class AppModel {
     do {
       if enabled { try SMAppService.mainApp.register() } else { try SMAppService.mainApp.unregister() }
     } catch {
-      setupAlert = SetupAlert(title: "Couldn't Change Launch at Login", message: error.localizedDescription)
+      alert("Couldn't Change Launch at Login", error.localizedDescription)
     }
 
     loginItem = SMAppService.mainApp.status
   }
 
-  /// Writes this app's server into Claude Desktop's config; a config that is not a JSON object is refused, not overwritten.
-  func addToClaudeDesktop() {
+  /// After a confirmation, writes this app's server into Claude Desktop's config; a config that is not a JSON object is refused, not overwritten.
+  func configureClaudeDesktop() {
     let url = ClaudeSetup.desktopConfigURL
+    let confirm = NSAlert()
+    confirm.messageText = "Set Up SafariPilot Server"
+    confirm.informativeText = "Adds SafariPilot to Claude Desktop's settings, with a credential that identifies Claude Desktop to SafariPilot. Your other servers stay as they are.\n\n\(url.path)"
+    confirm.addButton(withTitle: "Set Up")
+    confirm.addButton(withTitle: "Cancel")
+    NSApp.activate()
+    guard confirm.runModal() == .alertFirstButtonReturn else { return }
 
     do {
       let existing = FileManager.default.fileExists(atPath: url.path) ? try Data(contentsOf: url) : nil
@@ -120,9 +121,9 @@ final class AppModel {
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
       try merged.write(to: url, options: .atomic)
       desktopAdded = true
-      setupAlert = SetupAlert(title: "Added to Claude Desktop", message: "Quit and reopen Claude to load SafariPilot.")
+      alert("Added to Claude Desktop", "Quit and reopen Claude to load SafariPilot.")
     } catch {
-      setupAlert = SetupAlert(title: "Couldn't Update Claude Desktop", message: "\(error)")
+      alert("Couldn't Update Claude Desktop", "\(error)")
     }
   }
 
@@ -133,8 +134,17 @@ final class AppModel {
       NSPasteboard.general.prepareForNewContents(with: .currentHostOnly)
       NSPasteboard.general.setString(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath, credential: credential), forType: .string)
     } catch {
-      setupAlert = SetupAlert(title: "Couldn't Create a Credential", message: "\(error)")
+      alert("Couldn't Create a Credential", "\(error)")
     }
+  }
+
+  /// App-modal, since a menu bar action has no window to put a sheet on.
+  private func alert(_ title: String, _ message: String) {
+    let alert = NSAlert()
+    alert.messageText = title
+    alert.informativeText = message
+    NSApp.activate()
+    alert.runModal()
   }
 
   func runCLI(_ request: CLIRequest) async -> CLIReply {

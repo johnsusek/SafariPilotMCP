@@ -43,10 +43,5 @@ struct MainView: View {
     // A Dock icon and menu bar only while the window is open; otherwise the app lives in the menu bar alone.
     .onAppear { NSApp.setActivationPolicy(.regular) }
     .onDisappear { NSApp.setActivationPolicy(.accessory) }
-    .alert(model.setupAlert?.title ?? "", isPresented: Binding(get: { model.setupAlert != nil }, set: { if !$0 { model.setupAlert = nil } })) {
-      Button("OK") {}
-    } message: {
-      Text(model.setupAlert?.message ?? "")
-    }
   }
 }

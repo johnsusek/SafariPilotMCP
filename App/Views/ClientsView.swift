@@ -8,7 +8,7 @@ struct ClientsView: View {
     Form {
       Section("Connect a Client") {
         LabeledContent {
-          if model.desktopAdded { Text("Added") } else { Button("Add") { model.addToClaudeDesktop() } }
+          Button(model.desktopAdded ? "Set Up Again…" : "Set Up…") { model.configureClaudeDesktop() }
         } label: {
           Text("Claude Desktop")
           Text("Adds SafariPilot to Claude Desktop's MCP servers.")
