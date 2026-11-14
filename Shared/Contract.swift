@@ -110,8 +110,17 @@ struct WaitResult: Codable, Sendable {
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
 struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
-/// loading is true when a created tab was still loading after the background's load timeout.
-struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool? }
+/// Safari has not granted the tab's site: prompt while it is asking the user, denied when refused or never allowed.
+enum SiteAccess: String, Codable, Sendable { case prompt, denied }
+/// A background failure Safari's website access caused; error names the site and what the user has to do, and no retry helps until they do it.
+struct SiteAccessFailure: Codable, Sendable, Error, Equatable, CustomStringConvertible {
+  let siteAccess: SiteAccess
+  let error: String
+
+  var description: String { error }
+}
+/// loading is true when a created tab was still loading after the background's load timeout; access is set when Safari held the loaded tab behind its website access prompt, and tab is then as known before the load.
+struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool?; var access: SiteAccessFailure? }
 /// Where a tab is after an action: navigation is load when it started loading (loading: still loading at the 15 s cap), sameDocument when only its address changed.
 struct SettleResult: Codable, Sendable {
   enum Navigation: String, Codable, Sendable { case none, load, sameDocument }

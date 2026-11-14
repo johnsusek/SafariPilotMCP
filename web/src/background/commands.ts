@@ -4,6 +4,14 @@ import type {
   ContentResponse,
   FramesResult,
 } from "../shared/protocol";
+import {
+  accessError,
+  accessFailure,
+  type AccessFailure,
+  accessFrom,
+  probeAccess,
+  refusing,
+} from "./access";
 import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
@@ -26,18 +34,29 @@ async function sendToContent(
   let response = browser.tabs
     .sendMessage(tab.id, request, { frameId })
     .then(
-      (answer) =>
+      (answer): ContentResponse =>
         (answer as ContentResponse | undefined) ?? {
-          ok: false as const,
+          ok: false,
           error: noScript,
-          unreachable: true as const,
+          unreachable: true,
         },
+      (error): ContentResponse => ({
+        ok: false,
+        error: `${noScript}: ${error}`,
+        unreachable: true,
+      }),
     )
-    .catch((error) => ({
-      ok: false as const,
-      error: `${noScript}: ${error}`,
-      unreachable: true as const,
-    }));
+    .then(async (reply) => {
+      // Safari injects no content script on a site it has not granted, so a silent top frame may be that rather than a tab older than the extension.
+      if (reply.ok || !reply.unreachable || frameId !== 0) return reply;
+
+      let access = await probeAccess(tab.id);
+
+      if (access === "prompt" || access === "denied")
+        throw accessError(accessFailure(access, tab.id, tab.url));
+
+      return reply;
+    });
   return await withTimeout(
     response,
     contentTimeoutMs,
@@ -94,19 +113,39 @@ async function frameNode(
   return node;
 }
 
+type KnownTab = chrome.tabs.Tab & { id: number };
+
 // A navigation that is still loading after the timeout fails; a created tab is answered as loading instead, since it exists and its caller must come to own it.
-async function loadedTab(start: () => Promise<number>, created = false) {
-  let { tabId, loaded } = await loadAfter(start);
+// start answers with the tab as known before the load. When Safari holds the loaded tab behind its website access prompt, the load is still reported, with that tab
+// and access set, since the navigation happened and the caller should ask its user rather than repeat it.
+async function loadedTab(start: () => Promise<KnownTab>, created = false) {
+  let known: KnownTab | undefined;
+  let { tabId, loaded } = await loadAfter(async () => {
+    known = await start();
+    return known.id;
+  });
 
   if (!loaded && !created)
     throw new Error(
       `tab ${tabId} did not finish loading within ${loadTimeoutMs / 1000} s`,
     );
 
+  let tab = known!;
+  let access: AccessFailure | null = null;
+
+  try {
+    tab = await resolveTab(tabId);
+  } catch (error) {
+    access = accessFrom(error);
+
+    if (!access) throw error;
+  }
+
   return {
     ok: true as const,
-    tab: await tabInfo(await resolveTab(tabId)),
+    tab: await tabInfo(tab),
     loading: !loaded,
+    ...(access && { access }),
   };
 }
 
@@ -134,7 +173,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       await sender(tab.id),
       command.code,
       command.frame,
-    );
+    ).catch(refusing(tab.id, tab.url));
   }
 
   if (command.type === "tab")
@@ -150,16 +189,26 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
         : null;
     let create = async () => {
       if (window)
-        return (await browser.tabs.create({ windowId: window.id, url })).id!;
+        return (await browser.tabs.create({
+          windowId: window.id,
+          url,
+        })) as KnownTab;
 
       let created = await browser.windows.create({ url, focused: false });
       await browser.storage.session.set({ pilotWindow: created!.id });
-      return created!.tabs![0].id!;
+      return created!.tabs![0] as KnownTab;
     };
 
-    if (command.url !== null) return await loadedTab(create, true);
+    if (command.url !== null)
+      return await loadedTab(
+        async () => ({ ...(await create()), url: command.url! }),
+        true,
+      );
 
-    return { ok: true, tab: await tabInfo(await resolveTab(await create())) };
+    return {
+      ok: true,
+      tab: await tabInfo(await resolveTab((await create()).id)),
+    };
   }
 
   if (command.type === "tabSelect") {
@@ -178,7 +227,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     let tab = await resolveTab(command.tabId);
     return await loadedTab(async () => {
       await browser.tabs.update(tab.id, { url: command.url });
-      return tab.id;
+      return { ...tab, url: command.url, title: "" };
     });
   }
 
@@ -188,7 +237,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       await (command.direction === "back"
         ? browser.tabs.goBack(tab.id)
         : browser.tabs.goForward(tab.id));
-      return tab.id;
+      return { ...tab, url: "", title: "" };
     });
   }
 
@@ -212,9 +261,9 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       error: `tab ${tab.id} is not the active tab of its window; select it first`,
     };
 
-  let dataUrl = await browser.tabs.captureVisibleTab(tab.windowId, {
-    format: "png",
-  });
+  let dataUrl = await browser.tabs
+    .captureVisibleTab(tab.windowId, { format: "png" })
+    .catch(refusing(tab.id, tab.url));
   return { ok: true, dataUrl, tab: await tabInfo(tab) };
 }
 
@@ -224,9 +273,11 @@ export async function runCommand(
   try {
     return await dispatch(command);
   } catch (error) {
-    return {
-      ok: false,
-      error: `${command.type} failed: ${error instanceof Error ? error.message : String(error)}`,
-    };
+    return (
+      accessFrom(error) ?? {
+        ok: false,
+        error: `${command.type} failed: ${error instanceof Error ? error.message : String(error)}`,
+      }
+    );
   }
 }

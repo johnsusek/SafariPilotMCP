@@ -24,6 +24,19 @@ struct ContractTests {
     #expect(try decode(ScreenshotResult.self, #"{"ok":true,"dataUrl":"data:image/png;base64,AAAA","tab":\#(tab)}"#).tab.windowId == 3)
   }
 
+  @Test func siteAccessFailuresDecodeAndKeepTheirMarkInTheReply() throws {
+    let access = try decode(SiteAccessFailure.self, #"{"ok":false,"error":"Safari has not granted SafariPilot access to https://a.test","siteAccess":"denied"}"#)
+    #expect(access == SiteAccessFailure(siteAccess: .denied, error: "Safari has not granted SafariPilot access to https://a.test"))
+    #expect(throws: (any Error).self) { try decode(SiteAccessFailure.self, #"{"ok":false,"error":"no content script answered","unreachable":true}"#) }
+    let reply = CLIReply(failed: access)
+    #expect(!reply.ok && reply.text == access.error)
+    #expect(reply.data == .object(["error": .string(access.error), "siteAccess": "denied"]))
+    #expect(CLIReply(failed: Failure(description: "other")).data == .object(["error": "other"]))
+    let held = try decode(TabResult.self, #"{"ok":true,"tab":\#(tab),"loading":false,"access":{"ok":false,"error":"Safari is asking","siteAccess":"prompt"}}"#)
+    #expect(held.access == SiteAccessFailure(siteAccess: .prompt, error: "Safari is asking"))
+    #expect(try decode(TabResult.self, #"{"ok":true,"tab":\#(tab)}"#).access == nil)
+  }
+
   @Test func settleEncodesAndNamesWhereTheTabLanded() throws {
     #expect(BackgroundCommand.settle(tabId: 12, url: "https://a.test/", watchMs: 40).json == ["type": "settle", "tabId": .number(12), "url": "https://a.test/", "watchMs": .number(40)])
     let landed = { (navigation: String, url: String, loading: Bool) in

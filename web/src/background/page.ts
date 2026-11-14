@@ -39,6 +39,7 @@ import {
   timed,
   walkPath,
 } from "./frames";
+import { accessFrom } from "./access";
 
 let findLimit = 20;
 // Frames smaller than this hold widgets, not text worth reading.
@@ -513,9 +514,11 @@ export async function runPage(
   try {
     return await dispatch(send, request);
   } catch (error) {
-    return {
-      ok: false,
-      error: error instanceof Error ? error.message : String(error),
-    };
+    return (
+      accessFrom(error) ?? {
+        ok: false,
+        error: error instanceof Error ? error.message : String(error),
+      }
+    );
   }
 }

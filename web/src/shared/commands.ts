@@ -6,6 +6,7 @@ import type {
   ConsoleEntry,
   ContentResponse,
   ElementInfo,
+  Failure,
   FocusResult,
   FrameEntry,
   InspectResult,
@@ -161,7 +162,13 @@ export type Command =
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 // loading is set by commands that wait for a load: true when a created tab was still loading after the timeout.
-export type TabResult = { ok: true; tab: TabInfo; loading?: boolean };
+// access is set when Safari held the loaded tab behind its website access prompt; tab is then as known before the load, with the address asked for.
+export type TabResult = {
+  ok: true;
+  tab: TabInfo;
+  loading?: boolean;
+  access?: Failure;
+};
 // navigation is load when the tab started loading (loading: still loading after the timeout), sameDocument when only its address changed.
 export type SettleResult = {
   ok: true;

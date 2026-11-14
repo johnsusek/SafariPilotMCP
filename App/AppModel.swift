@@ -152,7 +152,7 @@ final class AppModel {
       return reply
     } catch {
       record(label, ok: false, summary: "\(error)")
-      return CLIReply(ok: false, text: "\(error)", data: .object(["error": .string("\(error)")]))
+      return CLIReply(failed: error)
     }
   }
 

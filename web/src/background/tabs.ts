@@ -1,5 +1,6 @@
 import type { TabInfo } from "../shared/commands";
 import type { Rect } from "../shared/protocol";
+import { withinAccess } from "./access";
 
 type Tab = chrome.tabs.Tab;
 type Window = chrome.windows.Window;
@@ -27,12 +28,13 @@ export let infoOf = (
   openerId: tab.openerTabId ?? null,
 });
 
+// Fails as Safari's website access prompt when the lookup is held past the access deadline.
 export async function resolveTab(tabId: number | null) {
   if (tabId === null) {
-    let [tab] = await browser.tabs.query({
-      active: true,
-      lastFocusedWindow: true,
-    });
+    let [tab] = await withinAccess(
+      browser.tabs.query({ active: true, lastFocusedWindow: true }),
+      null,
+    );
 
     if (tab?.id === undefined)
       throw new Error("no active tab in the last focused window");
@@ -40,7 +42,10 @@ export async function resolveTab(tabId: number | null) {
     return tab as Tab & { id: number };
   }
 
-  let tab = await browser.tabs.get(tabId).catch(() => null);
+  let tab = await withinAccess(
+    browser.tabs.get(tabId).catch(() => null),
+    tabId,
+  );
 
   if (!tab) throw new Error(`no tab with id ${tabId}`);
 

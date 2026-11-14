@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { accessDeadlineMs } from "./access";
 import { runCommand } from "./commands";
 import { addressSettleMs, loadTimeoutMs } from "./load";
 import { resolveTab } from "./tabs";
@@ -334,6 +335,222 @@ describe("runCommand", () => {
       ok: false,
       error: expect.stringMatching(/^javascript failed: SyntaxError: /),
     });
+  });
+});
+
+describe("site access", () => {
+  let refusal = new Error(
+    "Invalid call to scripting.executeScript(). this extension does not have access to this tab.",
+  );
+  let silent = () =>
+    fake.tabs.sendMessage.mockRejectedValue(
+      new Error("Could not establish connection"),
+    );
+  let content = (request: object, tabId: number | null = 6) =>
+    run({ type: "content", tabId, request });
+  let probe = {
+    target: { tabId: 6, frameIds: [0] },
+    func: expect.any(Function),
+  };
+
+  test("a silent top frame on a refused site fails as denied, naming the site, for every page request", async () => {
+    silent();
+    fake.scripting.executeScript.mockRejectedValue(refusal);
+    let requests = [
+      { op: "readPage", filter: "all", maxChars: 100, ref: null, depth: null },
+      { op: "find", name: "Go", role: "" },
+      { op: "pageText", maxChars: 100 },
+      { op: "locate", ref: "12" },
+      { op: "locate", ref: "5:12" },
+      { op: "inspect", ref: "12" },
+      { op: "focus", ref: "12" },
+      { op: "events", clear: true, arm: false, watch: "12" },
+      { op: "scroll", ref: null, left: 0, top: 100 },
+      { op: "scrollIntoView", ref: "12" },
+      {
+        op: "console",
+        onlyErrors: false,
+        pattern: null,
+        limit: 5,
+        clear: false,
+      },
+      { op: "upload", ref: "12", files: [] },
+      { op: "waitFor", text: "Ready", selector: null },
+    ];
+
+    for (let request of requests) {
+      let result = await content(request);
+      expect(result, JSON.stringify(request)).toMatchObject({
+        ok: false,
+        siteAccess: "denied",
+      });
+      expect(result).not.toHaveProperty("unreachable");
+      expect((result as { error: string }).error).toMatch(
+        /^Safari has not granted SafariPilot access to https:\/\/site \(refused, or never allowed\)/,
+      );
+    }
+
+    expect(fake.scripting.executeScript).toHaveBeenCalledWith(probe);
+  });
+
+  test("a silent top frame whose probe is held is the open prompt", async () => {
+    vi.useFakeTimers();
+    fake.tabs.sendMessage.mockResolvedValue(undefined);
+    fake.scripting.executeScript.mockReturnValue(new Promise(() => {}));
+    let pending = content({ op: "waitFor", text: "Ready", selector: null });
+    await vi.advanceTimersByTimeAsync(accessDeadlineMs);
+    let result = await pending;
+    expect(result).toMatchObject({ ok: false, siteAccess: "prompt" });
+    expect((result as { error: string }).error).toMatch(
+      /^Safari is asking the user whether SafariPilot may use https:\/\/site and holds every call for tab 6/,
+    );
+  });
+
+  test("a tab lookup Safari holds is the open prompt, for page commands and tab", async () => {
+    vi.useFakeTimers();
+    fake.tabs.get.mockReturnValue(new Promise(() => {}));
+
+    for (let command of [
+      { type: "tab", tabId: 6 },
+      { type: "content", tabId: 6, request: { op: "ping" } },
+      { type: "javascript", tabId: 6, code: "1", frame: null },
+      { type: "screenshot", tabId: 6 },
+      { type: "frames", tabId: 6 },
+    ]) {
+      let pending = run(command);
+      await vi.advanceTimersByTimeAsync(accessDeadlineMs);
+      expect(await pending, command.type).toMatchObject({
+        ok: false,
+        siteAccess: "prompt",
+        error: expect.stringMatching(/may use the site in tab 6 /),
+      });
+    }
+  });
+
+  test("a granted site with no content script keeps the new-tab advice", async () => {
+    silent();
+    let result = await content({ op: "ping" });
+    expect(fake.scripting.executeScript).toHaveBeenCalledWith(probe);
+    expect(result).toMatchObject({ ok: false, unreachable: true });
+    expect(result).not.toHaveProperty("siteAccess");
+  });
+
+  test("a probe failing some other way keeps the content failure", async () => {
+    silent();
+    fake.scripting.executeScript.mockRejectedValue(
+      new Error("could not execute script on this tab"),
+    );
+    expect(await content({ op: "ping" })).toMatchObject({
+      ok: false,
+      unreachable: true,
+    });
+  });
+
+  test("a silent iframe is not probed", async () => {
+    let viewport = {
+      innerWidth: 800,
+      innerHeight: 600,
+      scrollX: 0,
+      scrollY: 0,
+      devicePixelRatio: 1,
+      visualScale: 1,
+      visualOffsetLeft: 0,
+      visualOffsetTop: 0,
+    };
+    let box = { left: 0, top: 0, width: 300, height: 200 };
+    fake.tabs.sendMessage.mockImplementation(
+      async (_tab: number, request: { op: string }, { frameId }) => {
+        if (frameId !== 0) return undefined;
+
+        if (request.op === "frames")
+          return {
+            ok: true,
+            url: "u",
+            title: "t",
+            viewport,
+            frames: [
+              {
+                ref: 5,
+                frameId: 41,
+                src: "https://other.test/",
+                sandbox: null,
+                box,
+                clip: box,
+                transformed: false,
+              },
+            ],
+          };
+
+        return { ok: true, matches: [] };
+      },
+    );
+    expect(await content({ op: "find", name: "Go", role: "" })).toEqual({
+      ok: true,
+      matches: [],
+    });
+    expect(fake.scripting.executeScript).not.toHaveBeenCalled();
+  });
+
+  test("javascript and screenshot on a refused site fail as denied", async () => {
+    fake.scripting.executeScript.mockRejectedValue(refusal);
+    expect(
+      await run({ type: "javascript", tabId: 6, code: "1", frame: null }),
+    ).toMatchObject({ ok: false, siteAccess: "denied" });
+    fake.tabs.captureVisibleTab.mockRejectedValue(
+      new Error(
+        "Invalid call to tabs.captureVisibleTab(). either the 'activeTab' permission or granted host permissions for the current website are required.",
+      ),
+    );
+    let shot = await run({ type: "screenshot", tabId: 7 });
+    expect(shot).toMatchObject({ ok: false, siteAccess: "denied" });
+    expect((shot as { error: string }).error).toContain("https://site");
+  });
+
+  test("navigate to a site Safari is asking about reports the load with the access prompt", async () => {
+    vi.useFakeTimers();
+    fake.tabs.update.mockImplementation(async () => {
+      fake.tabs.get.mockReturnValue(new Promise(() => {}));
+      setTimeout(() => fireComplete(6), 0);
+    });
+    let pending = run({
+      type: "navigate",
+      tabId: 6,
+      url: "https://new.test/a",
+    });
+    await vi.advanceTimersByTimeAsync(accessDeadlineMs + 1);
+    expect(await pending).toMatchObject({
+      ok: true,
+      tab: { id: 6, url: "https://new.test/a", title: "", windowFrame: frame },
+      loading: false,
+      access: { ok: false, siteAccess: "prompt" },
+    });
+  });
+
+  test("tabCreate keeps its tab when Safari holds it behind the prompt", async () => {
+    vi.useFakeTimers();
+    stored.pilotWindow = 1;
+    fake.tabs.create.mockImplementation(async () => {
+      fake.tabs.get.mockReturnValue(new Promise(() => {}));
+      setTimeout(() => fireComplete(8), 0);
+      return { ...tab(8, 1, true), url: "" };
+    });
+    let pending = run({ type: "tabCreate", url: "https://new.test/" });
+    await vi.advanceTimersByTimeAsync(accessDeadlineMs + 1);
+    expect(await pending).toMatchObject({
+      ok: true,
+      tab: { id: 8, windowId: 1, url: "https://new.test/" },
+      access: { siteAccess: "prompt" },
+    });
+  });
+
+  test("navigate on a granted site reports no access, and listing tabs never probes", async () => {
+    fake.tabs.update.mockImplementation(async () => {
+      setTimeout(() => fireComplete(6), 0);
+    });
+    let result = await run({ type: "navigate", tabId: 6, url: "https://next" });
+    expect(result).not.toHaveProperty("access");
+    await run({ type: "tabs" });
+    expect(fake.scripting.executeScript).not.toHaveBeenCalled();
   });
 });
 

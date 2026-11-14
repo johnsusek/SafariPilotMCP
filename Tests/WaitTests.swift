@@ -58,6 +58,19 @@ struct WaitTests {
     #expect(script.looks.count == 2)
   }
 
+  @Test func aSiteSafariHasNotGrantedStopsTheWaitAtOnce() async throws {
+    let access = SiteAccessFailure(siteAccess: .prompt, error: "Safari is asking the user whether SafariPilot may use https://a.test and holds every call for tab 4 until they answer.")
+    let script = Script([pending, CLIReply(failed: access), found])
+
+    await #expect {
+      try await poll(script, timeout: 10)
+    } throws: { error in
+      (error as? Failure)?.description.hasSuffix(": \(access.error)") == true
+    }
+
+    #expect(script.looks.count == 2)
+  }
+
   @Test func aZeroTimeoutLooksOnce() async throws {
     let script = Script([missing, found])
     await #expect(throws: Failure.self) { try await poll(script, timeout: 0) }

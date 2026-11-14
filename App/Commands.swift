@@ -75,7 +75,11 @@ struct Commands {
 
     do { response = try await sending.value } catch is CancellationError { throw Failure(description: await watching.value ?? "\(command.type) was cancelled") }
 
-    if response["ok"]?.bool != true { throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")") }
+    if response["ok"]?.bool != true {
+      if let access = try? response.decode(SiteAccessFailure.self) { throw access }
+
+      throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")")
+    }
 
     try await model.noteTabs(in: response)
     return response
@@ -194,7 +198,8 @@ struct Commands {
     let result = try response.decode(TabResult.self)
     let tab = result.tab
     let loading = result.loading == true ? "; the page is still loading" : ""
-    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)\(loading)", data: response)
+    let access = result.access.map { "\n\($0.error)" } ?? ""
+    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)\(loading)\(access)", data: response)
   }
 
   private func tabClose(_ tabId: Int) async throws -> CLIReply {

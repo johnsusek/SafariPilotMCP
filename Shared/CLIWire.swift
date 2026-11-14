@@ -40,6 +40,17 @@ struct CLIReply: Codable, Sendable {
   let data: JSONValue
 }
 
+extension CLIReply {
+  /// A failed command; a site Safari has not granted is marked with siteAccess, so a caller can tell it from other failures.
+  init(failed error: any Error) {
+    var data: [String: JSONValue] = ["error": .string("\(error)")]
+
+    if let access = error as? SiteAccessFailure { data["siteAccess"] = .string(access.siteAccess.rawValue) }
+
+    self.init(ok: false, text: "\(error)", data: .object(data))
+  }
+}
+
 /// One app command, shared by the CLI and the MCP server. A nil tabId means the active tab of the last focused window.
 enum AppCommand: Codable, Sendable, Equatable {
   case status
