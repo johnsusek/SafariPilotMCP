@@ -40,6 +40,8 @@ targets:
         CFBundleShortVersionString: $(MARKETING_VERSION)
         CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
+        LSUIElement: true
+        NSHumanReadableCopyright: © 2026 John Susek
         NSSupportsSuddenTermination: false
     entitlements:
       path: App/SafariPilot.entitlements
