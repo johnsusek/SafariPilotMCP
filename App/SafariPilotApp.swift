@@ -85,7 +85,7 @@ private struct MenuBarIcon: View {
   @Environment(\.openWindow) private var openWindow
 
   var body: some View {
-    Image(nsImage: logo)
+    Image("MenuBarLogo")
       .onReceive(NotificationCenter.default.publisher(for: AppDelegate.reopen)) { _ in
         openWindow(id: "main")
         NSApp.activate()
@@ -97,12 +97,5 @@ private struct MenuBarIcon: View {
         openWindow(id: "main")
         NSApp.activate()
       }
-  }
-
-  private var logo: NSImage {
-    let image = NSImage(named: "Logo")!.copy() as! NSImage
-    image.size = NSSize(width: 33, height: 16)
-    image.isTemplate = true
-    return image
   }
 }
