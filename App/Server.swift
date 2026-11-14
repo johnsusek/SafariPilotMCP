@@ -103,7 +103,7 @@ enum Server {
 
         if !Task.isCancelled { model.transport.abandon(poll) }
       }
-      reply = try await JSONEncoder().encode(model.transport.handle(decoder.decode(JSONValue.self, from: line), poll: poll))
+      reply = try await JSONEncoder().encode(model.relay(decoder.decode(JSONValue.self, from: line), poll: poll))
     }
 
     reply.append(0x0A)

@@ -21,6 +21,10 @@ final class AppModel {
   }
 
   let transport = Transport()
+  /// The build stamped into the app extension this app embeds, read once at launch, since an install replaces the bundle under a running app.
+  let build = BuildIdentity.read(appex: Bundle.main.builtInPlugInsURL!.appending(path: "SafariPilotExtension.appex"))
+  /// What the last background message said about the extension Safari runs; nil until one arrives.
+  private(set) var extensionBuild: ExtensionBuild?
   let gate = ClientGate()
   private let queue = CommandQueue()
   private(set) var axTrusted = AXIsProcessTrusted()
@@ -36,6 +40,8 @@ final class AppModel {
   /// Commands that may touch Safari, running or recently ended, for naming the one that brought Safari forward.
   private var inFlight: [UUID: (label: String, start: Date)] = [:]
   private var lastEnded: (label: String, start: Date, end: Date)?
+
+  var buildMismatch: BuildMismatch? { extensionBuild?.mismatch(app: build) }
 
   var extensionState: String {
     if let extensionError { return "unknown (\(extensionError))" }
@@ -133,6 +139,11 @@ final class AppModel {
       return CLIReply(ok: false, text: refusal, data: .object(["unapproved": .bool(true)]))
     }
 
+    if request.command != .status, let buildMismatch {
+      record(label, ok: false, summary: "\(buildMismatch)")
+      return CLIReply(failed: buildMismatch)
+    }
+
     let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
     let id = UUID()
 
@@ -154,6 +165,19 @@ final class AppModel {
       record(label, ok: false, summary: "\(error)")
       return CLIReply(failed: error)
     }
+  }
+
+  /// Every background message names the builds Safari runs; a poll from any build but this app's gets the mismatch instead of a command, and so do commands waiting for one.
+  func relay(_ message: JSONValue, poll: UUID) async -> JSONValue {
+    let seen = ExtensionBuild(message: message)
+
+    if seen != extensionBuild {
+      extensionBuild = seen
+      let mismatch = seen.mismatch(app: build)
+      record("extension build", ok: mismatch == nil, summary: mismatch.map { "\($0)" } ?? "matches this app, \(build ?? "")")
+    }
+
+    return await transport.handle(message, poll: poll, refusal: buildMismatch)
   }
 
   /// Keeps the TabInfo a background reply carried and forgets a closed tab.

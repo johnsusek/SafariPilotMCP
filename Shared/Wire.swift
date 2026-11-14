@@ -124,3 +124,50 @@ enum Wire {
     return line
   }
 }
+
+/// The build identity web/build.mjs writes into extension/build.json, a resource of the app extension. Each build gets a new one,
+/// so a copy another build left registered never matches, even one of the same commit. Nil when the bundle has none.
+enum BuildIdentity {
+  static func read(appex url: URL) -> String? {
+    guard let file = Bundle(url: url)?.url(forResource: "build", withExtension: "json"), let data = try? Data(contentsOf: file) else { return nil }
+
+    return (try? JSONDecoder().decode(JSONValue.self, from: data))?["build"]?.string
+  }
+}
+
+/// The builds a background message names: the background's own on its instance, and its app extension's, which the relay adds with its path.
+struct ExtensionBuild: Codable, Equatable, Sendable {
+  var background: String?
+  var appex: String?
+  var appexPath: String?
+
+  init(background: String?, appex: String?, appexPath: String?) {
+    self.background = background
+    self.appex = appex
+    self.appexPath = appexPath
+  }
+
+  init(message: JSONValue) {
+    self.init(background: message["instance"]?["build"]?.string, appex: message["appex"]?["build"]?.string, appexPath: message["appex"]?["path"]?.string)
+  }
+
+  /// Nil only when both parts carry this app's build; a part that names none is a mismatch, never a pass.
+  func mismatch(app: String?) -> BuildMismatch? {
+    guard let app, background == app, appex == app else { return BuildMismatch(app: app, background: background, appex: appex, appexPath: appexPath) }
+
+    return nil
+  }
+}
+
+/// Safari runs an extension other than the one inside this app, which every command refuses until it is fixed.
+struct BuildMismatch: Codable, Equatable, Sendable, Error, CustomStringConvertible {
+  let app: String?
+  let background: String?
+  let appex: String?
+  let appexPath: String?
+
+  var description: String {
+    let found = "extension \(background ?? "none"), app extension \(appex ?? "none") at \(appexPath ?? "an unknown path")"
+    return "Safari is running a different copy of the SafariPilot extension than this app (this app: \(app ?? "none"); Safari: \(found)). Run scripts/install.sh, which unregisters stale copies, or remove the other copy."
+  }
+}

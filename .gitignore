@@ -5,3 +5,4 @@ extension/background.js
 extension/content.js
 extension/console.js
 .DS_Store
+extension/build.json

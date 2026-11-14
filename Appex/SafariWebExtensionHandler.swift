@@ -2,13 +2,21 @@ import Foundation
 import os
 import SafariServices
 
-/// Relays every native message from the background to SafariPilot.app over loopback TCP and returns the app's reply.
+/// Relays every native message from the background to SafariPilot.app over loopback TCP, adding this app extension's build, and returns the app's reply.
 /// Polls are held open by the app for up to ~20s, so requests complete asynchronously off the calling thread.
 final class SafariWebExtensionHandler: NSObject, NSExtensionRequestHandling {
   private let log = Logger(subsystem: "net.johnsolo.SafariPilot.Extension", category: "relay")
+  private static let build = BuildIdentity.read(appex: Bundle.main.bundleURL)
 
   func beginRequest(with context: NSExtensionContext) {
-    let message = (context.inputItems.first as? NSExtensionItem)?.userInfo?[SFExtensionMessageKey] ?? NSNull()
+    var message = (context.inputItems.first as? NSExtensionItem)?.userInfo?[SFExtensionMessageKey] ?? NSNull()
+
+    // The app compares this with the build of the app extension it embeds; the path names a stale copy.
+    if var object = message as? [String: Any] {
+      object["appex"] = ["build": Self.build.map { $0 as Any } ?? NSNull(), "path": Bundle.main.bundlePath]
+      message = object
+    }
+
     let box = ContextBox(context: context)
     let request: Data
 

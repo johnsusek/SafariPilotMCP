@@ -5,7 +5,11 @@ import { runCommand } from "./commands";
 import type { Instance, PollReply, PollResult, ToNative } from "./native";
 
 let appId = "net.johnsolo.SafariPilot";
-let instance: Instance = { id: crypto.randomUUID(), startedAt: Date.now() };
+let instance: Instance = {
+  id: crypto.randomUUID(),
+  startedAt: Date.now(),
+  build: SAFARIPILOT_BUILD,
+};
 let polling = false;
 
 let send = async (message: ToNative) =>
@@ -29,7 +33,7 @@ let pollLoop = async () => {
       let reply = (await send({ kind: "poll", instance, result })) as PollReply;
       result = undefined;
 
-      // The appex replies { error } when the app is unreachable; stop until the next wake instead of spinning.
+      // The appex replies { error } when the app is unreachable, and the app when this is not its build; stop until the next wake instead of spinning.
       if (reply?.error) throw new Error(reply.error);
 
       let command = reply?.command;

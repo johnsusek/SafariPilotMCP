@@ -143,6 +143,8 @@ struct Commands {
       "listener: \(transport.listening ? "127.0.0.1:\(Wire.port)" : "down \(transport.listenError ?? "")")",
       "background: \(reachable ? "reachable (poll open \(ago(transport.oldestOpenPoll)))" : "not reachable") last seen \(ago(transport.lastSeen))",
       "dispatchMessage: \(transport.lastDispatch ?? "not used")",
+      "build: \(model.build ?? "none")",
+      "extension build: \(model.buildMismatch.map { "MISMATCH \($0)" } ?? (model.extensionBuild == nil ? "not seen yet" : "matches"))",
       "instances:",
     ]
     let instances = transport.instances.values.sorted { $0.firstSeen < $1.firstSeen }
@@ -163,6 +165,9 @@ struct Commands {
       "listening": .bool(transport.listening),
       "reachable": .bool(reachable),
       "lastSeen": transport.lastSeen.map { .number($0.timeIntervalSince1970) } ?? .null,
+      "build": model.build.map { .string($0) } ?? .null,
+      "extensionBuild": model.extensionBuild.flatMap { try? JSONValue(encoding: $0) } ?? .null,
+      "buildMismatch": .bool(model.buildMismatch != nil),
       "instances": .array(instances.map { .object(["id": .string($0.id), "startedAt": .number($0.startedAt.timeIntervalSince1970), "lastSeen": .number($0.lastSeen.timeIntervalSince1970), "polls": .number(Double($0.polls))]) }),
       "lifecycle": .array(transport.lifecycle.suffix(50).map { .object(["instance": .string($0.instance), "event": .string($0.event), "at": .number($0.at.timeIntervalSince1970)]) }),
     ])

@@ -1,7 +1,8 @@
 // Messages between the background and the native app (relayed by the appex over loopback TCP).
 import type { Command, CommandResponse } from "../shared/commands";
 
-export type Instance = { id: string; startedAt: number };
+// build is the identity web/build.mjs stamped into this bundle; the app refuses polls from a build other than its own.
+export type Instance = { id: string; startedAt: number; build: string };
 
 export type NativeCommand = Command & { id: string };
 

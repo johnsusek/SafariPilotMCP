@@ -48,8 +48,8 @@ final class Transport {
     listenError = error
   }
 
-  /// poll names the open poll this message may become, for `abandon`.
-  func handle(_ message: JSONValue, poll key: UUID) async -> JSONValue {
+  /// poll names the open poll this message may become, for `abandon`. A refused poll still hands in its result but gets the refusal instead of a command, which stops the background's loop until its next wake.
+  func handle(_ message: JSONValue, poll key: UUID, refusal: (any Error)? = nil) async -> JSONValue {
     guard let instanceId = message["instance"]?["id"]?.string else { return .object(["error": .string("message without instance")]) }
 
     touch(instanceId, startedAt: message["instance"]?["startedAt"]?.number)
@@ -59,6 +59,11 @@ final class Transport {
       // The previous command's result rides on the next poll.
       if let result = message["result"], let id = result["id"]?.string {
         pending.removeValue(forKey: id)?.resume(returning: result["response"] ?? .null)
+      }
+
+      if let refusal {
+        fail(queued: refusal)
+        return .object(["error": .string("\(refusal)")])
       }
 
       return await poll(instanceId, key)
@@ -100,6 +105,15 @@ final class Transport {
     } onCancel: {
       Task { @MainActor in self.cancel(id) }
     }
+  }
+
+  /// Commands no poll has taken yet fail at once rather than at their deadline.
+  private func fail(queued error: any Error) {
+    for command in queue {
+      if let id = command["id"]?.string { pending.removeValue(forKey: id)?.resume(throwing: error) }
+    }
+
+    queue.removeAll()
   }
 
   /// A delivered command still runs once the background gets to it; its late result is dropped.

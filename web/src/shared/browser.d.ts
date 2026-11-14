@@ -8,3 +8,5 @@ declare let browser: typeof chrome & {
 interface Uint8ArrayConstructor {
   fromBase64(text: string): Uint8Array<ArrayBuffer>;
 }
+// Defined by web/build.mjs for the background bundle.
+declare let SAFARIPILOT_BUILD: string;

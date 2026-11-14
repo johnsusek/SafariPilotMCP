@@ -41,11 +41,13 @@ struct CLIReply: Codable, Sendable {
 }
 
 extension CLIReply {
-  /// A failed command; a site Safari has not granted is marked with siteAccess, so a caller can tell it from other failures.
+  /// A failed command; a site Safari has not granted is marked with siteAccess and another copy of the extension with buildMismatch, so a caller can tell them from other failures.
   init(failed error: any Error) {
     var data: [String: JSONValue] = ["error": .string("\(error)")]
 
     if let access = error as? SiteAccessFailure { data["siteAccess"] = .string(access.siteAccess.rawValue) }
+
+    if let mismatch = error as? BuildMismatch { data["buildMismatch"] = try? JSONValue(encoding: mismatch) }
 
     self.init(ok: false, text: "\(error)", data: .object(data))
   }

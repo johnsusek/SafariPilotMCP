@@ -35,6 +35,17 @@ struct GeneralView: View {
           Text("Safari Extension")
           Text(model.extensionState.capitalized)
         }
+        LabeledContent {
+          Text(model.build ?? "None").textSelection(.enabled)
+        } label: {
+          Text("Build")
+
+          if let mismatch = model.buildMismatch {
+            Text(mismatch.description).foregroundStyle(.red).textSelection(.enabled)
+          } else {
+            Text(model.extensionBuild == nil ? "Extension not seen yet" : "Extension matches")
+          }
+        }
         TimelineView(.periodic(from: .now, by: 1)) { context in
           LabeledContent {
             Text(model.transport.listening ? "127.0.0.1:\(String(Wire.port))" : "Down \(model.transport.listenError ?? "")").textSelection(.enabled)
