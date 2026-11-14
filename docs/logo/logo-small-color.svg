@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 52 32">
+  <g fill="#F3BE52">
+    <path id="wing" d="M38.2 6.85 L47.2 5.6 C49.9 5.2 51.4 6.6 51.4 8.6 C51.4 10.8 49.4 11.7 46.8 12.05 L42.4 12.65 L42.4 14.65 L44.2 14.4 C46.6 14.1 47.8 15.2 47.8 17 C47.8 19.2 46 20.2 43.8 20.45 L38.2 21.25Z"/>
+    <use href="#wing" transform="matrix(-1 0 0 1 52 0)"/>
+  </g>
+  <circle cx="26" cy="16" r="13.75" fill="#FFFFFF" stroke="#F3BE52" stroke-width="3.5"/>
+  <path d="M19.1 22.9 L23.6 13.6 L28.4 18.4Z" fill="#BDC8D6"/>
+  <path d="M32.9 9.1 L23.6 13.6 L28.4 18.4Z" fill="#EA583E"/>
+</svg>
