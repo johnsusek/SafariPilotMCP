@@ -266,10 +266,10 @@ private struct CredentialView: View {
       Text("\(HelloRequest.credentialVariable)=\(credential)").font(.caption.monospaced()).textSelection(.enabled)
       HStack {
         Spacer()
-        Button("Copy Value") {
+        Button("Copy") {
           let pasteboard = NSPasteboard.general
           pasteboard.prepareForNewContents(with: .currentHostOnly)
-          pasteboard.setString(credential, forType: .string)
+          pasteboard.setString("\(HelloRequest.credentialVariable)=\(credential)", forType: .string)
         }
         Button("Done", action: done).keyboardShortcut(.defaultAction)
       }
