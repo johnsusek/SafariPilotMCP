@@ -66,7 +66,12 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
   }
 }
 
-// Safari's browser.runtime.onMessage delivers the resolved promise as the response.
+// document.open() makes Safari inject this script again into the same world; with two copies answering, a sync op got refs from one and an async op's failure from the other.
+// So only the newest copy answers; Safari's browser.runtime.onMessage delivers the resolved promise as the response.
+let shared = globalThis as { safaripilotCopy?: number };
+let copy = (shared.safaripilotCopy ?? 0) + 1;
+shared.safaripilotCopy = copy;
+
 browser.runtime.onMessage.addListener((request: ContentRequest) =>
-  handle(request),
+  copy === shared.safaripilotCopy ? handle(request) : undefined,
 );
