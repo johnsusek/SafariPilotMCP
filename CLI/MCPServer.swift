@@ -72,7 +72,7 @@ enum MCPServer {
       if reply.ok, let png = reply.data["png"]?.string { return ToolResult(items: [.png(png), .text(reply.text)]) }
 
       switch command {
-      case .click, .key: break
+      case .click, .key, .drag: break
       default: return .reply(reply)
       }
 

@@ -1,6 +1,7 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
 import { installReader, takeConsole } from "./console";
 import { installLogger, takeEvents } from "./events";
+import { drag } from "./drag";
 import { find } from "./find";
 import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
@@ -33,6 +34,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "focus") return focusRef(request.ref);
     if (request.op === "syntheticClick")
       return syntheticClick(request.ref, request.action, request.modifiers);
+    if (request.op === "drag") return await drag(request.ref, request.to);
     if (request.op === "upload") return upload(request.ref, request.files);
     if (request.op === "readPage")
       return readPage(

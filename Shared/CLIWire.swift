@@ -72,6 +72,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// A plain left click is an AXPress; any other action or any modifier dispatches synthetic DOM events.
   case click(tabId: Int?, ref: PageRef, action: ClickAction = .left, modifiers: [KeyChord.Modifier] = [])
   case formInput(tabId: Int?, ref: PageRef, value: FormValue)
+  /// Presses ref and drags to the center of to, both in one frame, as untrusted events the page script dispatches.
+  case drag(tabId: Int?, ref: PageRef, to: PageRef)
   case events(tabId: Int?, clear: Bool)
   case tabs
   /// Opens the tab in SafariPilot's window, or in a new one when none is open.
@@ -176,7 +178,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 

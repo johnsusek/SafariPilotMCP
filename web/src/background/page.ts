@@ -13,6 +13,7 @@ import type {
   ClickResult,
   ConsoleResult,
   ContentResponse,
+  DragResult,
   ElementInfo,
   EventsResult,
   Failure,
@@ -476,6 +477,26 @@ async function dispatch(
   }
 
   let { path, frameId } = await owner(send, request.ref!);
+
+  if (request.op === "drag") {
+    let to = parsePath(request.to);
+
+    if (to.frames.join(":") !== path.frames.join(":"))
+      return {
+        ok: false,
+        error: `refs ${request.ref} and ${request.to} are in different frames; a drag runs inside one frame`,
+        code: "invalid_argument",
+      };
+
+    let dragged = await send(frameId, {
+      op: "drag",
+      ref: path.local,
+      to: to.local,
+    });
+    return dragged.ok
+      ? { ...(dragged as DragResult), ref: request.ref, to: request.to }
+      : inFrame(dragged, path);
+  }
 
   if (request.op === "scroll") {
     let scrolled = await send(frameId, { ...request, ref: path.local });

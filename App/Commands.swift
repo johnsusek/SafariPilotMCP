@@ -31,6 +31,7 @@ struct Commands {
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
     case let .javascript(tabId, code, frame): try await javascript(tabId, code, frame)
+    case let .drag(tabId, ref, to): try await drag(tabId, ref, to)
     case let .fileUpload(tabId, ref, files): try await fileUpload(tabId, ref, files)
     case let .consoleMessages(tabId, onlyErrors, pattern, limit, clear): try await consoleMessages(tabId, onlyErrors, pattern, limit, clear)
     case let .networkRequests(tabId, urlPattern, limit, clear): try await networkRequests(tabId, urlPattern, limit, clear)
@@ -458,6 +459,34 @@ struct Commands {
     let result = try response.decode(SyntheticClickResult.self)
     let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
     let text = "dispatched a synthetic \(action.rawValue.split(separator: "_").joined(separator: " "))\(held) on ref \(ref) \(result.target) in tab \(tab.id) as untrusted events: \(events); browser defaults such as text selection and the context menu do not run; focus is on \(result.focused)"
+    return await withLanding(CLIReply(ok: true, text: text, data: response), tab, since: acted)
+  }
+
+  /// Untrusted events never start Safari's own drag, so the content script plays one; no AX is involved, so the tab stays where it is in its window.
+  private func drag(_ tabId: Int?, _ ref: PageRef, _ to: PageRef) async throws -> CLIReply {
+    let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let located = try await locateHittable(tab.id, ref)
+    try refuseSandboxed(located, "a drag")
+    let response: JSONValue
+
+    // A listener that opens a dialog stops the drag mid-sequence; the remaining events run once handle_dialog answers it.
+    do { response = try await content(tab.id, .drag(ref: ref, to: to)) } catch {
+      guard let open = try AXEngine.dialog(for: tab) else { throw error }
+
+      let text = "started a synthetic drag from ref \(ref) to ref \(to) in tab \(tab.id), which opened \(open.dialog.line); the rest of the drag runs after handle_dialog accepts or dismisses it"
+      return try CLIReply(ok: true, text: text, data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
+    }
+
+    let acted = ContinuousClock.now
+    let result = try response.decode(DragResult.self)
+    let events = result.dispatched.map { "\($0.type)\($0.count > 1 ? " x\($0.count)" : "")\($0.canceled ? " (canceled)" : "")" }.joined(separator: ", ")
+    let kind = result.html5 ? "an HTML5 drag" : "a pointer drag"
+    let outcome = switch (result.html5, result.dropped) {
+    case (true, true): "dropped on \(result.target)"
+    case (true, false): "no dragover listener on \(result.target) called preventDefault, so nothing was dropped"
+    case (false, _): "released on \(result.target)"
+    }
+    let text = "dragged ref \(ref) \(result.source) to ref \(to) in tab \(tab.id) as \(kind) of untrusted events: \(events); \(outcome)"
     return await withLanding(CLIReply(ok: true, text: text, data: response), tab, since: acted)
   }
 

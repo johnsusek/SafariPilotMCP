@@ -44,7 +44,7 @@ function pressFocusable(element: Element) {
 }
 
 // A press focuses the nearest focusable element around the target, or blurs the focused one when there is none.
-function focusFor(target: Element) {
+export function focusFor(target: Element) {
   for (
     let element: Element | null = target;
     element;

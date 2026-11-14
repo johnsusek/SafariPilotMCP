@@ -80,6 +80,8 @@ export type ContentRequest =
       action: ClickAction;
       modifiers: Modifier[];
     }
+  // Presses ref and drags to the center of to, both in this frame, as untrusted events: an HTML5 drag from a draggable element, else pointer and mouse moves.
+  | { op: "drag"; ref: number; to: number }
   // Gives a file input (ref, the label of one, or the only one inside ref) the files through a DataTransfer and fires untrusted input and change;
   // on any other element dispatches untrusted dragenter, dragover and drop carrying them.
   | { op: "upload"; ref: number; files: UploadFile[] }
@@ -185,6 +187,18 @@ export type ClickResult = {
   target: string;
   dispatched: { type: string; canceled: boolean }[];
   focused: string;
+};
+// drag: source is what the drag started from (the draggable element around the press for an HTML5 drag, else the pressed element), target where it ended;
+// html5 says dragstart ran and was not canceled, dropped that a dragover was canceled so drop fired; dispatched merges runs of one event type, canceled when any was.
+export type DragResult = {
+  ok: true;
+  ref: number;
+  to: number;
+  source: string;
+  target: string;
+  html5: boolean;
+  dropped: boolean;
+  dispatched: { type: string; canceled: boolean; count: number }[];
 };
 // focus: focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
 export type FocusResult = {
@@ -331,6 +345,7 @@ export type ContentResponse =
   | EventsResult
   | InspectResult
   | ClickResult
+  | DragResult
   | FocusResult
   | UploadResult
   | ReadPageResult

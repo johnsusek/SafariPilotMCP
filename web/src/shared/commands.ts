@@ -3,6 +3,7 @@
 import type {
   ClickAction,
   ClickResult,
+  DragResult,
   ConsoleEntry,
   ContentResponse,
   ElementInfo,
@@ -39,6 +40,7 @@ export type PageRequest =
       action: ClickAction;
       modifiers: Modifier[];
     }
+  | { op: "drag"; ref: RefPath; to: RefPath }
   | { op: "upload"; ref: RefPath; files: UploadFile[] }
   | {
       op: "readPage";
@@ -92,6 +94,10 @@ export type PageConsoleResult = {
 };
 export type PageInspectResult = Omit<InspectResult, "ref"> & { ref: RefPath };
 export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
+export type PageDragResult = Omit<DragResult, "ref" | "to"> & {
+  ref: RefPath;
+  to: RefPath;
+};
 export type PageUploadResult = Omit<UploadResult, "ref"> & { ref: RefPath };
 export type PageFocusResult = Omit<FocusResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
@@ -252,6 +258,7 @@ export type CommandResponse =
   | PageLocateResult
   | PageInspectResult
   | PageClickResult
+  | PageDragResult
   | PageUploadResult
   | PageFocusResult
   | PageFindResult

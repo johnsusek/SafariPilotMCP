@@ -766,7 +766,7 @@ describe("runPage reads", () => {
     });
   });
 
-  test("inspect, setColor, scroll, syntheticClick and upload route to the owning frame", async () => {
+  test("inspect, setColor, scroll, syntheticClick, drag and upload route to the owning frame", async () => {
     documents[200].answer = (request) =>
       request.op === "inspect" || request.op === "setColor"
         ? {
@@ -854,6 +854,26 @@ describe("runPage reads", () => {
       await runPage(send, { op: "upload", ref: "5:3:4", files }),
     ).toMatchObject({ ok: true, ref: "5:3:4", via: "input" });
     expect(calls.at(-1)).toEqual([200, { op: "upload", ref: 4, files }]);
+    documents[200].answer = (request) =>
+      request.op === "drag"
+        ? {
+            ok: true,
+            ref: request.ref,
+            to: request.to,
+            source: "span#card",
+            target: "div#zone",
+            html5: true,
+            dropped: true,
+            dispatched: [{ type: "drop", canceled: true, count: 1 }],
+          }
+        : undefined;
+    expect(
+      await runPage(send, { op: "drag", ref: "5:3:4", to: "5:3:9" }),
+    ).toMatchObject({ ok: true, ref: "5:3:4", to: "5:3:9", dropped: true });
+    expect(calls.at(-1)).toEqual([200, { op: "drag", ref: 4, to: 9 }]);
+    expect(
+      await runPage(send, { op: "drag", ref: "5:3:4", to: "9" }),
+    ).toMatchObject({ ok: false, code: "invalid_argument" });
     expect(await runPage(send, { op: "inspect", ref: "5.4" })).toMatchObject({
       ok: false,
       error: expect.stringMatching(/must look like 12/),

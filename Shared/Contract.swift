@@ -60,6 +60,18 @@ struct SyntheticClickResult: Codable, Sendable {
   let dispatched: [Dispatched]
   let focused: String
 }
+/// source is what the drag started from and target where it ended; html5 says dragstart ran uncanceled and dropped that a canceled dragover let drop fire; dispatched merges runs of one event type, canceled when any was.
+struct DragResult: Codable, Sendable {
+  struct Dispatched: Codable, Sendable { let type: String; let canceled: Bool; let count: Int }
+
+  let ref: PageRef
+  let to: PageRef
+  let source: String
+  let target: String
+  let html5: Bool
+  let dropped: Bool
+  let dispatched: [Dispatched]
+}
 /// focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
 struct FocusResult: Codable, Sendable { let ref: PageRef; let focused: String; let taken: Bool }
 /// via says whether a file input took the files or they were dropped on target; files are read back from the page; dispatched lists the events in order, canceled when a listener called preventDefault.
@@ -218,6 +230,8 @@ enum ContentRequest: Equatable, Sendable {
   case focus(ref: PageRef)
   /// Dispatches untrusted pointer and mouse events for the click at the element's center and focuses as a press would.
   case syntheticClick(ref: PageRef, action: ClickAction, modifiers: [KeyChord.Modifier])
+  /// Presses ref and drags to the center of to, in the same frame, as untrusted events: an HTML5 drag from a draggable element, else pointer and mouse moves.
+  case drag(ref: PageRef, to: PageRef)
   /// Gives a file input (ref, a label for one, or the only one inside ref) the files and fires untrusted input and change, or drops them on any other element.
   case upload(ref: PageRef, files: [UploadFile])
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
@@ -239,6 +253,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .setColor(ref, value): ["op": "setColor", "ref": .string(ref.description), "value": .string(value)]
     case let .focus(ref): ["op": "focus", "ref": .string(ref.description)]
     case let .syntheticClick(ref, action, modifiers): ["op": "syntheticClick", "ref": .string(ref.description), "action": .string(action.rawValue), "modifiers": .array(modifiers.map { .string($0.rawValue) })]
+    case let .drag(ref, to): ["op": "drag", "ref": .string(ref.description), "to": .string(to.description)]
     case let .upload(ref, files): ["op": "upload", "ref": .string(ref.description), "files": .array(files.map { .object(["name": .string($0.name), "mimeType": .string($0.mimeType), "lastModified": .number($0.lastModified), "data": .string($0.data)]) })]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]

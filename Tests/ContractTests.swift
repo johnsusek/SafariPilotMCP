@@ -176,6 +176,7 @@ struct ContractTests {
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
     #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])
+    #expect(ContentRequest.drag(ref: PageRef(frames: [5], local: 12), to: PageRef(frames: [5], local: 3)).json == ["op": "drag", "ref": "5:12", "to": "5:3"])
     #expect(ContentRequest.syntheticClick(ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]).json == ["op": "syntheticClick", "ref": "5:12", "action": "double_click", "modifiers": .array(["cmd", "shift"])])
     #expect(BackgroundCommand.resize(tabId: 4, width: 1200, height: 800).json == ["type": "resize", "tabId": .number(4), "width": .number(1200), "height": .number(800)])
   }

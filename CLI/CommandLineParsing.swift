@@ -15,6 +15,7 @@ enum CommandLineParsing {
     snapshot                        interactive elements with refs
     click REF                       locate REF, then AXPress it; REF is 12, or 5:12 inside iframe 5's frame
       [--action double_click|triple_click|right_click] [--modifiers ctrl+shift+alt+cmd]  synthetic DOM events instead
+    drag REF TO                     drag from REF to TO in one frame as synthetic DOM events
     form-input REF VALUE            set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     key [--ref REF] --text TEXT     type TEXT one key per character
@@ -67,6 +68,10 @@ enum CommandLineParsing {
       let action = try option("--action", &rest)
       let modifiers = try option("--modifiers", &rest)
       invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF"), actionName: action, modifierNames: modifiers))
+    case "drag":
+      guard rest.count >= 2 else { throw Failure(.invalidArgument, "drag needs REF and TO") }
+
+      invocation = try Invocation(command: .drag(tabId: tabId, ref: ref(rest[0], "REF"), to: ref(rest[1], "TO")))
     case "events": invocation = Invocation(command: .events(tabId: tabId, clear: flag("--clear", &rest)))
     case "tabs": invocation = Invocation(command: .tabs)
     case "tab-create": invocation = Invocation(command: .tabCreate(url: rest.first))

@@ -8,7 +8,7 @@ struct ToolMappingTests {
     let file = FileManager.default.temporaryDirectory.appending(path: "sample-\(UUID().uuidString).txt")
     try Data("sample".utf8).write(to: file)
     defer { try? FileManager.default.removeItem(at: file) }
-    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept", "paths": .array([.string(file.path)])]
+    let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "to": .number(4), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept", "paths": .array([.string(file.path)])]
 
     // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
@@ -57,6 +57,8 @@ struct ToolMappingTests {
     #expect(try map("click", ["ref": .number(4), "action": "double_click"]) == .click(tabId: 20, ref: 4, action: .double))
     #expect(try map("click", ["ref": .number(4), "action": "triple_click"]) == .click(tabId: 20, ref: 4, action: .triple))
     #expect(try map("click", ["ref": "5:12", "action": "right_click", "modifiers": "ctrl+shift"]) == .click(tabId: 20, ref: PageRef(frames: [5], local: 12), action: .right, modifiers: [.shift, .ctrl]))
+    #expect(try map("drag", ["ref": "5:12", "to": "5:3"]) == .drag(tabId: 20, ref: PageRef(frames: [5], local: 12), to: PageRef(frames: [5], local: 3)))
+    #expect(throws: Failure.self) { try map("drag", ["ref": .number(4)]) }
     #expect(try map("click", ["ref": .number(4), "modifiers": "alt+Meta"]) == .click(tabId: 20, ref: 4, action: .left, modifiers: [.cmd, .alt]))
     let click = Tools.definitions.first { $0.name == "click" }!
     #expect(click.properties["action"]?["enum"] == .array(["left_click", "double_click", "triple_click", "right_click"]))
@@ -299,7 +301,7 @@ struct ToolMappingTests {
   }
 
   @Test func removedToolsAreUnknown() {
-    for name in ["hover", "drag", "right_click", "type"] {
+    for name in ["hover", "right_click", "type"] {
       #expect("\(name)") { try map(name, ["ref": .number(1), "from": .number(1), "to": .number(2)]) } throws: { error in
         (error as? Failure)?.description == "unknown tool \(name)"
       }
@@ -387,6 +389,8 @@ struct CommandLineParsingTests {
   }
 
   @Test func clickTakesActionAndModifiers() throws {
+    #expect(try parse("drag 4 5:9").command == .drag(tabId: nil, ref: 4, to: PageRef(frames: [5], local: 9)))
+    #expect(throws: Failure.self) { try parse("drag 4") }
     #expect(try parse("click 5:12 --action double_click --modifiers shift+cmd").command == .click(tabId: nil, ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]))
     #expect(try parse("--tab 3 click 12 --modifiers ctrl").command == .click(tabId: 3, ref: 12, action: .left, modifiers: [.ctrl]))
     #expect(throws: Failure.self) { try parse("click 12 --action double") }
@@ -449,7 +453,7 @@ struct CommandLineParsingTests {
   }
 
   @Test func removedCommandsAndFlagsAreUnknown() {
-    let expected = ["hover 6": "unknown command hover", "drag 7 8": "unknown command drag", "debug-cg click 3 --global": "debug-cg click takes 1 argument, got 2", "debug-cg key Enter --global": "debug-cg key takes 1 argument, got 2"]
+    let expected = ["hover 6": "unknown command hover", "debug-cg click 3 --global": "debug-cg click takes 1 argument, got 2", "debug-cg key Enter --global": "debug-cg key takes 1 argument, got 2"]
 
     for (line, message) in expected {
       #expect("\(line)") { try parse(line) } throws: { error in (error as? Failure)?.description == message }
