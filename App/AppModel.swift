@@ -27,11 +27,6 @@ final class AppModel {
   private(set) var extensionError: String?
   private(set) var desktopAdded = false
   private(set) var loginItem = SMAppService.mainApp.status
-  /// Off refuses every MCP client and every command but status, while the app keeps running.
-  var serverEnabled = UserDefaults.standard.object(forKey: "serverEnabled") as? Bool ?? true {
-    didSet { UserDefaults.standard.set(serverEnabled, forKey: "serverEnabled") }
-  }
-  static let serverOff = "SafariPilot's MCP server is turned off; turn on Enable MCP Server in its menu bar menu."
 
   private(set) var log: [LogEntry] = []
   /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
@@ -149,11 +144,6 @@ final class AppModel {
 
   func runCLI(_ request: CLIRequest) async -> CLIReply {
     let label = request.command.logLabel
-
-    if !serverEnabled, request.command != .status {
-      record(label, ok: false, summary: "refused: MCP server is off")
-      return CLIReply(failed: Failure(.appUnavailable, AppModel.serverOff))
-    }
 
     if let refusal = gate.refusal(for: request) {
       record(label, ok: false, summary: "\(refusal.code.rawValue): \(refusal)")

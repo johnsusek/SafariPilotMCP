@@ -9,11 +9,10 @@ struct SafariPilotApp: App {
 
   var body: some Scene {
     MenuBarExtra(isInserted: $showInMenuBar) {
-      MenuBarView(model: delegate.model)
+      MenuBarMenu(model: delegate.model)
     } label: {
       Image("MenuBarLogo")
     }
-    .menuBarExtraStyle(.window)
     // Lives on the scene, not a view, so reopening still works with the menu bar icon hidden.
     .onChange(of: delegate.openMain, initial: true) { _, open in
       guard open else { return }
@@ -64,5 +63,27 @@ struct SafariPilotApp: App {
   func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
     openMain = true
     return false
+  }
+}
+
+private struct MenuBarMenu: View {
+  let model: AppModel
+  @Environment(\.openWindow) private var openWindow
+
+  var body: some View {
+    Button("Configure Claude Desktop…") { model.configureClaudeDesktop() }
+    Button("Copy Claude Code Command") { model.copyClaudeCodeCommand() }
+    Divider()
+    Button("Settings…") {
+      openWindow(id: "main")
+      NSApp.activate()
+    }
+    .keyboardShortcut(",")
+    Button("About SafariPilot") {
+      NSApp.orderFrontStandardAboutPanel()
+      NSApp.activate()
+    }
+    Button("Quit SafariPilot") { NSApp.terminate(nil) }
+      .keyboardShortcut("q")
   }
 }
