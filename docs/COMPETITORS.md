@@ -50,7 +50,7 @@ Checked: [Epistates/MCPSafari](https://github.com/Epistates/MCPSafari) at 13ba54
 ## Worth borrowing
 
 1. **Page diff after an action** (Apple's page_interactions, safari-mcp's snapshot diff): return what changed after click, form_input and key instead of a separate read_page.
-2. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem in DECISIONS.md.
+2. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem scripts/install.sh works around.
 3. **Strict arguments** (MCPSafari ToolArguments.swift:97-104): refuse unknown, mistyped or out-of-range arguments before anything runs.
 4. **Hover:** all three have it. Apple's comes from inside the engine, so CSS :hover may apply, which untrusted events cannot do.
 5. **Smaller tools:** full-page screenshots, back, forward and reload, `drop_file` for drop zones without a file input, targeting by visible text, console level filter and clear on read, network filters by method, status and time.

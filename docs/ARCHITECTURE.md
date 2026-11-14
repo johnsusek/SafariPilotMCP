@@ -1,6 +1,6 @@
 # Architecture
 
-How SafariPilot works inside. For what it does and how to use it, see the [README](../README.md). Why each choice was made is in [DECISIONS.md](../DECISIONS.md).
+How SafariPilot works inside. For what it does and how to use it, see the [README](../README.md).
 
 ## Parts
 

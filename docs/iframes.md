@@ -11,14 +11,14 @@ The main risk is unconfirmed. If Safari 27 runs cross-site iframes in a separate
 3. **Refs are per-document integers.** `web/src/content/refs.ts:3` (`nextRef = 1`) means every frame would number from 1. Swift uses `Int` refs everywhere:
    - `Shared/Contract.swift`: `ElementInfo.ref`, `LoggedEvent.ref`, `LocateResult.ref` and every `ContentRequest` case.
    - `Shared/CLIWire.swift`: every `AppCommand` case that carries a ref.
-   - `CLI/Tools.swift:21` gives ref the schema type integer, and `ToolArguments.integer` at `:137` turns quoted digits into Int (DECISIONS 49).
+   - `CLI/Tools.swift:21` gives ref the schema type integer, and `ToolArguments.integer` at `:137` turns quoted digits into Int.
    - `CLI/CommandLineParsing.swift:56` and others parse refs with `integer(...)`.
 
    A dotted form like `5.12` would be read as a number, and `5.10` would silently become `5.1`.
 4. **The coordinate contract is already "top-level layout viewport".** `web/src/shared/protocol.ts:2` says so. `ViewportMapping` (`Shared/ViewportMapping.swift:31-43`) and `AXEngine.resolve` (`App/AX/AXEngine.swift:80-112`) take one `LocateResult` plus the top viewport. If frame rects arrive already converted to top-viewport CSS px, the app's mapping code does not change.
 5. **The AX side mostly works for nested web areas already, if WebKit exposes them.**
-   - `findWebAreas` (`AXEngine.swift:63-77`) stops at the first AXWebArea, so nested frame web areas never confuse window matching (DECISIONS 44).
-   - `bestMatch` (`:115-141`) walks every child under the top web area, nested web areas included. Frame pruning (`:129`) still holds because a nested web area's frame lies inside its iframe's frame. The 5000/20000 element limits (DECISIONS 95, 141) cover frame subtrees too.
+   - `findWebAreas` (`AXEngine.swift:63-77`) stops at the first AXWebArea, so nested frame web areas never confuse window matching.
+   - `bestMatch` (`:115-141`) walks every child under the top web area, nested web areas included. Frame pruning (`:129`) still holds because a nested web area's frame lies inside its iframe's frame. The 5000/20000 element limits cover frame subtrees too.
    - Site Isolation reports suggest a cross-process iframe can appear as an empty placeholder, with its root having no parent link (WebKit bugs 327631, 285952, 286043). That would break both frame matching and the key focus check below.
 6. **locate, hitsTarget and covered are single-document.** `web/src/content/locate.ts:38-109` scrolls with `scrollIntoView`, clips to the frame's own `visibleArea`, and hit-tests with `document.elementFromPoint` (`hit.ts:4`). Inside a frame that only proves the element is on top within that frame. Each ancestor must also confirm that the mapped point lands on its iframe element.
 7. **The trusted-click and keydown checks read one document's log.**
@@ -32,7 +32,7 @@ The main risk is unconfirmed. If Safari 27 runs cross-site iframes in a separate
     - find walks `flatElements(document)` and stops at 20 matches (`find.ts:7,19`).
     - pageText uses `textRoot().innerText` (`pageText.ts:29-36`), which contains no frame text.
     - scroll and scroll_to resolve against `document` (`scroll.ts:14,50`).
-11. **The background is non-persistent and is unloaded routinely** (DECISIONS 18, 27, 50). Any ref-to-frame map kept in the background would be lost, so frame routing must be derivable from the ref itself.
+11. **The background is non-persistent and is unloaded routinely**. Any ref-to-frame map kept in the background would be lost, so frame routing must be derivable from the ref itself.
 12. **No hard rule is in tension.** Everything below stays AX plus pid-targeted keys and never activates Safari.
 
 ### Safari WebExtension support (MDN browser-compat-data, read today)
@@ -113,7 +113,7 @@ None of this has been verified live on Safari 27.
 
 ### 3.0 Spike (measure; do not build features yet)
 
-Flip `all_frames`, add a temporary content `ping` that returns `runtime.getFrameId(iframe)` for each iframe, and add nested web areas to debug-ax. Then run against an MDN live sample, the W3Schools Tryit page and the test page, and record each result in DECISIONS:
+Flip `all_frames`, add a temporary content `ping` that returns `runtime.getFrameId(iframe)` for each iframe, and add nested web areas to debug-ax. Then run against an MDN live sample, the W3Schools Tryit page and the test page, and record each result:
 
 1. Does the script inject into a cross-origin frame (mdn.mozillademos.org)?
 2. Does it inject into srcdoc and about:blank frames, including one rewritten with `document.write` (Tryit)?
@@ -166,7 +166,7 @@ If item 6 fails, cross-origin frames become read-only (read_page, find and text 
 - **`locate.ts`**
   - The optional `clip` argument is intersected with the frame's own `visibleArea`.
   - It returns `candidates` from `candidatePoints` that pass the owner hit test.
-  - The checkbox and label union (DECISIONS 139) is unchanged.
+  - The checkbox and label union is unchanged.
 - **`tree.ts`**
   - Add an item kind for an iframe whose `frameIdOf` is at least 0. It is kept even under filter interactive and renders as `iframe "name" host=… [ref=P5]`, where P is the prefix.
   - `render` records `{ref, line index, depth}` for each such iframe.
@@ -281,11 +281,6 @@ site_frames() {
 }
 ```
 
-### 3.10 DECISIONS.md
-
-- Supersede entry 7 ("top frame only") and entry 136 ("not supported: iframes").
-- Add entries for the ref path format, `frameId: 0` on every plain send, the geometry contract (background composes into top-viewport CSS px), the limits, and each spike result.
-
 ### Critical files for implementation
 - /Users/john/Code/SafariPilot/web/src/background/commands.ts (plus new /Users/john/Code/SafariPilot/web/src/background/frames.ts)
 - /Users/john/Code/SafariPilot/web/src/shared/protocol.ts and /Users/john/Code/SafariPilot/Shared/Contract.swift
@@ -306,7 +301,7 @@ site_frames() {
 
 ## 4. Spike results (2026-11-12)
 
-All 8 unknowns in 3.0 came back favorable, so cross-origin frames are fully actionable; see the DECISIONS.md entries of this date for the measurements. Changes to the plan:
+All 8 unknowns in 3.0 came back favorable, so cross-origin frames are fully actionable. Changes to the plan:
 
 - Refuse any CSS-transformed frame, uniform scale included (Q8): AX reports transformed frames unscaled.
 - A sandbox frame without allow-scripts is readable, but its event listeners never fire, so click and key there fail loudly as unverifiable.

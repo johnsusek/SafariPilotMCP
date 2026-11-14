@@ -84,7 +84,6 @@ Comparison as of November 2026, from each project's source and documentation. De
 ## More
 
 - [Architecture](docs/ARCHITECTURE.md): how it works inside, building and testing.
-- [DECISIONS.md](DECISIONS.md): why it works that way.
 
 ## Thanks
 

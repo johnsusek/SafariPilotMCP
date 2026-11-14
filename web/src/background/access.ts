@@ -1,5 +1,5 @@
 // Safari grants a web extension one site at a time, whatever its manifest asks for, unless the user chose "Always Allow on Every Website".
-// Every assumption about how Safari behaves for a site it has not granted lives here; DECISIONS.md lists them as not verified live.
+// Every assumption about how Safari behaves for a site it has not granted lives here, none of it verified live.
 import type { Failure } from "../shared/protocol";
 import { failureFrom, thrown, withTimeout } from "./frames";
 
