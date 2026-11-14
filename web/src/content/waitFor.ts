@@ -1,7 +1,8 @@
 import type { Failure, WaitForResult } from "../shared/protocol";
-import { collapse } from "./describe";
+import { collapse, isEditableRoot } from "./describe";
 import { flatChildren, flatElements, isInvisible, isPruned } from "./flat";
 import { readViewport, visibleArea } from "./geometry";
+import { isSensitive } from "./sensitive";
 import { elementInfo, hasBox } from "./snapshot";
 
 let formTags = new Set(["input", "select", "textarea"]);
@@ -9,7 +10,11 @@ let formTags = new Set(["input", "select", "textarea"]);
 type Span = { element: Element; start: number; end: number };
 
 // The text a person sees under root, whitespace collapsed, and where each shown element's text sits in it, children before their parents.
-// It walks the flat tree find and read_page use; block boxes and br separate words, and form field values are left out.
+// It walks the flat tree find and read_page use; block boxes and br separate words, and form field values (a textarea's default text too) and secret editors are left out.
+let isField = (node: Node) =>
+  node instanceof Element &&
+  (formTags.has(node.localName) || (isEditableRoot(node) && isSensitive(node)));
+
 export function shownText(root: Node) {
   let text = "";
   let spans: Span[] = [];
@@ -36,7 +41,7 @@ export function shownText(root: Node) {
         continue;
       }
 
-      if (isPruned(child) || formTags.has(child.localName)) continue;
+      if (isPruned(child) || isField(child)) continue;
 
       let hidden = isInvisible(child);
       let gap = /^(inline|contents|$)/.test(getComputedStyle(child).display)
@@ -51,7 +56,8 @@ export function shownText(root: Node) {
       add(gap);
     }
   };
-  walk(root, root instanceof Element && isInvisible(root));
+  if (!isField(root)) walk(root, root instanceof Element && isInvisible(root));
+
   return { text, spans };
 }
 

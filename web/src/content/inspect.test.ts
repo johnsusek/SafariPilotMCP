@@ -13,6 +13,25 @@ test("a password reads back as bullets and is marked secure", () => {
   });
 });
 
+test("any secret field reads back as bullets, so form_input checks its length without the value", () => {
+  document.body.innerHTML =
+    '<input autocomplete="one-time-code" value="482913"><textarea name="api_token">sk-1</textarea><div contenteditable="true" aria-label="Password">abc</div><input aria-label="City" value="Lisbon">';
+  let [code, token, editor, city] = document.querySelectorAll(
+    "input, textarea, div",
+  );
+  expect(inspect(refFor(code))).toMatchObject({
+    kind: "text",
+    secure: true,
+    value: "••••••",
+  });
+  expect(inspect(refFor(token))).toMatchObject({ secure: true, value: "••••" });
+  expect(inspect(refFor(editor))).toMatchObject({ secure: true, value: "•••" });
+  expect(inspect(refFor(city))).toMatchObject({
+    secure: false,
+    value: "Lisbon",
+  });
+});
+
 test("a color input is its own kind and setColor fires bubbling input and change", () => {
   document.body.innerHTML = '<form><input type="color" value="#e66465"></form>';
   let field = document.querySelector("input")!;

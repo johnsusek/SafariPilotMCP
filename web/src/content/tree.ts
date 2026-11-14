@@ -15,6 +15,8 @@ import { flatChildren, isInvisible, isPruned, isShown } from "./flat";
 import { blocksScripts, frameIdOf, sourceOf } from "./frames";
 import { readViewport } from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
+import { hidden, redactUrl } from "../shared/redact";
+import { isSensitive } from "./sensitive";
 import { isInteractive } from "./snapshot";
 
 type Item =
@@ -54,6 +56,7 @@ let textInputTypes = new Set([
   "search",
   "url",
   "tel",
+  "password",
   "number",
   "range",
   "date",
@@ -227,14 +230,16 @@ function valueOf(element: Element) {
   return textInputTypes.has(input.type) ? input.value : "";
 }
 
+// Credentials are hidden before the href is shortened, so a cut never leaves part of a secret.
 function shortHref(anchor: HTMLAnchorElement) {
   let url = new URL(anchor.href, location.href);
 
-  if (!url.protocol.startsWith("http")) return collapse(url.href, hrefMax);
+  if (!url.protocol.startsWith("http"))
+    return collapse(redactUrl(url.href), hrefMax);
 
   let path = `${url.pathname}${url.search}${url.hash}`;
   return collapse(
-    url.origin === location.origin ? path : `${url.host}${path}`,
+    redactUrl(url.origin === location.origin ? path : `${url.host}${path}`),
     hrefMax,
   );
 }
@@ -293,7 +298,11 @@ function statesOf(element: Element, role: string) {
 
   let value = collapse(valueOf(element), valueMax);
 
-  if (value) states.push(`value=${JSON.stringify(value)}`);
+  // Unquoted, so it cannot be read as a field holding the text [hidden].
+  if (value)
+    states.push(
+      `value=${isSensitive(element) ? hidden : JSON.stringify(value)}`,
+    );
 
   if (element instanceof HTMLAnchorElement && element.hasAttribute("href"))
     states.push(`href=${shortHref(element)}`);

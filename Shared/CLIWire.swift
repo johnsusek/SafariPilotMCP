@@ -140,6 +140,8 @@ enum AppCommand: Codable, Sendable, Equatable {
     case let .formInput(tabId, ref, .text(text)): "formInput(tabId: \(String(describing: tabId)), ref: \(ref), value: text of \(text.count) characters)"
     case let .key(tabId, chords, ref, times): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), ref: \(String(describing: ref)), times: \(times))"
     case let .dialog(tabId, accept, promptText?): "dialog(tabId: \(String(describing: tabId)), accept: \(accept), promptText: \(promptText.count) characters)"
+    case let .navigate(tabId, url): "navigate(tabId: \(String(describing: tabId)), url: \(Redaction.url(url)))"
+    case let .tabCreate(url?): "tabCreate(url: \(Redaction.url(url)))"
     default: String(describing: self)
     }
   }

@@ -1,4 +1,5 @@
 import type { CommandResponse, FrameNode } from "../shared/commands";
+import { redactUrl } from "../shared/redact";
 import type {
   ContentRequest,
   ContentResponse,
@@ -30,7 +31,7 @@ async function sendToContent(
 ): Promise<ContentResponse> {
   let where =
     frameId === 0 ? `tab ${tab.id}` : `frame ${frameId} of tab ${tab.id}`;
-  let noScript = `no content script answered in ${where} (${tab.url ?? "unknown url"}); open the URL in a new tab (tabs from before the extension was installed or updated stay unreachable), or the page does not allow extensions`;
+  let noScript = `no content script answered in ${where} (${tab.url === undefined ? "unknown url" : redactUrl(tab.url)}); open the URL in a new tab (tabs from before the extension was installed or updated stay unreachable), or the page does not allow extensions`;
   let response = browser.tabs
     .sendMessage(tab.id, request, { frameId })
     .then(

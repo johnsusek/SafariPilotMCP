@@ -165,6 +165,19 @@ describe("runCommand", () => {
     );
   });
 
+  test("the no content script failure hides credentials in the tab's URL", async () => {
+    tabs[0].url = "https://u:pw@site/cb?code=4/0Ab&state=s";
+    fake.tabs.sendMessage.mockResolvedValue(undefined);
+    let failed = await run({
+      type: "content",
+      tabId: null,
+      request: { op: "ping" },
+    });
+    expect((failed as { error: string }).error).toContain(
+      "(https://[hidden]@site/cb?code=[hidden]&state=s)",
+    );
+  });
+
   test("a wait on a tab with no content script yet is pending, not failed", async () => {
     fake.tabs.sendMessage.mockRejectedValue(
       new Error("Could not establish connection"),

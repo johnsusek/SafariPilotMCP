@@ -60,7 +60,7 @@ describe("treeText", () => {
     expect(withoutRefs(text)).toBe('menuitem "Top"');
   });
 
-  test("states and values, never password values", () => {
+  test("states and values, a password's only as hidden", () => {
     let { text } = render(
       '<input type="checkbox" checked aria-label="Agree"><button disabled>Send</button><input aria-label="Email" value="me@example.com" required><input type="password" aria-label="Password" value="hunter2"><select aria-label="Size"><option>S</option><option selected>M</option></select><button aria-expanded="false">More</button>',
     );
@@ -69,12 +69,44 @@ describe("treeText", () => {
         'checkbox "Agree" checked',
         'button "Send" disabled',
         'textbox "Email" required value="me@example.com"',
-        'textbox "Password"',
+        'textbox "Password" value=[hidden]',
         'combobox "Size" value="M"',
         'button "More" collapsed',
       ].join("\n"),
     );
     expect(text).not.toContain("hunter2");
+  });
+
+  test("secret fields show that they hold a value, never the value", () => {
+    let { text } = render(
+      '<input autocomplete="one-time-code" aria-label="Code" value="482913"><label>Card number <input value="4111111111111111"></label><textarea name="api_token">sk-live-abc</textarea><div contenteditable="true" aria-label="Recovery passphrase">correct horse</div><input name="cvv" value=""><input aria-label="City" value="Lisbon">',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        'textbox "Code" value=[hidden]',
+        'textbox "Card number" value=[hidden]',
+        "textbox value=[hidden]",
+        'textbox "Recovery passphrase" value=[hidden]',
+        "textbox",
+        'textbox "City" value="Lisbon"',
+      ].join("\n"),
+    );
+
+    for (let secret of ["482913", "4111", "sk-live", "horse"])
+      expect(text).not.toContain(secret);
+  });
+
+  test("link targets hide credentials in their URL", () => {
+    let { text } = render(
+      '<a href="https://example.org/reset?token=abc123&lang=en">Reset</a><a href="/cb#access_token=xyz">Back</a><a href="https://u:pw@example.org/">In</a>',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        'link "Reset" href=example.org/reset?token=[hidden]&lang=en',
+        'link "Back" href=/cb#access_token=[hidden]',
+        'link "In" href=example.org/',
+      ].join("\n"),
+    );
   });
 
   test("file inputs show their type, what they take and the chosen files", () => {

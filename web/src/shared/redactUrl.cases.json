@@ -1,0 +1,61 @@
+[
+  {
+    "url": "https://example.com/search?q=shoes&page=2#results",
+    "shown": "https://example.com/search?q=shoes&page=2#results"
+  },
+  {
+    "url": "https://user:pw@example.com/a",
+    "shown": "https://[hidden]@example.com/a"
+  },
+  {
+    "url": "https://user@example.com/",
+    "shown": "https://[hidden]@example.com/"
+  },
+  { "url": "//user:pw@example.com/a", "shown": "//[hidden]@example.com/a" },
+  {
+    "url": "https://example.com/a?next=/b@c",
+    "shown": "https://example.com/a?next=/b@c"
+  },
+  {
+    "url": "https://example.com/cb?code=4/0Ab&state=xyz",
+    "shown": "https://example.com/cb?code=[hidden]&state=xyz"
+  },
+  {
+    "url": "https://example.com/cb#access_token=ya29.a0&token_type=Bearer&expires_in=3599",
+    "shown": "https://example.com/cb#access_token=[hidden]&token_type=[hidden]&expires_in=3599"
+  },
+  {
+    "url": "https://example.com/#/reset?token=abc==&lang=en",
+    "shown": "https://example.com/#/reset?token=[hidden]&lang=en"
+  },
+  {
+    "url": "https://b.s3.amazonaws.com/f.pdf?X-Amz-Credential=AK%2F2026&X-Amz-Signature=deadbeef&X-Amz-Expires=300",
+    "shown": "https://b.s3.amazonaws.com/f.pdf?X-Amz-Credential=[hidden]&X-Amz-Signature=[hidden]&X-Amz-Expires=300"
+  },
+  {
+    "url": "https://maps.example.com/api?key=AIzaSy&center=1,2",
+    "shown": "https://maps.example.com/api?key=[hidden]&center=1,2"
+  },
+  {
+    "url": "https://example.com/?apiKey=1&accessToken=2&client_secret=3&PHPSESSID=4&oobCode=5&sig=6&SAMLResponse=7",
+    "shown": "https://example.com/?apiKey=[hidden]&accessToken=[hidden]&client_secret=[hidden]&PHPSESSID=[hidden]&oobCode=[hidden]&sig=[hidden]&SAMLResponse=[hidden]"
+  },
+  {
+    "url": "https://example.com/?%74oken=x",
+    "shown": "https://example.com/?%74oken=[hidden]"
+  },
+  {
+    "url": "https://example.com/shop/cart;jsessionid=ABC123?item=9",
+    "shown": "https://example.com/shop/cart;jsessionid=[hidden]?item=9"
+  },
+  {
+    "url": "https://example.com/?token=&password",
+    "shown": "https://example.com/?token=&password"
+  },
+  {
+    "url": "https://example.com/?design=1&monkey=2&bypass=3&passenger=4&keyword=5&country_code=US&promo=6",
+    "shown": "https://example.com/?design=1&monkey=2&bypass=3&passenger=4&keyword=5&country_code=US&promo=6"
+  },
+  { "url": "about:blank", "shown": "about:blank" },
+  { "url": "", "shown": "" }
+]

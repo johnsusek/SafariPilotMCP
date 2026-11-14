@@ -177,13 +177,13 @@ struct Commands {
   private func ping(_ tabId: Int?) async throws -> CLIReply {
     let response = try await content(tabId, .ping)
     let result = try response.decode(PingResult.self)
-    return CLIReply(ok: true, text: "\(result.title)\n\(result.url)", data: response)
+    return CLIReply(ok: true, text: "\(result.title)\n\(Redaction.url(result.url))", data: response)
   }
 
   private func snapshot(_ tabId: Int?) async throws -> CLIReply {
     let response = try await content(tabId, .snapshot)
     let result = try response.decode(SnapshotResult.self)
-    let lines = ["\(result.title) | \(result.url)"] + result.elements.map(describe)
+    let lines = ["\(result.title) | \(Redaction.url(result.url))"] + result.elements.map(describe)
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: response)
   }
 
@@ -204,7 +204,7 @@ struct Commands {
     let tab = result.tab
     let loading = result.loading == true ? "; the page is still loading" : ""
     let access = result.access.map { "\n\($0.error)" } ?? ""
-    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.url) \(tab.title)\(loading)\(access)", data: response)
+    return CLIReply(ok: true, text: "\(verb) tab \(tab.id) \(tab.shownURL) \(tab.title)\(loading)\(access)", data: response)
   }
 
   private func tabClose(_ tabId: Int) async throws -> CLIReply {
@@ -219,7 +219,7 @@ struct Commands {
 
     if result.text.isEmpty {
       let shown = filter == .interactive ? "no visible actionable elements" : "no visible elements"
-      return CLIReply(ok: true, text: "\(shown) on \(result.title) | \(result.url)", data: response)
+      return CLIReply(ok: true, text: "\(shown) on \(result.title) | \(Redaction.url(result.url))", data: response)
     }
 
     return CLIReply(ok: true, text: result.text + truncated, data: response)
@@ -239,7 +239,7 @@ struct Commands {
 
     if let pending = result.pending { return CLIReply(ok: true, text: "the page cannot be read yet: \(pending)", data: response) }
 
-    guard let match = result.match else { return CLIReply(ok: true, text: "no \(condition.label) on \(result.url ?? "?") yet", data: response) }
+    guard let match = result.match else { return CLIReply(ok: true, text: "no \(condition.label) on \(result.url.map(Redaction.url) ?? "?") yet", data: response) }
 
     let offscreen = match.inViewport ? "" : " (offscreen)"
     return CLIReply(ok: true, text: "found \(condition.label) at [\(match.ref)] \(match.role) <\(match.tag)> \"\(match.text)\"\(offscreen)", data: response)
@@ -249,7 +249,7 @@ struct Commands {
     let response = try await content(tabId, .pageText(maxChars: maxChars))
     let result = try response.decode(PageTextResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
-    return CLIReply(ok: true, text: "\(result.title) | \(result.url)\n\(result.text)\(truncated)", data: response)
+    return CLIReply(ok: true, text: "\(result.title) | \(Redaction.url(result.url))\n\(result.text)\(truncated)", data: response)
   }
 
   private func scroll(_ tabId: Int?, _ ref: PageRef?, _ left: Double, _ top: Double) async throws -> CLIReply {
@@ -313,7 +313,7 @@ struct Commands {
     let part = region.map { " region [\($0.x0), \($0.y0), \($0.x1), \($0.y1)] of its" } ?? ""
     let size = region != nil || scale != 1 ? "; image is \(image.width) x \(image.height) px" : ""
     let data: JSONValue = .object(["png": .string(image.png.base64EncodedString()), "tab": response["tab"] ?? .null])
-    return CLIReply(ok: true, text: "screenshot of tab \(result.tab.id) \(result.tab.url),\(part) \(frame)\(size)", data: data)
+    return CLIReply(ok: true, text: "screenshot of tab \(result.tab.id) \(result.tab.shownURL),\(part) \(frame)\(size)", data: data)
   }
 
   /// Locate, then refuse to act when the content script says the point would land on something else.
@@ -489,7 +489,7 @@ struct Commands {
     ]
 
     for webArea in target.webAreas {
-      lines.append("  AXWebArea \(AXEngine.format(webArea.frame)) url \(webArea.string("AXURL") ?? "?")")
+      lines.append("  AXWebArea \(AXEngine.format(webArea.frame)) url \(webArea.string("AXURL").map(Redaction.url) ?? "?")")
 
       for ancestor in sequence(first: webArea, next: \.parent).dropFirst().prefix(6) {
         lines.append("    < \(ancestor.summary) \(AXEngine.format(ancestor.frame))")
@@ -528,7 +528,7 @@ struct Commands {
       visited += 1
 
       if node.role == "AXWebArea" {
-        found.append("\(String(repeating: "  ", count: depth))AXWebArea \(AXEngine.format(node.frame)) url \(node.string("AXURL") ?? "?") children \(node.children.count)")
+        found.append("\(String(repeating: "  ", count: depth))AXWebArea \(AXEngine.format(node.frame)) url \(node.string("AXURL").map(Redaction.url) ?? "?") children \(node.children.count)")
       }
 
       queue += node.children.map { ($0, node.role == "AXWebArea" ? depth + 1 : depth) }
@@ -549,13 +549,13 @@ struct Commands {
         return
       }
 
-      lines.append("\(indent)frame \(id) \(node["url"]?.string ?? "?") \"\(node["title"]?.string ?? "")\" clicks \(Int(node["clicks"]?.number ?? 0)) keydowns \(Int(node["keydowns"]?.number ?? 0))")
+      lines.append("\(indent)frame \(id) \(node["url"]?.string.map(Redaction.url) ?? "?") \"\(node["title"]?.string ?? "")\" clicks \(Int(node["clicks"]?.number ?? 0)) keydowns \(Int(node["keydowns"]?.number ?? 0))")
 
       for entry in node["frames"]?.array ?? [] {
         let rect = entry["box"]
         let box = [rect?["left"], rect?["top"], rect?["width"], rect?["height"]].map { String(format: "%.0f", $0?.number ?? -1) }
         let sandbox = entry["sandbox"]?.string.map { " sandbox=\"\($0)\"" } ?? ""
-        lines.append("\(indent)  iframe [\(Int(entry["ref"]?.number ?? -1))] frameId \(Int(entry["frameId"]?.number ?? -1)) \(entry["src"]?.string ?? "?")\(sandbox) (\(box[0]), \(box[1]), \(box[2]) x \(box[3]))")
+        lines.append("\(indent)  iframe [\(Int(entry["ref"]?.number ?? -1))] frameId \(Int(entry["frameId"]?.number ?? -1)) \(entry["src"]?.string.map(Redaction.url) ?? "?")\(sandbox) (\(box[0]), \(box[1]), \(box[2]) x \(box[3]))")
 
         if let child = entry["frame"], child != .null { add(child, indent + "    ") }
       }

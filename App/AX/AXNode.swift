@@ -21,9 +21,14 @@ struct AXNode: @unchecked Sendable {
   var parent: AXNode? { value(kAXParentAttribute).map { AXNode(element: $0 as! AXUIElement) } }
   var children: [AXNode] { (value(kAXChildrenAttribute) as? [AXUIElement] ?? []).map(AXNode.init) }
 
-  /// Title, description, or value, whichever names the element first.
+  /// Roles whose AXValue is what the user typed, which may be a secret, so it never names them.
+  static let typedRoles: Set = ["AXTextField", "AXTextArea", "AXSecureTextField", "AXComboBox"]
+
+  /// Title, description, or value, whichever names the element first; a text field's value is skipped.
   var label: String {
-    for attribute in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, kAXHelpAttribute] {
+    let typed = AXNode.typedRoles.contains(role)
+
+    for attribute in [kAXTitleAttribute, kAXDescriptionAttribute, kAXValueAttribute, kAXHelpAttribute] where !(typed && attribute == kAXValueAttribute) {
       if let text = string(attribute), !text.isEmpty { return String(text.prefix(80)) }
     }
 

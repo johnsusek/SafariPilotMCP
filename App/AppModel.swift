@@ -160,10 +160,10 @@ final class AppModel {
       default: try await queue.run { try await commands.run(request.command) }
       }
       record(label, ok: reply.ok, summary: reply.text.components(separatedBy: "\n").first ?? "")
-      return reply
+      return reply.forClient
     } catch {
       record(label, ok: false, summary: "\(error)")
-      return CLIReply(failed: error)
+      return CLIReply(failed: error).forClient
     }
   }
 

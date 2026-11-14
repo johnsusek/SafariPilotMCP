@@ -1,5 +1,6 @@
 import type { ControlKind, Failure, InspectResult } from "../shared/protocol";
 import { resolveRef } from "./refs";
+import { isSensitive } from "./sensitive";
 
 let nonTextInputs = new Set([
   "checkbox",
@@ -72,14 +73,20 @@ export function inspect(ref: number): InspectResult | Failure {
       kind: element.type as ControlKind,
     };
 
-  // A password's value never leaves the page: it reads back one bullet per character, as AX shows it.
-  if (element instanceof HTMLInputElement && element.type === "password")
+  // A secret's value never leaves the page: it reads back one bullet per character, as AX shows a password, which is enough to check what was set.
+  if (isSensitive(element)) {
+    let value =
+      element instanceof HTMLInputElement ||
+      element instanceof HTMLTextAreaElement
+        ? element.value
+        : (element.textContent ?? "");
     return {
       ...base,
-      value: "\u2022".repeat(element.value.length),
+      value: "\u2022".repeat(value.length),
       secure: true,
       kind: "text",
     };
+  }
 
   if (element instanceof HTMLInputElement) {
     let kind: ControlKind = nonTextInputs.has(element.type) ? "other" : "text";

@@ -11,7 +11,7 @@ struct WindowCandidate: Equatable, Sendable {
   var summary: String {
     let state = minimized ? " minimized" : ""
     let frameText = frame.map { String(format: "(%.0f, %.0f, %.0f x %.0f)", $0.minX, $0.minY, $0.width, $0.height) } ?? "no frame"
-    return "\"\(title)\" \(frameText)\(state) urls [\(urls.joined(separator: ", "))]"
+    return "\"\(title)\" \(frameText)\(state) urls [\(urls.map(Redaction.url).joined(separator: ", "))]"
   }
 }
 
@@ -45,13 +45,13 @@ enum WindowMatching {
     let matches = candidates.indices.filter { candidates[$0].urls.contains { normalize($0) == wanted } }
     let found = candidates.isEmpty ? "no Safari windows" : candidates.map(\.summary).joined(separator: "; ")
 
-    guard !matches.isEmpty else { throw .noMatch("no Safari window shows tab \(tab.id) \(tab.url); found: \(found)") }
+    guard !matches.isEmpty else { throw .noMatch("no Safari window shows tab \(tab.id) \(tab.shownURL); found: \(found)") }
 
     if matches.count == 1, let target = tab.windowFrame {
       let own = near(target, candidates)
 
       // The same page open in another window is the only match until WebKit builds the tab's page in AX; acting on it would press the wrong window.
-      if !own.isEmpty, !own.contains(matches[0]) { throw .noMatch("the only Safari window showing \(tab.url) is not at tab \(tab.id)'s windowFrame, and the window that is does not show it in Accessibility yet; found: \(found)") }
+      if !own.isEmpty, !own.contains(matches[0]) { throw .noMatch("the only Safari window showing \(tab.shownURL) is not at tab \(tab.id)'s windowFrame, and the window that is does not show it in Accessibility yet; found: \(found)") }
     }
 
     let index = try matches.count == 1 ? matches[0] : nearest(matches, tab: tab, candidates: candidates, found: found)
@@ -83,12 +83,12 @@ enum WindowMatching {
   static let tolerance = 40.0
 
   private static func nearest(_ matches: [Int], tab: TabInfo, candidates: [WindowCandidate], found: String) throws(WindowMatchError) -> Int {
-    guard let target = tab.windowFrame else { throw .ambiguous("\(matches.count) Safari windows show \(tab.url) and the tab has no windowFrame; found: \(found)") }
+    guard let target = tab.windowFrame else { throw .ambiguous("\(matches.count) Safari windows show \(tab.shownURL) and the tab has no windowFrame; found: \(found)") }
 
     let close = near(target, candidates).filter(matches.contains)
     let frameText = "(\(target.left), \(target.top), \(target.width) x \(target.height))"
 
-    guard close.count == 1 else { throw .ambiguous("\(matches.count) Safari windows show \(tab.url) and \(close.count) are within \(Int(tolerance)) pt of windowFrame \(frameText); found: \(found)") }
+    guard close.count == 1 else { throw .ambiguous("\(matches.count) Safari windows show \(tab.shownURL) and \(close.count) are within \(Int(tolerance)) pt of windowFrame \(frameText); found: \(found)") }
 
     return close[0]
   }

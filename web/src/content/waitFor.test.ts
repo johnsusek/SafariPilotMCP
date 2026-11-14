@@ -119,3 +119,13 @@ describe("waitFor selector", () => {
     expect(matched("a", "b")).toBe("waitFor takes either text or selector");
   });
 });
+
+describe("waitFor secrets", () => {
+  test("a selector match on a field or a secret editor shows none of its text", () => {
+    document.body.innerHTML =
+      '<textarea id="note" name="api_token">sk-live-abc</textarea><div id="pass" contenteditable="true" aria-label="Password">hunter2</div><p>Signed in</p>';
+    expect(matched(null, "#note")).toEqual({ tag: "textarea", text: "" });
+    expect(matched(null, "#pass")).toEqual({ tag: "div", text: "" });
+    expect(shownText(document.body).text.trim()).toBe("Signed in");
+  });
+});

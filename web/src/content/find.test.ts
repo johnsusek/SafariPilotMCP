@@ -112,3 +112,13 @@ describe("find", () => {
     expect(roles("gridcell")).toEqual(["gridcell"]);
   });
 });
+
+test("find never returns a field's value, secret or not", () => {
+  document.body.innerHTML =
+    '<input autocomplete="one-time-code" value="482913"><textarea>draft text</textarea><div contenteditable="true" aria-label="Password">hunter2</div>';
+  let result = JSON.stringify(find("", "textbox"));
+  expect(result).toContain('"role":"textbox"');
+
+  for (let value of ["482913", "draft text", "hunter2"])
+    expect(result).not.toContain(value);
+});

@@ -20,7 +20,7 @@ struct TabInfo: Codable, Sendable, Equatable {
   let windowFrame: CSSRect?
   let openerId: Int?
 
-  var line: String { "\(active ? "*" : " ") \(id) w\(windowId) \(url) \(title)\(openerId.map { " (opened by \($0))" } ?? "")" }
+  var line: String { "\(active ? "*" : " ") \(id) w\(windowId) \(shownURL) \(title)\(openerId.map { " (opened by \($0))" } ?? "")" }
 }
 
 struct ElementInfo: Codable, Sendable, Equatable {
@@ -132,7 +132,7 @@ struct SettleResult: Codable, Sendable {
   /// A load in a frame alone keeps the tab's address, so the tab's own page moved only when its top document was replaced or a load or address change left a new address.
   func moved(from url: String, replaced: Bool) -> Bool { replaced || (navigation != .none && tab.url != url) }
 
-  var line: String { "landed on \(tab.url) \"\(tab.title)\"\(loading ? ", still loading after 15 s" : "")" }
+  var line: String { "landed on \(tab.shownURL) \"\(tab.title)\"\(loading ? ", still loading after 15 s" : "")" }
 }
 struct ClosedResult: Codable, Sendable { let closed: Int }
 struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
