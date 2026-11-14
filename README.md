@@ -50,24 +50,24 @@ What it doesn't hide: the text of the page itself, which is what Claude is there
 
 | | SafariPilot | [Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) (`safaridriver --mcp`) | [safari-mcp](https://github.com/achiya-automation/safari-mcp) | [MCPSafari](https://github.com/Epistates/MCPSafari) |
 | --- | --- | --- | --- | --- |
-| Built on | Safari extension and Accessibility | WebDriver | AppleScript, optional extension | Safari extension |
-| Your signed-in Safari | Yes | Reportedly no, a separate automation session | Yes | Yes |
-| Native (trusted) clicks and keys | Every click and key, checked after | Not documented | Separate opt-in tools | Opt-in keys; clicks are scripted |
-| Safari can stay in the background | Yes, typing included | Not documented | Yes, except native tools | Yes, except native input |
+| Built on | Safari extension and Accessibility | WebDriver and WebKit text extraction | AppleScript, optional extension | Safari extension |
+| Your signed-in Safari | Yes | No, its own agent window | Yes | Yes |
+| Native (trusted) clicks and keys | Every click and key, checked after | Engine-dispatched; typing pastes | Scripted; click falls back to native | Opt-in keys; clicks are scripted |
+| Safari can stay in the background | Yes, typing included | Not documented | Yes, except native input, which fronts the tab and moves the cursor | Yes, except native input, which fronts Safari and moves the pointer |
 | Approval per client | Yes, with credentials | No, one Safari setting | No | No |
-| Tabs it can reach | Its own and their popups | All open tabs | Its own; yours by opt-in | Sites you granted |
-| Hides secrets | Fields, URLs, cookies, headers, bodies | Not documented | Not documented | Fields and URLs |
-| Iframes | Read and act in | Not documented | Script and frame list | Read; native input top frame only |
-| Alert and confirm dialogs | Yes | Yes | Yes | Only when set up before they open |
-| Network request bodies | Fetch and XHR | Yes | Headers and timing | Not documented |
-| File upload | Yes | Not documented | Yes | Yes |
-| Hover and drag | Drag, scripted | Yes | Opt-in native hover | Yes |
-| Install | Signed DMG | Built into Safari 27 | npm or Homebrew | Homebrew |
+| Tabs it can reach | Its own and their popups | Reportedly its own window | Its own; lists all; yours by opt-in | Every tab on sites you granted |
+| Hides secrets | Fields, URLs, cookies, headers, bodies | Field values in page text | No; snapshots show field values | Fields and URLs |
+| Iframes | Read and act in | Read and act in | Script, frame list, scripted actions | Read and act in; native input top frame only |
+| Alert and confirm dialogs | Yes | Yes | Only when set up before they open | Only when set up before they open |
+| Network request bodies | Fetch and XHR | All request types | No; headers and timing | No; URL, status, timing |
+| File upload | Yes | No | Yes | Yes |
+| Hover and drag | Drag, scripted | Hover; no drag | Scripted; opt-in native hover | Yes |
+| Install | Signed DMG | Built into Safari 27 | npm or Homebrew | Homebrew, notarized |
 | Requires | macOS 26, Safari 27 | Safari 27 | Node.js 20 | macOS 14, Safari 17 |
 
-In short: Apple's server is built for testing your own site in a clean session. safari-mcp and MCPSafari install in one command and run on older systems, but act mostly through scripted events and leave client approval to you. SafariPilot is for letting Claude work in your real, signed-in Safari while you keep using your Mac, with every click and key sent as real input, each client approved, and secrets hidden.
+In short: Apple's server is built for testing your own site in its own window. safari-mcp and MCPSafari install from npm or Homebrew and run on older systems, but act mostly through scripted events, leave client approval to you, and hide few or no secrets. SafariPilot is for letting Claude work in your real, signed-in Safari while you keep using your Mac, with every click and key sent as real input, each client approved, and secrets hidden.
 
-Comparison as of November 2026, from each project's documentation.
+Comparison as of November 2026, from each project's source and documentation. Details and sources are in [docs/COMPETITORS.md](docs/COMPETITORS.md).
 
 ## More
 
