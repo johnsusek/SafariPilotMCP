@@ -7,10 +7,11 @@ struct SafariPilotApp: App {
 
   var body: some Scene {
     MenuBarExtra {
-      MenuBarMenu(model: delegate.model)
+      MenuBarView(model: delegate.model)
     } label: {
       MenuBarIcon(model: delegate.model)
     }
+    .menuBarExtraStyle(.window)
 
     Window("SafariPilot", id: "main") {
       MainView(model: delegate.model)
@@ -23,8 +24,7 @@ struct SafariPilotApp: App {
           .disabled(delegate.model.axTrusted)
         Button("Open Extension Settings") { Task { await delegate.model.openExtensionSettings() } }
         Divider()
-        Button("Add to Claude Desktop") { delegate.model.addToClaudeDesktop() }
-          .disabled(delegate.model.desktopAdded)
+        Button("Configure Claude Desktop…") { delegate.model.configureClaudeDesktop() }
         Button("Copy Claude Code Command") { delegate.model.copyClaudeCodeCommand() }
         Divider()
         Button("Clear Log") { delegate.model.clearLog() }
@@ -50,42 +50,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
   func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
     NotificationCenter.default.post(name: Self.reopen, object: nil)
     return false
-  }
-}
-
-private struct MenuBarMenu: View {
-  let model: AppModel
-  @Environment(\.openWindow) private var openWindow
-
-  var body: some View {
-    @Bindable var model = model
-    Toggle("Enable MCP Server", isOn: $model.serverEnabled)
-    Divider()
-    Button("Add to Claude Desktop") {
-      model.addToClaudeDesktop()
-      showWindow()
-    }
-    .disabled(model.desktopAdded)
-    Button("Copy Claude Code Command") {
-      model.copyClaudeCodeCommand()
-
-      if model.setupAlert != nil { showWindow() }
-    }
-    Divider()
-    Button("Settings…") { showWindow() }
-      .keyboardShortcut(",")
-    Button("About SafariPilot") {
-      NSApp.orderFrontStandardAboutPanel()
-      NSApp.activate()
-    }
-    Button("Quit SafariPilot") { NSApp.terminate(nil) }
-      .keyboardShortcut("q")
-  }
-
-  /// Setup results are alerts on the window, so actions that report one open it.
-  private func showWindow() {
-    openWindow(id: "main")
-    NSApp.activate()
   }
 }
 
