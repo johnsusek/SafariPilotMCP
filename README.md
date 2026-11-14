@@ -27,7 +27,7 @@ Every click and keystroke is a real native input event.
 
 ## Install
 
-Download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest), drag SafariPilot to Applications and open it. It lives in the menu bar; choose **Open SafariPilot** there to see its window. Then:
+Download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest), drag SafariPilot to Applications and open it. It lives in the menu bar; choose **Settings…** there to see its window. Then:
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**. Allowing it on every website saves a prompt per site.
 2. In SafariPilot's **General** pane, grant **Accessibility** (used to click and type).
