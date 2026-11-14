@@ -132,7 +132,7 @@ site_w3schools() {
   check "w3schools: click names the confirm it opened" 'opened a confirm from https://www.w3schools.com' click $(ref "Try it" button)
   check "w3schools: page tools name the open dialog" 'shows a confirm' text
   check "w3schools: dialog dismissed" 'dismissed a confirm' dialog dismiss
-  check "w3schools: page saw Cancel" 'You pressed Cancel' text
+  check "w3schools: page saw Cancel" '^You pressed Cancel!$' text
   close_tab
 }
 
