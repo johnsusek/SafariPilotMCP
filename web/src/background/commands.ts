@@ -18,6 +18,7 @@ import {
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
+import { listRequests, piloting, requestDetail } from "./network";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
 
@@ -192,17 +193,18 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       typeof pilotWindow === "number"
         ? await browser.windows.get(pilotWindow).catch(() => null)
         : null;
-    let create = async () => {
-      if (window)
-        return (await browser.tabs.create({
-          windowId: window.id,
-          url,
-        })) as KnownTab;
+    let create = () =>
+      piloting(async () => {
+        if (window)
+          return (await browser.tabs.create({
+            windowId: window.id,
+            url,
+          })) as KnownTab;
 
-      let created = await browser.windows.create({ url, focused: false });
-      await browser.storage.session.set({ pilotWindow: created!.id });
-      return created!.tabs![0] as KnownTab;
-    };
+        let created = await browser.windows.create({ url, focused: false });
+        await browser.storage.session.set({ pilotWindow: created!.id });
+        return created!.tabs![0] as KnownTab;
+      });
 
     if (command.url !== null)
       return await loadedTab(
@@ -244,6 +246,21 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
         : browser.tabs.goForward(tab.id));
       return { ...tab, url: "", title: "" };
     });
+  }
+
+  if (command.type === "network") {
+    let tab = await resolveTab(command.tabId);
+    return listRequests(
+      tab.id,
+      command.urlPattern,
+      command.limit,
+      command.clear,
+    );
+  }
+
+  if (command.type === "networkRequest") {
+    let tab = await resolveTab(command.tabId);
+    return await requestDetail(await sender(tab.id), tab.id, command.requestId);
   }
 
   if (command.type === "settle")

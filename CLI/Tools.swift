@@ -63,6 +63,13 @@ enum Tools {
       "limit": property("integer", "Most recent matching messages to return, from 1 to \(AppCommand.consoleLimits.upperBound); defaults to \(AppCommand.defaultConsoleLimit)."),
       "clear": property("boolean", "Empty the recorded messages after reading, so the next call returns only newer ones; defaults to false."),
     ]),
+    ToolDefinition(name: "read_network_requests", description: "Lists the requests a tab opened with tab_create, or opened by one, made since it opened, oldest first with ids, or returns one request's headers and, for a fetch or XMLHttpRequest call, its bodies, with secret headers and parameters hidden, as untrusted page data.", properties: [
+      "tabId": tabId,
+      "urlPattern": property("string", "Text the URL must contain, ignoring case, such as \"/api/\" or \"example.com\"."),
+      "limit": property("integer", "Most recent matching requests to return, from 1 to \(AppCommand.networkLimits.upperBound); defaults to \(AppCommand.defaultNetworkLimit)."),
+      "clear": property("boolean", "Empty the log after reading, so the next call returns only newer requests; defaults to false."),
+      "requestId": property("string", "Id from a listing whose headers and bodies to return instead of the list."),
+    ]),
     ToolDefinition(name: "handle_dialog", description: "Accepts or dismisses the alert, confirm or prompt dialog open in a tab by pressing its OK or Cancel button through Accessibility, first typing prompt_text into a prompt when given.", properties: ["tabId": tabId, "action": property("string", "\"accept\" presses OK (an alert's Close) and \"dismiss\" presses Cancel.", oneOf: ["accept", "dismiss"]), "prompt_text": property("string", "Text to put in a prompt's field before accepting it.")], required: ["action"]),
     ToolDefinition(name: "wait", description: "Waits a number of seconds, up to \(Int(maxWait)), or until text a person can see or a shown element matching a CSS selector appears in the page or its frames, surviving a navigation on the way and returning the matched element's ref, and fails naming what it waited for when timeout runs out or a dialog is open.", properties: [
       "tabId": tabId,
@@ -157,6 +164,7 @@ enum Tools {
     case "screenshot": return try .screenshot(tabId: page(), corners: arguments.numbers("region"), scale: arguments.number("scale"))
     case "file_upload": return try .fileUpload(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"), paths: arguments.require(arguments.strings("paths"), "paths"))
     case "read_console_messages": return try .console(tabId: page(), onlyErrors: arguments.bool("onlyErrors") ?? false, pattern: arguments.string("pattern"), limit: arguments.integer("limit"), clear: arguments.bool("clear") ?? false)
+    case "read_network_requests": return try .network(tabId: page(), requestId: arguments.string("requestId"), urlPattern: arguments.string("urlPattern"), limit: arguments.integer("limit"), clear: arguments.bool("clear") ?? false)
     case "handle_dialog": return try .dialog(tabId: page(), action: arguments.require(arguments.string("action"), "action"), promptText: arguments.string("prompt_text"))
     case "scroll_to": return try .scrollTo(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"))
     case "resize_window": return try .resize(tabId: page(), width: arguments.require(arguments.integer("width"), "width"), height: arguments.require(arguments.integer("height"), "height"))

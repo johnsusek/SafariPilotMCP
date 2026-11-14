@@ -6,6 +6,7 @@ import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
 import { inspect, setColor } from "./inspect";
 import { locate } from "./locate";
+import { installNetworkReader, takeBody } from "./network";
 import { syntheticClick } from "./mouse";
 import { pageText } from "./pageText";
 import { scroll, scrollIntoView } from "./scroll";
@@ -16,6 +17,7 @@ import { waitFor } from "./waitFor";
 
 installLogger();
 installReader();
+installNetworkReader();
 
 async function handle(request: ContentRequest): Promise<ContentResponse> {
   try {
@@ -57,6 +59,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
         request.limit,
         request.clear,
       );
+    if (request.op === "networkBody")
+      return takeBody(request.url, request.method, request.time);
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

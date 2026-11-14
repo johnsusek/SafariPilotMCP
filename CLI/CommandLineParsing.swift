@@ -35,6 +35,7 @@ enum CommandLineParsing {
     javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
     file-upload REF PATH...         give files to the file input REF (or the one it labels or holds), or drop them on REF
     console [--errors] [--pattern REGEX] [--limit N] [--clear]  console messages from every frame, newest N (default 50, up to 200)
+    network [--pattern TEXT] [--limit N] [--clear] | --id ID  requests a tab_create tab made, newest N (default 50, up to 200), or one request's headers and bodies
     dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
@@ -85,6 +86,11 @@ enum CommandLineParsing {
       let pattern = try option("--pattern", &rest)
       let limit = try option("--limit", &rest).map { try integer($0, "--limit") }
       invocation = try Invocation(command: .console(tabId: tabId, onlyErrors: flag("--errors", &rest), pattern: pattern, limit: limit, clear: flag("--clear", &rest)))
+    case "network":
+      let requestId = try option("--id", &rest)
+      let pattern = try option("--pattern", &rest)
+      let limit = try option("--limit", &rest).map { try integer($0, "--limit") }
+      invocation = try Invocation(command: .network(tabId: tabId, requestId: requestId, urlPattern: pattern, limit: limit, clear: flag("--clear", &rest)))
     case "dialog":
       // --text takes every word after it verbatim.
       let textStart = rest.firstIndex(of: "--text")

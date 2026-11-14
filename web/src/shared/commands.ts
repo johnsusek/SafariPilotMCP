@@ -158,7 +158,17 @@ export type Command =
       tabId: number | null;
       code: string;
       frame: RefPath | null;
-    };
+    }
+  // The newest limit requests the tab made whose URL contains urlPattern (case-insensitive), from the log webRequest keeps for tabs SafariPilot opened; clear empties it after reading.
+  | {
+      type: "network";
+      tabId: number | null;
+      urlPattern: string | null;
+      limit: number;
+      clear: boolean;
+    }
+  // One logged request with its headers and, for a fetch or XMLHttpRequest call, the bodies its frame's capture kept.
+  | { type: "networkRequest"; tabId: number | null; requestId: string };
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 // loading is set by commands that wait for a load: true when a created tab was still loading after the timeout.
@@ -192,6 +202,49 @@ export type FramesTree = { ok: true; tree: FrameNode };
 // json is the code's last expression as JSON, null when JSON.stringify gives undefined (undefined, a function or a symbol).
 export type JavascriptResult = { ok: true; json: string | null };
 
+export type NetworkHeader = { name: string; value: string };
+// One request from webRequest: id is SafariPilot's own, time epoch ms when it started, frameId the frame that made it (0 the top one), status null until a response,
+// statusLine as the server sent it, duration ms until it completed, redirected or failed (null while pending), redirect the URL it was sent on to, error why it failed.
+// URLs and header values come with secrets as [hidden].
+export type NetworkEntry = {
+  id: string;
+  frameId: number;
+  method: string;
+  url: string;
+  type: string;
+  time: number;
+  status: number | null;
+  statusLine: string;
+  fromCache: boolean;
+  duration: number | null;
+  redirect: string | null;
+  error: string | null;
+};
+// matched counts matches before limit, dropped the oldest requests the tab's full log let go since the last clear.
+export type NetworkResult = {
+  ok: true;
+  entries: NetworkEntry[];
+  matched: number;
+  dropped: number;
+};
+// Headers are null when webRequest gave none (a request that failed before sending, or a response never received). bodies is null when no call
+// was recorded for the request, with bodyNote saying why; secret header values, URL and body parameters come as [hidden].
+export type NetworkRequestResult = {
+  ok: true;
+  request: NetworkEntry & {
+    requestHeaders: NetworkHeader[] | null;
+    responseHeaders: NetworkHeader[] | null;
+  };
+  bodies: {
+    requestBody: string | null;
+    responseBody: string | null;
+    contentType: string;
+    truncated: boolean;
+    note: string | null;
+  } | null;
+  bodyNote: string | null;
+};
+
 export type CommandResponse =
   | ContentResponse
   | PageEventsResult
@@ -211,4 +264,6 @@ export type CommandResponse =
   | ClosedResult
   | ScreenshotResult
   | FramesTree
-  | JavascriptResult;
+  | JavascriptResult
+  | NetworkResult
+  | NetworkRequestResult;

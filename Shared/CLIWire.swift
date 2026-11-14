@@ -97,6 +97,10 @@ enum AppCommand: Codable, Sendable, Equatable {
   case fileUpload(tabId: Int?, ref: PageRef, files: [UploadFile])
   /// The newest limit console messages from every frame, of errors and exceptions only when onlyErrors, whose text matches pattern; clear empties the buffers after reading.
   case consoleMessages(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
+  /// The newest limit requests the tab made whose URL contains urlPattern, ignoring case, from the log kept for tabs tab_create opened; clear empties it after reading.
+  case networkRequests(tabId: Int?, urlPattern: String?, limit: Int, clear: Bool)
+  /// One logged request with its headers and, for a fetch or XMLHttpRequest call, its bodies.
+  case networkRequest(tabId: Int?, requestId: String)
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
   /// One look for the condition in every reached frame; the MCP server's wait repeats it, so no command holds the queue for a whole wait.
@@ -113,6 +117,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   static let scaleRange = 0.1...1.0
   static let consoleLimits = 1...200
   static let defaultConsoleLimit = 50
+  static let networkLimits = 1...200
+  static let defaultNetworkLimit = 50
 
   /// corners are four numbers x0, y0, x1, y1 with the second corner below and right of the first.
   static func screenshot(tabId: Int?, corners region: [Double]?, scale: Double?) throws -> AppCommand {
@@ -170,7 +176,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -213,6 +219,22 @@ enum AppCommand: Codable, Sendable, Equatable {
     guard consoleLimits.contains(limit) else { throw Failure(.invalidArgument, "limit must be from 1 to 200, not \(limit)") }
 
     return .consoleMessages(tabId: tabId, onlyErrors: onlyErrors, pattern: pattern?.isEmpty == false ? pattern : nil, limit: limit, clear: clear)
+  }
+
+  /// requestId picks one request, so it takes none of the listing's filters; an empty urlPattern matches everything, so it is sent as none.
+  static func network(tabId: Int?, requestId: String?, urlPattern: String?, limit: Int?, clear: Bool) throws -> AppCommand {
+    if let requestId {
+      guard urlPattern == nil, limit == nil, !clear else { throw Failure(.invalidArgument, "requestId reads one request; leave out urlPattern, limit and clear") }
+      guard !requestId.isEmpty else { throw Failure(.invalidArgument, "requestId is empty") }
+
+      return .networkRequest(tabId: tabId, requestId: requestId)
+    }
+
+    let limit = limit ?? defaultNetworkLimit
+
+    guard networkLimits.contains(limit) else { throw Failure(.invalidArgument, "limit must be from 1 to 200, not \(limit)") }
+
+    return .networkRequests(tabId: tabId, urlPattern: urlPattern?.isEmpty == false ? urlPattern : nil, limit: limit, clear: clear)
   }
 
   /// "back" and "forward" walk history; anything else is a URL to load.

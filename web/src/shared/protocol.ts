@@ -51,10 +51,7 @@ export type LoggedEvent = {
 
 // Click kinds named like Claude in Chrome's computer actions, and the keys held during a click.
 export type ClickAction =
-  | "left_click"
-  | "double_click"
-  | "triple_click"
-  | "right_click";
+  "left_click" | "double_click" | "triple_click" | "right_click";
 export type Modifier = "cmd" | "shift" | "alt" | "ctrl";
 // A local file handed to the page: data is its bytes in base64, lastModified epoch ms, mimeType "" when unknown (as browsers report it).
 export type UploadFile = {
@@ -113,7 +110,9 @@ export type ContentRequest =
       pattern: string | null;
       limit: number;
       clear: boolean;
-    };
+    }
+  // The body record of this frame's fetch or XMLHttpRequest call with url and method that started closest to time (epoch ms).
+  | { op: "networkBody"; url: string; method: string; time: number };
 
 // What a caller does about a failure; errorCodes.json gives each code its retry flag and next step, which the MCP server adds to the reply.
 export type ErrorCode = keyof (typeof import("./errorCodes.json"))["codes"];
@@ -285,12 +284,7 @@ export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
 
 // exception is an uncaught error or an unhandled promise rejection.
 export type ConsoleLevel =
-  | "log"
-  | "info"
-  | "warn"
-  | "error"
-  | "debug"
-  | "exception";
+  "log" | "info" | "warn" | "error" | "debug" | "exception";
 // time is epoch ms, url the frame's document URL when logged, source the caller's url:line:column when known.
 export type ConsoleEntry = {
   level: ConsoleLevel;
@@ -307,6 +301,26 @@ export type ConsoleResult = {
   entries: ConsoleEntry[];
   matched: number;
   dropped: number;
+};
+
+// A fetch or XMLHttpRequest call the main-world capture recorded: url is absolute, time epoch ms when the page made the call, bodies text cut at the capture's
+// maxBody (truncated says the response was), and note why responseBody is null (still loading, not text, failed) or null once it is read.
+export type BodyRecord = {
+  method: string;
+  url: string;
+  time: number;
+  requestBody: string | null;
+  status: number | null;
+  contentType: string;
+  responseBody: string | null;
+  truncated: boolean;
+  note: string | null;
+};
+// capturing is false when the frame has no main-world capture (it loaded before the extension); record is null when no call matched.
+export type NetworkBodyResult = {
+  ok: true;
+  capturing: boolean;
+  record: BodyRecord | null;
 };
 
 export type ContentResponse =
@@ -327,4 +341,5 @@ export type ContentResponse =
   | FramesResult
   | FrameBoxResult
   | HitFrameResult
-  | ConsoleResult;
+  | ConsoleResult
+  | NetworkBodyResult;

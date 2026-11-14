@@ -103,6 +103,19 @@ site_httpbin() {
   close_tab
 }
 
+site_network() {
+  open_tab "https://httpbin.org/html"
+  check "network: the page load is logged" 'GET https://httpbin.org/html main_frame: 200' network
+  check "network: a page fetch returns" '^200$' javascript "(await fetch('/anything?api_key=k', {method: 'POST', headers: {'X-Api-Key': 'k'}, body: JSON.stringify({token: 'abc', n: 1})})).status"
+  check "network: the fetch is logged with its key hidden" 'POST https://httpbin.org/anything\?api_key=\[hidden\]' network --pattern /anything
+  local id=$(print -r -- "$output" | sed -nE 's/.* id ([0-9]+) POST .*/\1/p' | tail -1)
+  check "network: secret request header hidden" '[Xx]-[Aa]pi-[Kk]ey: \[hidden\]' network --id ${id:-0}
+  verdict "network: request body read and redacted" '"token":"\[hidden\]"'
+  verdict "network: response body read" '^Response body \(application/json\)'
+  refute "network: no secret in headers or bodies" 'abc|api_key=k|Api-Key": "k'
+  close_tab
+}
+
 site_youtube() {
   open_tab "https://www.youtube.com/"
   local search=$(ref "Search" combobox)
@@ -292,7 +305,7 @@ site_mcp() {
 }
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
 
 for site in $sites; do
   site_$site

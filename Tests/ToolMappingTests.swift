@@ -257,6 +257,20 @@ struct ToolMappingTests {
     }
   }
 
+  @Test func readNetworkRequestsListsOrReadsOne() throws {
+    #expect(try map("read_network_requests") == .networkRequests(tabId: 20, urlPattern: nil, limit: 50, clear: false))
+    #expect(try map("read_network_requests", ["tabId": .number(7), "urlPattern": "/api/", "limit": .number(200), "clear": .bool(true)]) == .networkRequests(tabId: 7, urlPattern: "/api/", limit: 200, clear: true))
+    #expect(try map("read_network_requests", ["urlPattern": ""]) == .networkRequests(tabId: 20, urlPattern: nil, limit: 50, clear: false))
+    #expect(try map("read_network_requests", ["requestId": "12"]) == .networkRequest(tabId: 20, requestId: "12"))
+    #expect(AppCommand.networkRequest(tabId: 7, requestId: "1").targetTab == 7)
+    #expect(throws: Failure.self) { try map("read_network_requests", ["limit": .number(0)]) }
+    #expect(throws: Failure.self) { try map("read_network_requests", ["requestId": "12", "clear": .bool(true)]) }
+    #expect(throws: Failure.self) { try map("read_network_requests", ["requestId": ""]) }
+    #expect(try CommandLineParsing.parse(["--tab", "3", "network", "--pattern", "api", "--limit", "5", "--clear"]).command == .networkRequests(tabId: 3, urlPattern: "api", limit: 5, clear: true))
+    #expect(try CommandLineParsing.parse(["network", "--id", "4"]).command == .networkRequest(tabId: nil, requestId: "4"))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["network", "--verbose"]) }
+  }
+
   @Test func readConsoleMessagesMapsFiltersAndLimits() throws {
     #expect(try map("read_console_messages") == .consoleMessages(tabId: 20, onlyErrors: false, pattern: nil, limit: 50, clear: false))
     #expect(try map("read_console_messages", ["tabId": .number(7), "onlyErrors": .bool(true), "pattern": "MyApp", "limit": .number(200), "clear": .bool(true)]) == .consoleMessages(tabId: 7, onlyErrors: true, pattern: "MyApp", limit: 200, clear: true))

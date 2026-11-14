@@ -3,6 +3,7 @@
 // Wake paths (alarms, tab events, connectNative pushes) restart the loop if Safari unloaded us.
 import { runCommand } from "./commands";
 import type { Instance, PollReply, PollResult, ToNative } from "./native";
+import { forget, pilotOpened, restorePilotTabs } from "./network";
 
 let appId = "net.johnsolo.SafariPilot";
 let instance: Instance = {
@@ -68,6 +69,8 @@ browser.tabs.onActivated.addListener(() => wake("tabs.onActivated"));
 browser.tabs.onUpdated.addListener((_tabId, change) => {
   if (change.status === "complete") wake("tabs.onUpdated");
 });
+browser.tabs.onCreated.addListener(pilotOpened);
+browser.tabs.onRemoved.addListener(forget);
 
 // Lead (b): the app calls SFSafariApplication.dispatchMessage when a command is queued and no poll is open.
 let connect = () => {
@@ -89,4 +92,7 @@ let port: chrome.runtime.Port | null = connect();
 
 browser.alarms.create("keepalive", { periodInMinutes: 1 });
 lifecycle("start");
+restorePilotTabs().catch((error) =>
+  lifecycle(`pilot tabs not restored: ${error}`),
+);
 pollLoop();

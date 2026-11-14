@@ -151,6 +151,54 @@ struct ConsoleResult: Codable, Sendable {
   let dropped: [String: Int]
   let unread: [Unread]
 }
+struct NetworkHeader: Codable, Sendable, Equatable { let name: String; let value: String }
+/// One request from webRequest: time is epoch ms when it started, frameId the frame that made it (0 the top one), status nil until a response, duration ms until it completed,
+/// redirected or failed (nil while pending), redirect the URL it was sent on to, error why it failed. Secrets in URLs and header values come as [hidden].
+struct NetworkEntry: Codable, Sendable, Equatable {
+  let id: String
+  let frameId: Int
+  let method: String
+  let url: String
+  let type: String
+  let time: Double
+  let status: Int?
+  let statusLine: String
+  let fromCache: Bool
+  let duration: Double?
+  let redirect: String?
+  let error: String?
+}
+/// matched counts matches before limit, dropped the oldest requests the tab's full log let go since the last clear.
+struct NetworkResult: Codable, Sendable {
+  let entries: [NetworkEntry]
+  let matched: Int
+  let dropped: Int
+}
+/// Headers are nil when webRequest gave none; bodies is nil when no fetch or XMLHttpRequest call was recorded for the request, and bodyNote says why.
+struct NetworkRequestResult: Codable, Sendable {
+  struct Request: Codable, Sendable {
+    let id: String
+    let frameId: Int
+    let method: String
+    let url: String
+    let type: String
+    let time: Double
+    let status: Int?
+    let statusLine: String
+    let fromCache: Bool
+    let duration: Double?
+    let redirect: String?
+    let error: String?
+    let requestHeaders: [NetworkHeader]?
+    let responseHeaders: [NetworkHeader]?
+  }
+  /// note says why responseBody is nil (still loading, not text, failed); truncated that the response was cut.
+  struct Bodies: Codable, Sendable { let requestBody: String?; let responseBody: String?; let contentType: String; let truncated: Bool; let note: String? }
+
+  let request: Request
+  let bodies: Bodies?
+  let bodyNote: String?
+}
 /// json is the code's last expression as JSON, nil when it has none (undefined, a function or a symbol).
 struct JavascriptResult: Codable, Sendable { let json: String? }
 
@@ -219,6 +267,8 @@ enum BackgroundCommand: Equatable, Sendable {
   case resize(tabId: Int?, width: Int, height: Int)
   case frames(tabId: Int?)
   case javascript(tabId: Int?, code: String, frame: PageRef?)
+  case network(tabId: Int?, urlPattern: String?, limit: Int, clear: Bool)
+  case networkRequest(tabId: Int?, requestId: String)
 
   var json: [String: JSONValue] {
     let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
@@ -237,6 +287,8 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .resize(tabId, width, height): return ["type": "resize", "tabId": id(tabId), "width": .number(Double(width)), "height": .number(Double(height))]
     case let .frames(tabId): return ["type": "frames", "tabId": id(tabId)]
     case let .javascript(tabId, code, frame): return ["type": "javascript", "tabId": id(tabId), "code": .string(code), "frame": frame.map { .string($0.description) } ?? .null]
+    case let .network(tabId, urlPattern, limit, clear): return ["type": "network", "tabId": id(tabId), "urlPattern": urlPattern.map { .string($0) } ?? .null, "limit": .number(Double(limit)), "clear": .bool(clear)]
+    case let .networkRequest(tabId, requestId): return ["type": "networkRequest", "tabId": id(tabId), "requestId": .string(requestId)]
     }
   }
 

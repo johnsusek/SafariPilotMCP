@@ -22,7 +22,14 @@ test("every message to the app names the build of this bundle", async () => {
       onInstalled: listener,
     },
     alarms: { onAlarm: listener, create: vi.fn() },
-    tabs: { onActivated: listener, onUpdated: listener },
+    tabs: {
+      onActivated: listener,
+      onUpdated: listener,
+      onCreated: listener,
+      onRemoved: listener,
+      query: async () => [],
+    },
+    storage: { session: { get: async () => ({}), set: async () => {} } },
   });
 
   await import("./index");

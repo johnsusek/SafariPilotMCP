@@ -57,6 +57,15 @@ let fakeBrowser = () => ({
       removeListener: (listener: Listener) => listeners.delete(listener),
     },
   },
+  webRequest: Object.fromEntries(
+    [
+      "onBeforeRequest",
+      "onSendHeaders",
+      "onBeforeRedirect",
+      "onCompleted",
+      "onErrorOccurred",
+    ].map((name) => [name, { addListener: vi.fn(), removeListener: vi.fn() }]),
+  ),
   scripting: {
     executeScript: vi.fn(async () => [
       { frameId: 0, result: { ok: true, json: "2" } },

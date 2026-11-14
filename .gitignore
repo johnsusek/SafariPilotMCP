@@ -3,6 +3,6 @@ node_modules/
 SafariPilot.xcodeproj/
 extension/background.js
 extension/content.js
-extension/console.js
+extension/main.js
 .DS_Store
 extension/build.json

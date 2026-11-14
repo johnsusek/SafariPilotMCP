@@ -239,8 +239,8 @@ describe("formatting", () => {
     let jsc = `log@${own}:1:200\nshow@https://example.com/app.js:12:5\nglobal code@https://example.com/app.js:20:1`;
     expect(callerOf(jsc, own)).toBe("https://example.com/app.js:12:5");
     let v8 =
-      "Error\n    at Object.log (file:///x/console.js:3:4)\n    at run (https://example.com/a.js:7:2)";
-    expect(callerOf(v8, "file:///x/console.js")).toBe(
+      "Error\n    at Object.log (file:///x/main.js:3:4)\n    at run (https://example.com/a.js:7:2)";
+    expect(callerOf(v8, "file:///x/main.js")).toBe(
       "https://example.com/a.js:7:2",
     );
     expect(callerOf("[native code]", null)).toBeNull();
