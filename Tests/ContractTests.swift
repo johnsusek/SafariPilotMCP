@@ -24,6 +24,22 @@ struct ContractTests {
     #expect(try decode(ScreenshotResult.self, #"{"ok":true,"dataUrl":"data:image/png;base64,AAAA","tab":\#(tab)}"#).tab.windowId == 3)
   }
 
+  @Test func settleEncodesAndNamesWhereTheTabLanded() throws {
+    #expect(BackgroundCommand.settle(tabId: 12, url: "https://a.test/", watchMs: 40).json == ["type": "settle", "tabId": .number(12), "url": "https://a.test/", "watchMs": .number(40)])
+    let landed = { (navigation: String, url: String, loading: Bool) in
+      try self.decode(SettleResult.self, #"{"ok":true,"tab":{"id":12,"windowId":3,"active":true,"url":"\#(url)","title":"B","windowFrame":null},"navigation":"\#(navigation)","loading":\#(loading)}"#)
+    }
+    let loaded = try landed("load", "https://b.test/", false)
+    #expect(loaded.moved(from: "https://a.test/", replaced: false))
+    #expect(loaded.line == #"landed on https://b.test/ "B""#)
+    #expect(try landed("load", "https://b.test/", true).line == #"landed on https://b.test/ "B", still loading after 15 s"#)
+    #expect(try landed("sameDocument", "https://a.test/#/b", false).moved(from: "https://a.test/", replaced: false))
+    // A load that kept the address happened in a frame, unless the top document was replaced (a reload or a form posting to itself).
+    #expect(try !landed("load", "https://a.test/", false).moved(from: "https://a.test/", replaced: false))
+    #expect(try landed("load", "https://a.test/", false).moved(from: "https://a.test/", replaced: true))
+    #expect(try !landed("none", "https://a.test/", false).moved(from: "https://a.test/", replaced: false))
+  }
+
   @Test func consoleEncodesDecodesAndRenders() throws {
     #expect(ContentRequest.console(onlyErrors: true, pattern: "a|b", limit: 50, clear: false).json == ["op": "console", "onlyErrors": .bool(true), "pattern": "a|b", "limit": .number(50), "clear": .bool(false)])
     #expect(ContentRequest.console(onlyErrors: false, pattern: nil, limit: 1, clear: true).json["pattern"] == .null)

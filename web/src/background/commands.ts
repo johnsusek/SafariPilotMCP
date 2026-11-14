@@ -6,7 +6,7 @@ import type {
 } from "../shared/protocol";
 import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
 import { runJavascript } from "./javascript";
-import { loadAfter, loadTimeoutMs } from "./load";
+import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
@@ -186,6 +186,9 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       return tab.id;
     });
   }
+
+  if (command.type === "settle")
+    return await settle(command.tabId, command.url, command.watchMs);
 
   if (command.type === "resize") {
     let tab = await resolveTab(command.tabId);

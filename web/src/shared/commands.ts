@@ -132,8 +132,10 @@ export type Command =
   | { type: "tabSelect"; tabId: number }
   | { type: "tabClose"; tabId: number }
   // navigate and history answer once the tab has finished loading, or fail after a timeout.
+  // settle follows an action the app dispatched: it watches the tab for watchMs for a load to start and waits for it, or notices an address change from url without one.
   | { type: "navigate"; tabId: number | null; url: string }
   | { type: "history"; tabId: number | null; direction: "back" | "forward" }
+  | { type: "settle"; tabId: number; url: string; watchMs: number }
   // Resizes the tab's window to width x height points and answers with the tab's new window frame.
   | { type: "resize"; tabId: number | null; width: number; height: number }
   // Fails when the tab is not the active tab of its window; the app selects it first.
@@ -151,6 +153,13 @@ export type Command =
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 // loading is set by commands that wait for a load: true when a created tab was still loading after the timeout.
 export type TabResult = { ok: true; tab: TabInfo; loading?: boolean };
+// navigation is load when the tab started loading (loading: still loading after the timeout), sameDocument when only its address changed.
+export type SettleResult = {
+  ok: true;
+  tab: TabInfo;
+  navigation: "none" | "load" | "sameDocument";
+  loading: boolean;
+};
 export type ClosedResult = { ok: true; closed: number };
 export type ScreenshotResult = { ok: true; dataUrl: string; tab: TabInfo };
 
@@ -181,6 +190,7 @@ export type CommandResponse =
   | PageReadResult
   | TabsResult
   | TabResult
+  | SettleResult
   | ClosedResult
   | ScreenshotResult
   | FramesTree

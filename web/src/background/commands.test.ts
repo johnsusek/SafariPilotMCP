@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { runCommand } from "./commands";
-import { loadTimeoutMs } from "./load";
+import { addressSettleMs, loadTimeoutMs } from "./load";
 import { resolveTab } from "./tabs";
 
 type Listener = (tabId: number, change: { status?: string }) => void;
@@ -318,5 +318,104 @@ describe("runCommand", () => {
       ok: false,
       error: expect.stringMatching(/^javascript failed: SyntaxError: /),
     });
+  });
+});
+
+describe("settle", () => {
+  let settle = (watchMs = 150) =>
+    run({ type: "settle", tabId: 6, url: "https://site/6", watchMs });
+  let later = (ms: number, change: () => void) => setTimeout(change, ms);
+  let answered = false;
+  let tracked = (pending: ReturnType<typeof run>) =>
+    pending.then((result) => {
+      answered = true;
+      return result;
+    });
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    tabs[1].status = "complete";
+    answered = false;
+  });
+
+  test("a tab that starts no load answers after the watch window", async () => {
+    let pending = tracked(settle());
+    await vi.advanceTimersByTimeAsync(140);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(20);
+    expect(await pending).toMatchObject({
+      ok: true,
+      tab: { id: 6, url: "https://site/6" },
+      navigation: "none",
+      loading: false,
+    });
+    expect(listeners.size).toBe(0);
+  });
+
+  test("a load that starts within the window is waited for and names where the tab landed", async () => {
+    later(60, () => {
+      tabs[1].status = "loading";
+    });
+    later(2000, () => {
+      Object.assign(tabs[1], {
+        status: "complete",
+        url: "https://next",
+        title: "Next",
+      });
+      fireComplete(6);
+    });
+    let pending = tracked(settle());
+    await vi.advanceTimersByTimeAsync(1999);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(await pending).toMatchObject({
+      ok: true,
+      tab: { id: 6, url: "https://next", title: "Next" },
+      navigation: "load",
+      loading: false,
+    });
+    expect(listeners.size).toBe(0);
+  });
+
+  test("a load still going at the timeout answers as loading", async () => {
+    tabs[1].status = "loading";
+    let pending = settle(0);
+    await vi.advanceTimersByTimeAsync(loadTimeoutMs);
+    expect(await pending).toMatchObject({
+      navigation: "load",
+      loading: true,
+    });
+  });
+
+  test("a load that completed before the first look still counts", async () => {
+    later(10, () => fireComplete(6));
+    let pending = settle();
+    await vi.advanceTimersByTimeAsync(150);
+    expect(await pending).toMatchObject({ navigation: "load", loading: false });
+  });
+
+  test("an address change without a load answers after the settle, not the load timeout", async () => {
+    later(40, () => {
+      Object.assign(tabs[1], { url: "https://site/6#/route", title: "Route" });
+    });
+    let pending = tracked(settle());
+    await vi.advanceTimersByTimeAsync(40 + addressSettleMs - 30);
+    expect(answered).toBe(false);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(await pending).toMatchObject({
+      tab: { url: "https://site/6#/route", title: "Route" },
+      navigation: "sameDocument",
+      loading: false,
+    });
+  });
+
+  test("a load starting after the window, or another tab loading, is not waited for", async () => {
+    later(200, () => {
+      tabs[1].status = "loading";
+    });
+    later(30, () => fireComplete(7));
+    let pending = settle();
+    await vi.advanceTimersByTimeAsync(175);
+    expect(await pending).toMatchObject({ navigation: "none" });
   });
 });

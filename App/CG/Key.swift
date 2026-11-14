@@ -56,11 +56,9 @@ extension Commands {
     let watched = ref.map { ["", $0.frame] } ?? [""]
     var replaced: Set<String> = []
     var busy: [String] = []
-    let navigated = { (what: String, readError: String) in
-      data["navigated"] = .bool(true)
-      data["delivered"] = .null
-      return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); \(what) navigated or reloaded, so delivery could not be counted\(readError)", data: .object(data))
-    }
+    var navigatedWhat: String?
+    var readError = ""
+    let acted = ContinuousClock.now
     // WebKit hands the page each key only after it handled the last one, so a page busy rendering (an autocomplete) is still receiving keys well after they were posted.
     let deadline = ContinuousClock.now + .milliseconds(1500)
     try await Task.sleep(for: .milliseconds(150))
@@ -73,13 +71,18 @@ extension Commands {
 
     while true {
       var after: JSONValue?
-      var readError = ""
 
       do { after = try await content(tab.id, .events(clear: true, arm: false, watch: ref)) } catch { readError = " (reading the log failed: \(error))" }
 
-      guard let events = try after?.decode(EventsResult.self) else { return navigated("the page", readError) }
+      guard let events = try after?.decode(EventsResult.self) else {
+        navigatedWhat = "the page"
+        break
+      }
 
-      if let frame = watched.first(where: { events.replaced($0, since: before) }) { return navigated(frame.isEmpty ? "the page" : "the frame of iframe \(frame)", "") }
+      if let frame = watched.first(where: { events.replaced($0, since: before) }) {
+        navigatedWhat = frame.isEmpty ? "the page" : "the frame of iframe \(frame)"
+        break
+      }
 
       replaced.formUnion(before.origins.keys.filter { events.replaced($0, since: before) })
       busy = events.busy
@@ -90,7 +93,16 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(100))
     }
 
-    if keydowns.count < expected, let frame = replaced.sorted().first { return navigated("the frame of iframe \(frame)", "") }
+    let landed = await landing(tab, since: acted, replaced: navigatedWhat == "the page")
+
+    if navigatedWhat == nil, keydowns.count < expected { navigatedWhat = landed.moved ? "the page" : replaced.sorted().first.map { "the frame of iframe \($0)" } }
+
+    if let what = navigatedWhat {
+      data["navigated"] = .bool(true)
+      data["delivered"] = .null
+      let text = "pressed \(pressed) in tab \(tab.id); \(what) navigated or reloaded, so delivery could not be counted\(readError)"
+      return CLIReply(ok: true, text: ([text] + landed.lines).joined(separator: "\n"), data: .object(data))
+    }
 
     data["navigated"] = .bool(false)
     data["delivered"] = .number(Double(keydowns.count))
@@ -102,13 +114,14 @@ extension Commands {
         "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari, or a frame SafariPilot cannot read, took the rest\(busy.isEmpty ? "" : " (frames still busy: \(busy.joined(separator: ", ")))")",
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
-      ] + (logged.isEmpty ? ["  none"] : logged)
+      ] + (logged.isEmpty ? ["  none"] : logged) + landed.lines
       return CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data))
     }
 
     let extra = keydowns.count > expected ? ", more than posted, so other key input reached the page too" : ""
     let last = keydowns.last.map { event in "\(event.ref.map { "[\($0)] " } ?? "")\(event.target)" } ?? "?"
-    return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)", data: .object(data))
+    let text = "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)"
+    return CLIReply(ok: true, text: ([text] + landed.lines).joined(separator: "\n"), data: .object(data))
   }
 
   private func focused(in target: AXEngine.Target) -> AXNode? {

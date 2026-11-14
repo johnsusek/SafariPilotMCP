@@ -93,6 +93,26 @@ struct Commands {
     return try await call(.tabSelect(tabId: tab.id)).decode(TabResult.self).tab
   }
 
+  /// A navigation an action starts is looked for until this long after its input, which click's and key's own waits already cover; one the page starts later is not waited for.
+  static let navigationWatch = Duration.milliseconds(150)
+
+  /// Waits for a page the action started loading, up to the background's 15 s load cap, and names where the tab landed. moved is false when the tab's own page stayed, as after opening a popup or loading a frame.
+  func landing(_ tab: TabInfo, since acted: ContinuousClock.Instant, replaced: Bool = false) async -> (moved: Bool, lines: [String]) {
+    let watch = max(.zero, Commands.navigationWatch - (.now - acted))
+
+    do {
+      let settled = try await call(.settle(tabId: tab.id, url: tab.url, watchMs: Int((watch / .milliseconds(1)).rounded(.up)))).decode(SettleResult.self)
+      let moved = settled.moved(from: tab.url, replaced: replaced)
+      return (moved, moved ? [settled.line] : [])
+    } catch {
+      return (replaced, ["could not read where tab \(tab.id) landed: \(error)"])
+    }
+  }
+
+  func withLanding(_ reply: CLIReply, _ tab: TabInfo, since acted: ContinuousClock.Instant) async -> CLIReply {
+    let lines = await landing(tab, since: acted).lines
+    return CLIReply(ok: reply.ok, text: ([reply.text] + lines).joined(separator: "\n"), data: reply.data)
+  }
 
   func describe(_ event: LoggedEvent) -> String {
     let count = event.count > 1 ? " x\(event.count)" : ""
@@ -324,44 +344,49 @@ struct Commands {
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
     let pressed = try AXEngine.press(match)
+    let acted = ContinuousClock.now
     try await Task.sleep(for: .milliseconds(150))
     let after = try? await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
     var lines = ["pressed \(pressed.summary) via AXPress (\(pressed.depth) up from match) in tab \(tab.id)"]
 
-    guard let after else {
-      if let open = try AXEngine.dialog(for: tab) {
-        lines[0] += ", which opened \(open.dialog.line); handle_dialog accepts or dismisses it"
-        return try CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
-      }
+    if after == nil, let open = try AXEngine.dialog(for: tab) {
+      lines[0] += ", which opened \(open.dialog.line); handle_dialog accepts or dismisses it"
+      return try CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
+    }
 
+    let pageNavigated = after.map { $0.origin != before.origin } ?? true
+    let landed = await landing(tab, since: acted, replaced: pageNavigated)
+
+    guard let after else {
       lines[0] += ", then the page stopped answering, most likely because it is navigating"
-      return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
+      return CLIReply(ok: true, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
     if after.busy.contains(frame) {
       lines[0] += ", then the frame of iframe \(frame) did not answer within 2 s: it is busy"
-      return CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .null)
+      return CLIReply(ok: true, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
     let clicks = after.events.filter { $0.type == "click" && $0.isTrusted && $0.frame == frame }
-    let pageNavigated = after.origin != before.origin
+    // The old document often still answers 150 ms after a link press, so a load the tab started counts as the page navigating too.
+    let navigated = pageNavigated || landed.moved
     let frameNavigated = !frame.isEmpty && after.replaced(frame, since: before)
 
     // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
-    if !pageNavigated, !frameNavigated, clicks.isEmpty {
+    if !navigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
-      return CLIReply(ok: false, text: (lines + matched).joined(separator: "\n"), data: .null)
+      return CLIReply(ok: false, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
     // WebKit can report a frame's elements at their old place for a while after it scrolls, so a press matched by frame can land on a neighbor.
-    if !frame.isEmpty, !pageNavigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
+    if !frame.isEmpty, !navigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
       lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
-      return CLIReply(ok: false, text: (lines + matched).joined(separator: "\n"), data: .null)
+      return CLIReply(ok: false, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
-    let outcome = pageNavigated ? "; the page navigated" : frameNavigated ? "; the frame of iframe \(frame) navigated or closed" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
+    let outcome = pageNavigated || (navigated && clicks.isEmpty) ? "; the page navigated" : frameNavigated ? "; the frame of iframe \(frame) navigated or closed" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
     lines[0] += outcome
-    lines += matched
+    lines += matched + landed.lines
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .string(ref.description),
@@ -392,10 +417,11 @@ struct Commands {
       return try CLIReply(ok: true, text: text, data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
     }
 
+    let acted = ContinuousClock.now
     let result = try response.decode(SyntheticClickResult.self)
     let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
     let text = "dispatched a synthetic \(action.rawValue.split(separator: "_").joined(separator: " "))\(held) on ref \(ref) \(result.target) in tab \(tab.id) as untrusted events: \(events); browser defaults such as text selection and the context menu do not run; focus is on \(result.focused)"
-    return CLIReply(ok: true, text: text, data: response)
+    return await withLanding(CLIReply(ok: true, text: text, data: response), tab, since: acted)
   }
 
   /// Safari's open panel cannot be driven in the background, so the content script hands the page File objects instead; no AX is involved, so the tab stays where it is in its window.

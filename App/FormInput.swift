@@ -57,6 +57,7 @@ extension Commands {
     }
 
     let (valueNode, valueResult) = try AXEngine.setValue(text, in: match)
+    let acted = ContinuousClock.now
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
     let after = try await settled(tab.id, ref) { $0.value == expected }
     let matched = after.value == expected
@@ -73,7 +74,7 @@ extension Commands {
       "valueResult": .string(valueResult.name),
       "readBack": after.value.map { .string($0) } ?? .null,
     ])
-    return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)
+    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
   }
 
   private func setChecked(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
@@ -97,16 +98,17 @@ extension Commands {
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
     let pressed = try AXEngine.press(match)
+    let acted = ContinuousClock.now
     let after = try await settled(tab.id, ref) { $0.checked == wanted }
     data["pressedRole"] = .string(pressed.role)
 
     guard after.checked == wanted else {
       data["checked"] = .bool(after.checked == true)
       let lines = ["pressed \(pressed.summary) but \(kind) ref \(ref) is still \(state(after.checked))"] + matchLines(located, match)
-      return CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data))
+      return await withLanding(CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
     }
 
-    return CLIReply(ok: true, text: "\(state(wanted)) \(kind) ref \(ref) by pressing \(pressed.summary)", data: .object(data))
+    return await withLanding(CLIReply(ok: true, text: "\(state(wanted)) \(kind) ref \(ref) by pressing \(pressed.summary)", data: .object(data)), tab, since: acted)
   }
 
   private func select(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
@@ -130,28 +132,30 @@ extension Commands {
     let match = try await AXEngine.resolve(located, tab: tab)
     let occurrence = options[..<index].filter { $0.label == option.label }.count
     let item = try await AXEngine.pickOption(option.label, occurrence: occurrence, in: match)
+    let acted = ContinuousClock.now
     let after = try await settled(tab.id, ref) { $0.selectedIndex == index }
 
     guard after.selectedIndex == index else {
       let shown = after.selectedIndex.flatMap { options.indices.contains($0) ? options[$0].label : nil } ?? "nothing"
       data["selectedIndex"] = after.selectedIndex.map { .number(Double($0)) } ?? .null
       let lines = ["pressed \(item.summary) in the open menu but select ref \(ref) still shows \"\(shown)\""] + matchLines(located, match)
-      return CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data))
+      return await withLanding(CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
     }
 
-    return CLIReply(ok: true, text: "selected \"\(option.label)\" in select ref \(ref) by pressing \(item.summary) in its menu", data: .object(data))
+    return await withLanding(CLIReply(ok: true, text: "selected \"\(option.label)\" in select ref \(ref) by pressing \(item.summary) in its menu", data: .object(data)), tab, since: acted)
   }
 
   /// The AXColorWell ignores AXValue and opens a popover of unnamed swatches, so the page script sets the value; its input and change events are untrusted.
   private func setColor(_ tab: TabInfo, _ ref: PageRef, _ value: String) async throws -> CLIReply {
     let after = try await content(tab.id, .setColor(ref: ref, value: value)).decode(InspectResult.self)
+    let acted = ContinuousClock.now
     let shown = after.value ?? ""
     let lines = [
       "set color ref \(ref) from the page script; its input and change events are untrusted",
       "read back: \"\(shown)\" \(shown.lowercased() == value.lowercased() ? "(matches)" : "(the input's serialization)")",
     ]
     let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string("color"), "readBack": .string(shown)])
-    return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data)
+    return await withLanding(CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
   }
 
   /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.
@@ -197,6 +201,8 @@ extension Commands {
       typed.append("\(title.isEmpty ? "meridiem" : title) \(text)")
     }
 
+    let acted = ContinuousClock.now
+
     // A zero seconds or milliseconds part may or may not appear in the value, so both sides drop it before comparing.
     let trimmed = { (text: String?) in (text ?? "").replacing(/(:\d{2})\.0+$/) { $0.1 }.replacing(/(\d{2}:\d{2}):00$/) { $0.1 } }
     let after = try await settled(tab.id, ref) { trimmed($0.value) == trimmed(value) }
@@ -206,7 +212,7 @@ extension Commands {
       "read back: \"\(after.value ?? "")\" \(matched ? "(matches)" : "(DIFFERS)")",
     ] + matchLines(located, match)
     let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string(kind.rawValue), "readBack": .string(after.value ?? "")])
-    return CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data)
+    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
   }
 
   /// Splits an input value (YYYY-MM-DD, HH:MM[:SS[.mmm]], or both joined by T) into parts keyed by WebKit's field titles, hour in 24 h.

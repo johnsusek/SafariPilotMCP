@@ -103,6 +103,19 @@ struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
 /// loading is true when a created tab was still loading after the background's load timeout.
 struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool? }
+/// Where a tab is after an action: navigation is load when it started loading (loading: still loading at the 15 s cap), sameDocument when only its address changed.
+struct SettleResult: Codable, Sendable {
+  enum Navigation: String, Codable, Sendable { case none, load, sameDocument }
+
+  let tab: TabInfo
+  let navigation: Navigation
+  let loading: Bool
+
+  /// A load in a frame alone keeps the tab's address, so the tab's own page moved only when its top document was replaced or a load or address change left a new address.
+  func moved(from url: String, replaced: Bool) -> Bool { replaced || (navigation != .none && tab.url != url) }
+
+  var line: String { "landed on \(tab.url) \"\(tab.title)\"\(loading ? ", still loading after 15 s" : "")" }
+}
 struct ClosedResult: Codable, Sendable { let closed: Int }
 struct ScreenshotResult: Codable, Sendable { let dataUrl: String; let tab: TabInfo }
 /// One console message: level is log, info, warn, error, debug or exception (an uncaught error or unhandled rejection); time is epoch ms, url the frame's document when logged, source the caller's url:line:column when known, frame the frame's path, "" for the top one.
@@ -176,6 +189,7 @@ enum BackgroundCommand: Equatable, Sendable {
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
+  case settle(tabId: Int, url: String, watchMs: Int)
   case screenshot(tabId: Int?)
   case resize(tabId: Int?, width: Int, height: Int)
   case frames(tabId: Int?)
@@ -193,6 +207,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .tabClose(tabId): return ["type": "tabClose", "tabId": id(tabId)]
     case let .navigate(tabId, url): return ["type": "navigate", "tabId": id(tabId), "url": .string(url)]
     case let .history(tabId, direction): return ["type": "history", "tabId": id(tabId), "direction": .string(direction.rawValue)]
+    case let .settle(tabId, url, watchMs): return ["type": "settle", "tabId": id(tabId), "url": .string(url), "watchMs": .number(Double(watchMs))]
     case let .screenshot(tabId): return ["type": "screenshot", "tabId": id(tabId)]
     case let .resize(tabId, width, height): return ["type": "resize", "tabId": id(tabId), "width": .number(Double(width)), "height": .number(Double(height))]
     case let .frames(tabId): return ["type": "frames", "tabId": id(tabId)]
