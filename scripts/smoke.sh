@@ -9,8 +9,12 @@ tab=""
 # The last checked command's output.
 output=""
 
+# Stops the run when no tab opens, since every later check would go to a missing tab.
 open_tab() {
-  tab=$(safaripilot tab-create "$1" | awk '{print $3}')
+  local opened
+  opened=$(safaripilot tab-create "$1" 2>&1)
+  tab=$(print -r -- "$opened" | awk '/^opened tab/ {print $3; exit}')
+  [[ $tab == <-> ]] || { print "ABORT no tab for $1\n    $opened"; exit 1 }
   sleep 2
 }
 
@@ -303,6 +307,12 @@ site_mcp() {
   grep -q failed $log && print "    server stderr:\n$(grep failed $log | head -5 | sed 's/^/    /')"
   rm $log
 }
+
+# install.sh relaunches the app just before a run, so wait up to 30 s for its listener.
+for attempt in {1..30}; do
+  safaripilot status >/dev/null 2>&1 && break
+  sleep 1
+done
 
 sites=($@)
 ((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
