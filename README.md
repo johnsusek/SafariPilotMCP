@@ -6,6 +6,20 @@ Let Claude use Safari on your Mac, just like Claude in Chrome.
 
 Claude works in its own tabs, in the background. It doesn't take over the cursor, doesn't bring Safari to the front, and the tabs you already have open stay private.
 
+Other ways to hand Safari to an AI each give something up. Apple's built-in server runs in a window of its own, apart from your browsing, and is made for testing your own site. Open-source servers reach your signed-in Safari, but they mostly act through scripted events that many sites ignore, take over the cursor or bring Safari forward for real input, and let any app on your Mac connect without asking.
+
+SafariPilot gives up none of that. Every click and key is real input, sent while you keep using your Mac. Each new client needs your approval, and passwords, card numbers, tokens and cookies are hidden from what Claude reads in pages, URLs and network logs.
+
+## Features
+
+- **Your signed-in Safari.** Claude works in the Safari you already use, with your logins and cookies. It can reach your email, dashboards and anything else behind a sign-in, and you never hand it a password.
+- **Real clicks and typing.** Clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work. Each action is checked after it lands, and a miss is reported, never assumed.
+- **Out of your way.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. You keep working while Claude does.
+- **Its own tabs only.** Claude sees the tabs it opened and the popups they open. Your other tabs, windows, history and bookmarks are out of reach.
+- **The whole page.** Iframes, cross-origin ones included, are read and acted in. Claude can answer an alert that is already open, upload files without the file picker, drag, and read console and network logs with request bodies.
+- **Errors Claude can act on.** Every failure says what went wrong, whether retrying is safe, and what to do next. Claude recovers instead of repeating a click that already happened.
+- **Quick setup.** A signed, notarized app. One click adds it to Claude Desktop or copies the command for Claude Code.
+
 ## Requirements
 
 - macOS 26 or later
@@ -64,8 +78,6 @@ What it doesn't hide: the text of the page itself, which is what Claude is there
 | Hover and drag | Drag, scripted | Hover; no drag | Scripted; opt-in native hover | Yes |
 | Install | Signed DMG | Built into Safari 27 | npm or Homebrew | Homebrew, notarized |
 | Requires | macOS 26, Safari 27 | Safari 27 | Node.js 20 | macOS 14, Safari 17 |
-
-In short: Apple's server is built for testing your own site in its own window. safari-mcp and MCPSafari install from npm or Homebrew and run on older systems, but act mostly through scripted events, leave client approval to you, and hide few or no secrets. SafariPilot is for letting Claude work in your real, signed-in Safari while you keep using your Mac, with every click and key sent as real input, each client approved, and secrets hidden.
 
 Comparison as of November 2026, from each project's source and documentation. Details and sources are in [docs/COMPETITORS.md](docs/COMPETITORS.md).
 
