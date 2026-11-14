@@ -4,14 +4,24 @@ import SwiftUI
 @main
 struct SafariPilotApp: App {
   @NSApplicationDelegateAdaptor private var delegate: AppDelegate
+  @AppStorage("showInMenuBar") private var showInMenuBar = true
+  @Environment(\.openWindow) private var openWindow
 
   var body: some Scene {
-    MenuBarExtra {
+    MenuBarExtra(isInserted: $showInMenuBar) {
       MenuBarView(model: delegate.model)
     } label: {
-      MenuBarIcon(model: delegate.model)
+      Image("MenuBarLogo")
     }
     .menuBarExtraStyle(.window)
+    // Lives on the scene, not a view, so reopening still works with the menu bar icon hidden.
+    .onChange(of: delegate.openMain, initial: true) { _, open in
+      guard open else { return }
+
+      delegate.openMain = false
+      openWindow(id: "main")
+      NSApp.activate()
+    }
 
     Window("SafariPilot", id: "main") {
       MainView(model: delegate.model)
@@ -36,40 +46,23 @@ struct SafariPilotApp: App {
 }
 
 /// Lives in the menu bar with no Dock icon; the bridge must keep serving the CLI with the status window closed.
-final class AppDelegate: NSObject, NSApplicationDelegate {
+@Observable final class AppDelegate: NSObject, NSApplicationDelegate {
   @MainActor let model = AppModel()
-  static let reopen = Notification.Name("SafariPilotReopen")
+  var openMain = false
 
+  /// The window opens at launch only while setup is unfinished, so a login or CLI launch stays out of the way.
   func applicationDidFinishLaunching(_: Notification) {
-    MainActor.assumeIsolated { model.start() }
+    MainActor.assumeIsolated {
+      model.start()
+      openMain = !model.axTrusted
+    }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { false }
 
   /// Opening the app again from Finder or Spotlight shows the status window.
   func applicationShouldHandleReopen(_: NSApplication, hasVisibleWindows _: Bool) -> Bool {
-    NotificationCenter.default.post(name: Self.reopen, object: nil)
+    openMain = true
     return false
-  }
-}
-
-/// The label stays rendered for the app's lifetime, so it is where a reopen can reach openWindow.
-private struct MenuBarIcon: View {
-  let model: AppModel
-  @Environment(\.openWindow) private var openWindow
-
-  var body: some View {
-    Image("MenuBarLogo")
-      .onReceive(NotificationCenter.default.publisher(for: AppDelegate.reopen)) { _ in
-        openWindow(id: "main")
-        NSApp.activate()
-      }
-      // The window opens at launch only while setup is unfinished, so a login or CLI launch stays out of the way.
-      .task {
-        guard !model.axTrusted else { return }
-
-        openWindow(id: "main")
-        NSApp.activate()
-      }
   }
 }

@@ -3,6 +3,7 @@ import SwiftUI
 
 struct GeneralView: View {
   let model: AppModel
+  @AppStorage("showInMenuBar") private var showInMenuBar = true
 
   var body: some View {
     Form {
@@ -19,6 +20,11 @@ struct GeneralView: View {
             Text("Needs Approval")
             Text("Allow SafariPilot in System Settings.")
           }
+        }
+
+        Toggle(isOn: $showInMenuBar) {
+          Text("Show in Menu Bar")
+          Text("If the icon is hidden, open SafariPilot again to return here.")
         }
       }
 
