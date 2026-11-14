@@ -6,7 +6,7 @@ How SafariPilot works inside. For what it does and how to use it, see the [READM
 
 | Part | Where | Role |
 | --- | --- | --- |
-| App | `App/` | Dock app. Hosts the loopback listener, approval gate, command queue, Accessibility engine and activity log. |
+| App | `App/` | Menu bar app, with a Dock icon only while its window is open. The CLI launches it in the background when it is not running. Hosts the loopback listener, approval gate, command queue, Accessibility engine and activity log. |
 | Safari Web Extension | `Appex/`, `web/src/` built to `extension/` | MV3 event-page background, isolated-world content script (`content.js`) and main-world capture script (`main.js`) in every frame. |
 | CLI and MCP server | `CLI/` | `safaripilot mcp` speaks MCP over stdio (official `modelcontextprotocol/swift-sdk`). Release builds run only `mcp` and `status`. |
 | Shared | `Shared/` | Wire types, contract, redaction, error codes, viewport and window matching. |

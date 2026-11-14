@@ -27,14 +27,12 @@ Every click and keystroke is a real native input event.
 
 ## Install
 
-Download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest), drag SafariPilot to Applications and open it. Then:
+Download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest), drag SafariPilot to Applications and open it. It lives in the menu bar; choose **Open SafariPilot** there to see its window. Then:
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**. Allowing it on every website saves a prompt per site.
 2. In SafariPilot's **General** pane, grant **Accessibility** (used to click and type).
 3. In the **Clients** pane, choose **Claude Desktop** to add SafariPilot to its config, or **Claude Code** to copy a `claude mcp add` command.
-4. Turn on **Launch at Login** if you want Claude to find it every time.
-
-SafariPilot needs to be running for Claude to reach Safari.
+4. Turn on **Launch at Login** to skip the second or two Claude waits when it has to start SafariPilot itself.
 
 ### Build from source
 
