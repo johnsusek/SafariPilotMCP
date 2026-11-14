@@ -34,7 +34,7 @@ struct SafariPilotApp: App {
         Button("Open Extension Settings") { Task { await delegate.model.openExtensionSettings() } }
         Divider()
         Button("Configure Claude Desktop…") { delegate.model.configureClaudeDesktop() }
-        Button("Copy Claude Code Command") { delegate.model.copyClaudeCodeCommand() }
+        Button("Copy Server Command to Clipboard") { delegate.model.copyClaudeCodeCommand() }
         Divider()
         Button("Clear Log") { delegate.model.clearLog() }
           .keyboardShortcut("k")
@@ -71,8 +71,11 @@ private struct MenuBarMenu: View {
   @Environment(\.openWindow) private var openWindow
 
   var body: some View {
+    @Bindable var model = model
+    Toggle("Enable MCP Server", isOn: $model.serverEnabled)
+    Divider()
     Button("Configure Claude Desktop…") { model.configureClaudeDesktop() }
-    Button("Copy Claude Code Command") { model.copyClaudeCodeCommand() }
+    Button("Copy Server Command to Clipboard") { model.copyClaudeCodeCommand() }
     Divider()
     Button("Settings…") {
       openWindow(id: "main")
