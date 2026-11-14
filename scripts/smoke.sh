@@ -109,7 +109,8 @@ site_httpbin() {
 
 site_network() {
   open_tab "https://httpbin.org/html"
-  check "network: the page load is logged" 'GET https://httpbin.org/html main_frame: 200' network
+  safaripilot --tab $tab navigate "https://httpbin.org/html" >/dev/null
+  check "network: a page load is logged" 'GET https://httpbin.org/html main_frame: 200' network
   check "network: a page fetch returns" '^200$' javascript "(await fetch('/anything?api_key=k', {method: 'POST', headers: {'X-Api-Key': 'k'}, body: JSON.stringify({token: 'abc', n: 1})})).status"
   check "network: the fetch is logged with its key hidden" 'POST https://httpbin.org/anything\?api_key=\[hidden\]' network --pattern /anything
   local id=$(print -r -- "$output" | sed -nE 's/.* id ([0-9]+) POST .*/\1/p' | tail -1)

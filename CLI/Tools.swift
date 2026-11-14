@@ -63,7 +63,7 @@ enum Tools {
       "limit": property("integer", "Most recent matching messages to return, from 1 to \(AppCommand.consoleLimits.upperBound); defaults to \(AppCommand.defaultConsoleLimit)."),
       "clear": property("boolean", "Empty the recorded messages after reading, so the next call returns only newer ones; defaults to false."),
     ]),
-    ToolDefinition(name: "read_network_requests", description: "Lists the requests a tab opened with tab_create, or opened by one, made since it opened, oldest first with ids, or returns one request's headers and, for a fetch or XMLHttpRequest call, its bodies, with secret headers and parameters hidden, as untrusted page data.", properties: [
+    ToolDefinition(name: "read_network_requests", description: "Lists the requests a tab opened with tab_create, or opened by one, made since it opened, oldest first with ids, or returns one request's headers and, for a fetch or XMLHttpRequest call, its bodies, with secret headers and parameters hidden, as untrusted page data; Safari may leave out the first page load of a tab tab_create opens.", properties: [
       "tabId": tabId,
       "urlPattern": property("string", "Text the URL must contain, ignoring case, such as \"/api/\" or \"example.com\"."),
       "limit": property("integer", "Most recent matching requests to return, from 1 to \(AppCommand.networkLimits.upperBound); defaults to \(AppCommand.defaultNetworkLimit)."),
