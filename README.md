@@ -2,11 +2,11 @@
 
 # SafariPilot
 
-Let Claude use Safari on your Mac, just like Claude in Chrome.
+**SafariPilot lets Claude work in your Safari, while you keep using your Mac.**
 
-SafariPilot lets Claude work in the Safari you already use, signed in to your accounts, while you keep using your Mac. Claude opens its own tabs and works there in the background: Safari stays behind your other windows, your cursor stays put, and the tabs you have open stay private.
+Just like Claude in Chrome, SafariPilot opens its own tabs and works there in the background: Safari stays behind your other windows, no cursor takeover, and no access to other tabs you have open.
 
-Every click and keystroke is real input, the kind sites treat as coming from a person, and each one is checked after it lands. Nothing connects without your say, since each new client asks for your approval first. Passwords, card numbers, tokens and cookies stay hidden from everything Claude reads in pages, URLs and network logs.
+Every click and keystroke is a real native input event.
 
 ## Features
 
@@ -17,6 +17,8 @@ Every click and keystroke is real input, the kind sites treat as coming from a p
 - **The whole page.** Iframes, cross-origin ones included, are read and acted in. Claude can answer an alert that is already open, upload files without the file picker, drag, and read console and network logs with request bodies.
 - **Errors Claude can act on.** Every failure says what went wrong, whether retrying is safe, and what to do next. Claude recovers instead of repeating a click that already happened.
 - **Quick setup.** A signed, notarized app. One click adds it to Claude Desktop or copies the command for Claude Code.
+- **You approve every client.** Nothing connects without your say, since each new client asks for your approval first.
+- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from everything Claude reads in pages, URLs and network logs.
 
 ## Requirements
 
