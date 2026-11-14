@@ -58,7 +58,7 @@ enum Redaction {
 
 extension CLIReply {
   /// What the client receives: the text is composed with redacted URLs already, and the data's URLs are hidden here.
-  var forClient: CLIReply { CLIReply(ok: ok, text: text, data: Redaction.data(data)) }
+  var forClient: CLIReply { CLIReply(ok: ok, text: text, data: Redaction.data(data), code: code) }
 }
 
 extension TabInfo {

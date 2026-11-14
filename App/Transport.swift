@@ -156,7 +156,7 @@ final class Transport {
     queue.removeAll { $0["id"]?.string == id }
     let seen = lastSeen.map { "last seen \(Int(Date.now.timeIntervalSince($0)))s ago" } ?? "never seen"
     let reason = wasQueued ? "no background poll arrived (\(seen))" : "delivered to a poll but no result came back (\(seen))"
-    continuation.resume(throwing: Failure(description: "timed out: \(reason)"))
+    continuation.resume(throwing: Failure(wasQueued ? .safariUnavailable : .timedOut, "timed out: \(reason)"))
   }
 
   /// Lead (b): SFSafariApplication.dispatchMessage reaches a connectNative port in a loaded background, which restarts polling.

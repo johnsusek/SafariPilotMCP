@@ -135,12 +135,12 @@ final class AppModel {
     let label = request.command.logLabel
 
     if let refusal = gate.refusal(for: request) {
-      record(label, ok: false, summary: refusal)
-      return CLIReply(ok: false, text: refusal, data: .object(["unapproved": .bool(true)]))
+      record(label, ok: false, summary: "\(refusal.code.rawValue): \(refusal)")
+      return CLIReply(failed: refusal)
     }
 
     if request.command != .status, let buildMismatch {
-      record(label, ok: false, summary: "\(buildMismatch)")
+      record(label, ok: false, summary: "\(ErrorCode.buildMismatch.rawValue): \(buildMismatch)")
       return CLIReply(failed: buildMismatch)
     }
 
@@ -159,10 +159,11 @@ final class AppModel {
       case .status, .dialog: try await commands.run(request.command)
       default: try await queue.run { try await commands.run(request.command) }
       }
-      record(label, ok: reply.ok, summary: reply.text.components(separatedBy: "\n").first ?? "")
+      let summary = reply.text.components(separatedBy: "\n").first ?? ""
+      record(label, ok: reply.ok, summary: reply.code.map { "\($0.rawValue): \(summary)" } ?? summary)
       return reply.forClient
     } catch {
-      record(label, ok: false, summary: "\(error)")
+      record(label, ok: false, summary: "\(ErrorCode(of: error).rawValue): \(error)")
       return CLIReply(failed: error).forClient
     }
   }

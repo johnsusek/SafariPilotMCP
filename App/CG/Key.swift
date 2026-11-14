@@ -25,10 +25,7 @@ extension Commands {
     AXUIElementGetPid(target.app.element, &pid)
     let before = try await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
 
-    if let ref, before.origins[ref.frame] == nil {
-      let reason = before.busy.contains(ref.frame) ? "did not answer within 2 s" : "could not be read"
-      throw Failure(description: "the frame of iframe \(ref.frame) \(reason), so keys for ref \(ref) could not be counted; nothing was pressed")
-    }
+    if let ref { try before.requireAnswered(ref.frame, so: "keys for ref \(ref) could not be counted; nothing was pressed") }
 
     var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
@@ -115,7 +112,7 @@ extension Commands {
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
       ] + (logged.isEmpty ? ["  none"] : logged) + landed.lines
-      return CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data))
+      return CLIReply(failing: .inputUnconfirmed, text: lines.joined(separator: "\n"), data: .object(data))
     }
 
     let extra = keydowns.count > expected ? ", more than posted, so other key input reached the page too" : ""
@@ -159,7 +156,7 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    throw Failure(description: "posted \(posted) of \(total) key presses, then stopped: Safari's keyboard focus left the tab's page for \(focusAncestry(in: target)), so the rest were not sent")
+    throw Failure(.inputUnconfirmed, "posted \(posted) of \(total) key presses, then stopped: Safari's keyboard focus left the tab's page for \(focusAncestry(in: target)), so the rest were not sent")
   }
 
   /// Key events go to whatever Safari has focused, so refuse unless that is the tab's web area, inside it, or inside one of its frames.
@@ -184,6 +181,6 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    throw Failure(description: "keyboard focus is outside the tab's page, on \(focusAncestry(in: target)), after setting \(steps.joined(separator: ", ")); no keys were posted")
+    throw Failure(.notActionable, "keyboard focus is outside the tab's page, on \(focusAncestry(in: target)), after setting \(steps.joined(separator: ", ")); no keys were posted")
   }
 }

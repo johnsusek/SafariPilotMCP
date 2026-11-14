@@ -46,11 +46,11 @@ struct BuildIdentityTests {
   @Test func aFailedReplyMarksTheMismatchOnTheWire() throws {
     let mismatch = BuildMismatch(app: "new", background: "old", appex: "old", appexPath: path)
     let reply = CLIReply(failed: mismatch)
-    #expect(!reply.ok)
+    #expect(!reply.ok && reply.code == .buildMismatch)
     #expect(reply.data["buildMismatch"] == .object(["app": "new", "background": "old", "appex": "old", "appexPath": .string(path)]))
     #expect(reply.data["error"]?.string == mismatch.description)
     #expect(try JSONDecoder().decode(CLIReply.self, from: JSONEncoder().encode(reply)).data["buildMismatch"]?.decode(BuildMismatch.self) == mismatch)
-    #expect(CLIReply(failed: Failure(description: "other")).data["buildMismatch"] == nil)
+    #expect(CLIReply(failed: Failure(.failed, "other")).data["buildMismatch"] == nil)
   }
 
   @Test func theIdentityIsReadFromTheAppExtensionsResources() throws {

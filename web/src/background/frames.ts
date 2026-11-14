@@ -33,17 +33,26 @@ export type Send = (
 
 export type Path = { frames: number[]; local: number };
 
+// Thrown, so a failure reaches runPage or runCommand through any code with its code kept; failureFrom turns it back into the Failure.
+export let thrown = (failure: Failure) =>
+  Object.assign(new Error(failure.error), { failure });
+
+export let failureFrom = (error: unknown) =>
+  (error as { failure?: Failure } | null)?.failure ?? null;
+
 export function parsePath(ref: RefPath): Path {
   if (!/^\d+(:\d+){0,3}$/.test(ref))
-    throw new Error(
-      `ref ${JSON.stringify(ref)} must look like 12, or 5:12 for ref 12 inside the frame of iframe 5, at most ${maxFrameDepth} frames deep`,
-    );
+    throw thrown({
+      ok: false,
+      error: `ref ${JSON.stringify(ref)} must look like 12, or 5:12 for ref 12 inside the frame of iframe 5, at most ${maxFrameDepth} frames deep`,
+      code: "invalid_argument",
+    });
 
   let parts = ref.split(":").map(Number);
   return { frames: parts.slice(0, -1), local: parts.at(-1)! };
 }
 
-// Answers with a failure once ms pass, so a busy page cannot hold the background's only poll.
+// Answers with a failure once ms pass, so a busy page cannot hold the background's only poll; what was sent may still run, so it is timed_out.
 export async function withTimeout<Answer>(
   answer: Promise<Answer>,
   ms: number,
@@ -51,7 +60,10 @@ export async function withTimeout<Answer>(
 ): Promise<Answer | Failure> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   let timeout = new Promise<Failure>((resolve) => {
-    timer = setTimeout(() => resolve({ ok: false, error, timeout: true }), ms);
+    timer = setTimeout(
+      () => resolve({ ok: false, error, code: "timed_out" }),
+      ms,
+    );
   });
 
   try {
@@ -113,11 +125,13 @@ export async function walkPath(
     let reply = await send(walk.frameId, { op: "frameBox", ref, reveal });
 
     if (!reply.ok)
-      throw new Error(
-        index === 0
-          ? reply.error
-          : `in the frame of iframe ${frames.slice(0, index).join(":")}: ${reply.error}`,
-      );
+      throw thrown({
+        ...reply,
+        error:
+          index === 0
+            ? reply.error
+            : `in the frame of iframe ${frames.slice(0, index).join(":")}: ${reply.error}`,
+      });
 
     let { frame, viewport, moved, origin } = reply as FrameBoxResult;
 
@@ -135,9 +149,11 @@ export async function walkPath(
     });
 
     if (frame.frameId < 0)
-      throw new Error(
-        `iframe ${path} has no frame yet; scroll_to ${path} to load it, then retry`,
-      );
+      throw thrown({
+        ok: false,
+        error: `iframe ${path} has no frame yet; scroll_to ${path} to load it, then retry`,
+        code: "not_actionable",
+      });
 
     walk.moved ||= moved;
     walk.sandboxed ||= !allowsScripts(frame.sandbox);
@@ -178,6 +194,7 @@ export async function locatePath(
     return {
       ok: false,
       error: `ref ${ref} is inside a CSS-transformed or zoomed iframe, which Accessibility lays out untransformed, so it cannot be matched`,
+      code: "not_actionable",
     };
 
   let centered = await send(revealed.frameId, {
@@ -196,6 +213,7 @@ export async function locatePath(
     return {
       ok: false,
       error: `a frame navigated while ref ${ref} was located; read_page again`,
+      code: "stale_ref",
     };
 
   let located = await send(walk.frameId, {
@@ -265,12 +283,14 @@ export async function locatePath(
 
 // Content errors name the frame's own ref, so say which frame they came from.
 export function inFrame(failure: ContentResponse, path: Path): Failure {
-  let error = failure.ok ? "unexpected reply" : failure.error;
+  if (failure.ok)
+    return { ok: false, error: "unexpected reply", code: "failed" };
+
   return {
-    ok: false,
+    ...failure,
     error: path.frames.length
-      ? `${error} (in the frame of iframe ${path.frames.join(":")})`
-      : error,
+      ? `${failure.error} (in the frame of iframe ${path.frames.join(":")})`
+      : failure.error,
   };
 }
 

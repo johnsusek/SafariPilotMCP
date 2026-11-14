@@ -82,6 +82,7 @@ describe("upload", () => {
     expect(result).toMatchObject({
       ok: false,
       error: expect.stringMatching(/takes one file .* 2 were given/),
+      code: "invalid_argument",
     });
     expect((element("one") as HTMLInputElement).files?.length ?? 0).toBe(0);
     expect(seen).toEqual([]);
@@ -91,10 +92,24 @@ describe("upload", () => {
     });
   });
 
+  test("an input that does not keep the files is unconfirmed", () => {
+    Object.defineProperty(element("one"), "files", {
+      get: () => [],
+      set: () => {},
+    });
+    expect(send("one", [file("a.txt", "a")])).toMatchObject({
+      ok: false,
+      error: 'input#one holds [] after assigning ["a.txt"]',
+      code: "input_unconfirmed",
+    });
+    expect(seen).toEqual([]);
+  });
+
   test("a disabled input is refused", () => {
     expect(send("off", [file("a.txt", "a")])).toMatchObject({
       ok: false,
       error: "input#off is disabled",
+      code: "not_actionable",
     });
   });
 
@@ -162,6 +177,7 @@ describe("upload", () => {
       error: expect.stringMatching(
         /did not accept a drop .* nothing was dropped; this frame's file inputs: \[ref=\d+\] input#many/,
       ),
+      code: "not_actionable",
     });
     document.body.innerHTML = '<div id="bare">Bare</div>';
     expect(send("bare", [file("a.txt", "a")])).toMatchObject({
@@ -177,6 +193,7 @@ describe("upload", () => {
       error: expect.stringMatching(
         /is an iframe; pass the ref .* inside its frame, such as \d+:12$/,
       ),
+      code: "invalid_argument",
     });
     expect(seen).toEqual([]);
   });

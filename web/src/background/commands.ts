@@ -5,15 +5,16 @@ import type {
   ContentResponse,
   FramesResult,
 } from "../shared/protocol";
+import { accessFailure, accessFrom, probeAccess, refusing } from "./access";
+import type { Failure } from "../shared/protocol";
 import {
-  accessError,
-  accessFailure,
-  type AccessFailure,
-  accessFrom,
-  probeAccess,
-  refusing,
-} from "./access";
-import { maxFrameDepth, type Send, timed, withTimeout } from "./frames";
+  failureFrom,
+  maxFrameDepth,
+  type Send,
+  thrown,
+  timed,
+  withTimeout,
+} from "./frames";
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
@@ -39,22 +40,23 @@ async function sendToContent(
         (answer as ContentResponse | undefined) ?? {
           ok: false,
           error: noScript,
-          unreachable: true,
+          code: "no_content_script",
         },
       (error): ContentResponse => ({
         ok: false,
         error: `${noScript}: ${error}`,
-        unreachable: true,
+        code: "no_content_script",
       }),
     )
     .then(async (reply) => {
       // Safari injects no content script on a site it has not granted, so a silent top frame may be that rather than a tab older than the extension.
-      if (reply.ok || !reply.unreachable || frameId !== 0) return reply;
+      if (reply.ok || reply.code !== "no_content_script" || frameId !== 0)
+        return reply;
 
       let access = await probeAccess(tab.id);
 
       if (access === "prompt" || access === "denied")
-        throw accessError(accessFailure(access, tab.id, tab.url));
+        throw thrown(accessFailure(access, tab.id, tab.url));
 
       return reply;
     });
@@ -127,12 +129,14 @@ async function loadedTab(start: () => Promise<KnownTab>, created = false) {
   });
 
   if (!loaded && !created)
-    throw new Error(
-      `tab ${tabId} did not finish loading within ${loadTimeoutMs / 1000} s`,
-    );
+    throw thrown({
+      ok: false,
+      error: `tab ${tabId} did not finish loading within ${loadTimeoutMs / 1000} s`,
+      code: "timed_out",
+    });
 
   let tab = known!;
-  let access: AccessFailure | null = null;
+  let access: Failure | null = null;
 
   try {
     tab = await resolveTab(tabId);
@@ -260,6 +264,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return {
       ok: false,
       error: `tab ${tab.id} is not the active tab of its window; select it first`,
+      code: "tab_unavailable",
     };
 
   let dataUrl = await browser.tabs
@@ -274,11 +279,15 @@ export async function runCommand(
   try {
     return await dispatch(command);
   } catch (error) {
-    return (
-      accessFrom(error) ?? {
-        ok: false,
-        error: `${command.type} failed: ${error instanceof Error ? error.message : String(error)}`,
-      }
-    );
+    let failure = failureFrom(error);
+
+    // An access failure is already worded for the user; others say which command failed.
+    if (accessFrom(error)) return failure!;
+
+    return {
+      ok: false,
+      error: `${command.type} failed: ${error instanceof Error ? error.message : String(error)}`,
+      code: failure?.code ?? "failed",
+    };
   }
 }

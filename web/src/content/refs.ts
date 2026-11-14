@@ -20,7 +20,8 @@ export function refFor(element: Element) {
 
 export function resolveRef(ref: number): Element | Failure {
   let weak = elementsByRef.get(ref);
-  if (!weak) return { ok: false, error: `ref ${ref} is unknown` };
+  if (!weak)
+    return { ok: false, error: `ref ${ref} is unknown`, code: "stale_ref" };
   let element = weak.deref();
 
   if (!element) {
@@ -28,11 +29,16 @@ export function resolveRef(ref: number): Element | Failure {
     return {
       ok: false,
       error: `ref ${ref} is gone (element was garbage collected)`,
+      code: "stale_ref",
     };
   }
 
   if (!element.isConnected)
-    return { ok: false, error: `ref ${ref} is detached from the document` };
+    return {
+      ok: false,
+      error: `ref ${ref} is detached from the document`,
+      code: "stale_ref",
+    };
   return element;
 }
 

@@ -149,7 +149,7 @@ describe("runCommand", () => {
       tabId: null,
       request: { op: "ping" },
     });
-    expect(rejected).toMatchObject({ ok: false, unreachable: true });
+    expect(rejected).toMatchObject({ ok: false, code: "no_content_script" });
     expect((rejected as { error: string }).error).toMatch(
       /^no content script answered in tab 5 .*open the URL in a new tab/,
     );
@@ -159,7 +159,7 @@ describe("runCommand", () => {
       tabId: null,
       request: { op: "ping" },
     });
-    expect(silent).toMatchObject({ ok: false, unreachable: true });
+    expect(silent).toMatchObject({ ok: false, code: "no_content_script" });
     expect((silent as { error: string }).error).toMatch(
       /open the URL in a new tab/,
     );
@@ -197,6 +197,7 @@ describe("runCommand", () => {
     expect(await run({ type: "screenshot", tabId: 6 })).toEqual({
       ok: false,
       error: "tab 6 is not the active tab of its window; select it first",
+      code: "tab_unavailable",
     });
     let result = await run({ type: "screenshot", tabId: 7 });
     expect(fake.tabs.captureVisibleTab).toHaveBeenCalledWith(2, {
@@ -232,6 +233,7 @@ describe("runCommand", () => {
     expect(await pending).toEqual({
       ok: false,
       error: "navigate failed: tab 6 did not finish loading within 15 s",
+      code: "timed_out",
     });
     expect(listeners.size).toBe(0);
   });
@@ -347,6 +349,7 @@ describe("runCommand", () => {
     ).toMatchObject({
       ok: false,
       error: expect.stringMatching(/^javascript failed: SyntaxError: /),
+      code: "invalid_argument",
     });
   });
 });
@@ -395,9 +398,8 @@ describe("site access", () => {
       let result = await content(request);
       expect(result, JSON.stringify(request)).toMatchObject({
         ok: false,
-        siteAccess: "denied",
+        code: "site_access_denied",
       });
-      expect(result).not.toHaveProperty("unreachable");
       expect((result as { error: string }).error).toMatch(
         /^Safari has not granted SafariPilot access to https:\/\/site \(refused, or never allowed\)/,
       );
@@ -413,7 +415,7 @@ describe("site access", () => {
     let pending = content({ op: "waitFor", text: "Ready", selector: null });
     await vi.advanceTimersByTimeAsync(accessDeadlineMs);
     let result = await pending;
-    expect(result).toMatchObject({ ok: false, siteAccess: "prompt" });
+    expect(result).toMatchObject({ ok: false, code: "site_access_prompt" });
     expect((result as { error: string }).error).toMatch(
       /^Safari is asking the user whether SafariPilot may use https:\/\/site and holds every call for tab 6/,
     );
@@ -434,7 +436,7 @@ describe("site access", () => {
       await vi.advanceTimersByTimeAsync(accessDeadlineMs);
       expect(await pending, command.type).toMatchObject({
         ok: false,
-        siteAccess: "prompt",
+        code: "site_access_prompt",
         error: expect.stringMatching(/may use the site in tab 6 /),
       });
     }
@@ -444,8 +446,7 @@ describe("site access", () => {
     silent();
     let result = await content({ op: "ping" });
     expect(fake.scripting.executeScript).toHaveBeenCalledWith(probe);
-    expect(result).toMatchObject({ ok: false, unreachable: true });
-    expect(result).not.toHaveProperty("siteAccess");
+    expect(result).toMatchObject({ ok: false, code: "no_content_script" });
   });
 
   test("a probe failing some other way keeps the content failure", async () => {
@@ -455,7 +456,7 @@ describe("site access", () => {
     );
     expect(await content({ op: "ping" })).toMatchObject({
       ok: false,
-      unreachable: true,
+      code: "no_content_script",
     });
   });
 
@@ -508,14 +509,14 @@ describe("site access", () => {
     fake.scripting.executeScript.mockRejectedValue(refusal);
     expect(
       await run({ type: "javascript", tabId: 6, code: "1", frame: null }),
-    ).toMatchObject({ ok: false, siteAccess: "denied" });
+    ).toMatchObject({ ok: false, code: "site_access_denied" });
     fake.tabs.captureVisibleTab.mockRejectedValue(
       new Error(
         "Invalid call to tabs.captureVisibleTab(). either the 'activeTab' permission or granted host permissions for the current website are required.",
       ),
     );
     let shot = await run({ type: "screenshot", tabId: 7 });
-    expect(shot).toMatchObject({ ok: false, siteAccess: "denied" });
+    expect(shot).toMatchObject({ ok: false, code: "site_access_denied" });
     expect((shot as { error: string }).error).toContain("https://site");
   });
 
@@ -535,7 +536,7 @@ describe("site access", () => {
       ok: true,
       tab: { id: 6, url: "https://new.test/a", title: "", windowFrame: frame },
       loading: false,
-      access: { ok: false, siteAccess: "prompt" },
+      access: { ok: false, code: "site_access_prompt" },
     });
   });
 
@@ -552,7 +553,7 @@ describe("site access", () => {
     expect(await pending).toMatchObject({
       ok: true,
       tab: { id: 8, windowId: 1, url: "https://new.test/" },
-      access: { siteAccess: "prompt" },
+      access: { code: "site_access_prompt" },
     });
   });
 

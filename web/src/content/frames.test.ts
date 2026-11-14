@@ -115,6 +115,7 @@ describe("frameEntry", () => {
     expect(frameBox(refFor(document.body), false)).toEqual({
       ok: false,
       error: expect.stringMatching(/is a <body>, not an iframe/),
+      code: "invalid_argument",
     });
   });
 });

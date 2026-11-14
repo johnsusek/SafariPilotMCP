@@ -46,14 +46,14 @@ struct Commands {
   func call(_ command: BackgroundCommand) async throws -> JSONValue {
     let tabId = command.json["tabId"]?.number.map { Int($0) }
 
-    if let blocked = try await dialogBlock(tabId) { throw Failure(description: blocked) }
+    if let blocked = try await dialogBlock(tabId) { throw Failure(.dialogOpen, blocked) }
 
     let remaining = deadline - .now
 
-    guard remaining > .zero else { throw Failure(description: "timed out before sending \(command.type)") }
+    guard remaining > .zero else { throw Failure(.timedOut, "timed out before sending \(command.type)") }
 
     let sending = Task { try await model.transport.send(command.json, timeout: remaining) }
-    let watching = Task { () -> String? in
+    let watching = Task { () -> (any Error)? in
       while !Task.isCancelled {
         try? await Task.sleep(for: .milliseconds(250))
 
@@ -61,10 +61,10 @@ struct Commands {
           guard let blocked = try await dialogBlock(tabId) else { continue }
 
           sending.cancel()
-          return blocked
+          return Failure(.dialogOpen, blocked)
         } catch {
           sending.cancel()
-          return "\(error)"
+          return error
         }
       }
 
@@ -73,12 +73,16 @@ struct Commands {
     defer { watching.cancel() }
     let response: JSONValue
 
-    do { response = try await sending.value } catch is CancellationError { throw Failure(description: await watching.value ?? "\(command.type) was cancelled") }
+    do { response = try await sending.value } catch is CancellationError { throw await watching.value ?? Failure(.failed, "\(command.type) was cancelled") }
 
     if response["ok"]?.bool != true {
-      if let access = try? response.decode(SiteAccessFailure.self) { throw access }
+      guard let failure = try? response.decode(PageFailure.self) else { throw Failure(.failed, "extension (\(command.type)): malformed response \(response)") }
 
-      throw Failure(description: "extension (\(command.type)): \(response["error"]?.string ?? "malformed response \(response)")")
+      // A site access failure is already worded for the user, so it is passed on as it is.
+      switch failure.code {
+      case .siteAccessPrompt, .siteAccessDenied: throw Failure(failure.code, failure.error)
+      default: throw Failure(failure.code, "extension (\(command.type)): \(failure.error)")
+      }
     }
 
     try await model.noteTabs(in: response)
@@ -116,7 +120,7 @@ struct Commands {
 
   func withLanding(_ reply: CLIReply, _ tab: TabInfo, since acted: ContinuousClock.Instant) async -> CLIReply {
     let lines = await landing(tab, since: acted).lines
-    return CLIReply(ok: reply.ok, text: ([reply.text] + lines).joined(separator: "\n"), data: reply.data)
+    return CLIReply(ok: reply.ok, text: ([reply.text] + lines).joined(separator: "\n"), data: reply.data, code: reply.code)
   }
 
   func describe(_ event: LoggedEvent) -> String {
@@ -284,7 +288,7 @@ struct Commands {
     let screens = await MainActor.run { NSScreen.screens.map { ($0.frame, $0.visibleFrame) } }
     let room = try ScreenFit.room(for: current.windowFrame, screens: screens)
 
-    guard Double(width) <= room.width, Double(height) <= room.height else { throw Failure(description: "\(width) x \(height) does not fit the \(Int(room.width)) x \(Int(room.height)) points free on the window's screen") }
+    guard Double(width) <= room.width, Double(height) <= room.height else { throw Failure(.invalidArgument, "\(width) x \(height) does not fit the \(Int(room.width)) x \(Int(room.height)) points free on the window's screen") }
 
     let response = try await call(.resize(tabId: current.id, width: width, height: height))
     let tab = try response.decode(TabResult.self).tab
@@ -303,10 +307,10 @@ struct Commands {
     let result = try response.decode(ScreenshotResult.self)
 
     guard result.dataUrl.hasPrefix("data:image/png;base64,"), let comma = result.dataUrl.firstIndex(of: ",") else {
-      throw Failure(description: "screenshot response is not a base64 PNG data URL: \(result.dataUrl.prefix(40))")
+      throw Failure(.failed, "screenshot response is not a base64 PNG data URL: \(result.dataUrl.prefix(40))")
     }
 
-    guard let png = Data(base64Encoded: String(result.dataUrl[result.dataUrl.index(after: comma)...])) else { throw Failure(description: "screenshot data URL is not valid base64") }
+    guard let png = Data(base64Encoded: String(result.dataUrl[result.dataUrl.index(after: comma)...])) else { throw Failure(.failed, "screenshot data URL is not valid base64") }
 
     let image = try ScreenshotImage.process(png, region: region, scale: scale)
     let frame = "\(image.frameWidth) x \(image.frameHeight) px view"
@@ -323,7 +327,7 @@ struct Commands {
 
     if !located.hitsTarget, !(coveredOK && located.covered) {
       let hint = located.covered ? "; key Enter or Space with this ref reaches it from the keyboard" : ""
-      throw Failure(description: "ref \(ref) is not hittable: \(located.hitDescription)\(hint)")
+      throw Failure(.notActionable, "ref \(ref) is not hittable: \(located.hitDescription)\(hint)")
     }
 
     return located
@@ -333,7 +337,7 @@ struct Commands {
   func refuseSandboxed(_ located: LocateResult, _ action: String) throws {
     guard located.sandboxed else { return }
 
-    throw Failure(description: "ref \(located.ref) is inside a frame sandboxed without allow-scripts, where the page's listeners never run, so \(action) there cannot be verified; nothing was sent")
+    throw Failure(.notActionable, "ref \(located.ref) is inside a frame sandboxed without allow-scripts, where the page's listeners never run, so \(action) there cannot be verified; nothing was sent")
   }
 
   func matchLines(_ locate: LocateResult, _ match: AXEngine.Match) -> [String] {
@@ -353,17 +357,14 @@ struct Commands {
     // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter, as from the keyboard.
     if match.node.role == "AXDisclosureTriangle" {
       let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1)
-      return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data)
+      return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data, code: reply.code)
     }
 
     // The click is logged by the frame that owns the element; a link there may navigate or remove just that frame.
     let frame = ref.frame
     let before = try await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
 
-    guard before.origins[frame] != nil else {
-      let reason = before.busy.contains(frame) ? "did not answer within 2 s" : "could not be read"
-      throw Failure(description: "the frame of iframe \(frame) \(reason), so a click on ref \(ref) could not be verified; nothing was clicked")
-    }
+    try before.requireAnswered(frame, so: "a click on ref \(ref) could not be verified; nothing was clicked")
 
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
@@ -399,13 +400,13 @@ struct Commands {
     // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
     if !navigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
-      return CLIReply(ok: false, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
+      return CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
     // WebKit can report a frame's elements at their old place for a while after it scrolls, so a press matched by frame can land on a neighbor.
     if !frame.isEmpty, !navigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
       lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
-      return CLIReply(ok: false, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
+      return CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
     }
 
     let outcome = pageNavigated || (navigated && clicks.isEmpty) ? "; the page navigated" : frameNavigated ? "; the frame of iframe \(frame) navigated or closed" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"

@@ -117,14 +117,26 @@ export function setColor(ref: number, value: string): InspectResult | Failure {
   if (!(element instanceof Element)) return element;
 
   if (!(element instanceof HTMLInputElement) || element.type !== "color")
-    return { ok: false, error: `ref ${ref} is not a color input` };
+    return {
+      ok: false,
+      error: `ref ${ref} is not a color input`,
+      code: "invalid_argument",
+    };
 
   if (element.disabled)
-    return { ok: false, error: `color input ref ${ref} is disabled` };
+    return {
+      ok: false,
+      error: `color input ref ${ref} is disabled`,
+      code: "not_actionable",
+    };
 
   // WebKit takes any CSS color and stores its own serialization (green reads back #008000), but an unparsable one as #000000.
   if (!CSS.supports("color", value))
-    return { ok: false, error: `"${value}" is not a CSS color` };
+    return {
+      ok: false,
+      error: `"${value}" is not a CSS color`,
+      code: "invalid_argument",
+    };
 
   element.value = value;
   element.dispatchEvent(new Event("input", { bubbles: true }));

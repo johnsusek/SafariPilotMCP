@@ -62,14 +62,17 @@ test("setColor refuses other elements and disabled color inputs", () => {
   expect(setColor(refFor(open), "not a color")).toMatchObject({
     ok: false,
     error: expect.stringContaining("not a CSS color"),
+    code: "invalid_argument",
   });
   vi.unstubAllGlobals();
   expect(setColor(refFor(text), "#00ff00")).toMatchObject({
     ok: false,
     error: expect.stringContaining("not a color input"),
+    code: "invalid_argument",
   });
   expect(setColor(refFor(color), "#00ff00")).toMatchObject({
     ok: false,
     error: expect.stringContaining("disabled"),
+    code: "not_actionable",
   });
 });

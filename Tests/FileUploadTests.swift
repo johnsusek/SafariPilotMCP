@@ -87,7 +87,7 @@ struct FileUploadTests {
   @Test func toolMapsPathsAndRefAndKeepsBytesOutOfTheLog() throws {
     let path = try write("a.txt", Data("secret bytes".utf8))
     let command = try map(["ref": "5:12", "paths": .array([.string(path)])])
-    guard case let .fileUpload(tabId, ref, files) = command else { throw Failure(description: "mapped to \(command)") }
+    guard case let .fileUpload(tabId, ref, files) = command else { throw Failure(.failed, "mapped to \(command)") }
 
     #expect(tabId == 20)
     #expect(ref == PageRef(frames: [5], local: 12))
@@ -128,7 +128,7 @@ struct FileUploadTests {
   @Test func cliTakesRefAndPathsResolvingRelativeOnes() throws {
     let path = try write("b.txt", Data("b".utf8))
     let invocation = try CommandLineParsing.parse(["--tab", "3", "file-upload", "5:2", path])
-    guard case let .fileUpload(tabId, ref, files) = invocation.command else { throw Failure(description: "parsed to \(invocation.command)") }
+    guard case let .fileUpload(tabId, ref, files) = invocation.command else { throw Failure(.failed, "parsed to \(invocation.command)") }
 
     #expect(tabId == 3)
     #expect(ref == PageRef(frames: [5], local: 2))

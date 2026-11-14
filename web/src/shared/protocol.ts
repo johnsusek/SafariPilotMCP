@@ -115,17 +115,13 @@ export type ContentRequest =
       clear: boolean;
     };
 
-// Safari has not granted the tab's site: prompt while it is asking the user, denied when refused or never allowed.
-export type SiteAccess = "prompt" | "denied";
+// What a caller does about a failure; errorCodes.json gives each code its retry flag and next step, which the MCP server adds to the reply.
+export type ErrorCode = keyof (typeof import("./errorCodes.json"))["codes"];
 
-// timeout marks a frame that did not answer in time, as opposed to one that is gone; unreachable one whose content script did not answer at all (none yet, or mid-navigation);
-// siteAccess a page Safari keeps the extension out of, which no retry fixes until the user grants the site.
 export type Failure = {
   ok: false;
   error: string;
-  timeout?: true;
-  unreachable?: true;
-  siteAccess?: SiteAccess;
+  code: ErrorCode;
 };
 
 // An iframe in this document: frameId is the id Safari gives its frame (-1 when it has none yet), box its content box,

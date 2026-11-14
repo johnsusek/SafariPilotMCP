@@ -1,9 +1,10 @@
 // Safari grants a web extension one site at a time, whatever its manifest asks for, unless the user chose "Always Allow on Every Website".
 // Every assumption about how Safari behaves for a site it has not granted lives here; DECISIONS.md lists them as not verified live.
-import type { Failure, SiteAccess } from "../shared/protocol";
-import { withTimeout } from "./frames";
+import type { Failure } from "../shared/protocol";
+import { failureFrom, thrown, withTimeout } from "./frames";
 
-export type AccessFailure = Failure & { siteAccess: SiteAccess };
+// Safari has not granted the tab's site: prompt while it is asking the user, denied when refused or never allowed.
+export type SiteAccess = "prompt" | "denied";
 
 // tabs.get and executeScript wait on Safari's question (WebKit's requestPermissionToAccessURLs, up to 2 min) and answer at once otherwise.
 export let accessDeadlineMs = 2000;
@@ -27,7 +28,7 @@ export function accessFailure(
   siteAccess: SiteAccess,
   tabId: number | null,
   url?: string,
-): AccessFailure {
+): Failure {
   let tab = tabId === null ? "the active tab" : `tab ${tabId}`;
   let site = siteOf(url) ?? `the site in ${tab}`;
   let settings = `Safari Settings > Extensions > SafariPilot, where "Always Allow on Every Website" grants every site at once`;
@@ -35,24 +36,22 @@ export function accessFailure(
     siteAccess === "prompt"
       ? `Safari is asking the user whether SafariPilot may use ${site} and holds every call for ${tab} until they answer. Ask your user to find Safari's permission prompt (it may be behind other windows, or waiting under the SafariPilot button in Safari's toolbar) and allow the site, or to use ${settings}; then retry.`
       : `Safari has not granted SafariPilot access to ${site} (refused, or never allowed). Ask your user to allow it from the SafariPilot button in Safari's toolbar or in ${settings}; then retry.`;
-  return { ok: false, error, siteAccess };
+  return { ok: false, error, code: `site_access_${siteAccess}` };
 }
 
-// Thrown, so it reaches runCommand through any page code; accessFrom turns it back into the Failure.
-export let accessError = (failure: AccessFailure) =>
-  Object.assign(new Error(failure.error), { failure });
-
-export function accessFrom(error: unknown): AccessFailure | null {
-  let failure = (error as { failure?: AccessFailure } | null)?.failure;
-  return failure?.siteAccess ? failure : null;
+// The access failure a thrown error carries, null for any other error.
+export function accessFrom(error: unknown) {
+  let failure = failureFrom(error);
+  return failure?.code === "site_access_prompt" ||
+    failure?.code === "site_access_denied"
+    ? failure
+    : null;
 }
 
 // Rethrows a refusal from a call Safari checks site access for as the denied failure.
 export let refusing =
   (tabId: number, url: string | undefined) => (error: unknown) => {
-    throw refused(error)
-      ? accessError(accessFailure("denied", tabId, url))
-      : error;
+    throw refused(error) ? thrown(accessFailure("denied", tabId, url)) : error;
   };
 
 // A lookup still waiting after the deadline is held by Safari's question, since nothing else makes a tab lookup wait.
@@ -62,8 +61,8 @@ export async function withinAccess<Answer>(
 ) {
   let answer = await withTimeout(lookup, accessDeadlineMs, "");
 
-  if ((answer as Failure | null)?.timeout)
-    throw accessError(accessFailure("prompt", tabId));
+  if ((answer as Failure | null)?.code === "timed_out")
+    throw thrown(accessFailure("prompt", tabId));
 
   return answer as Answer;
 }

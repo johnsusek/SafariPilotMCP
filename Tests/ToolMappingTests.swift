@@ -167,7 +167,7 @@ struct ToolMappingTests {
       #expect("\(name)") {
         try map(name, ["ref": .number(1), "value": "x", "keys": "Enter", "name": "q", "direction": "down", "url": "back", "width": .number(800), "height": .number(600)], session: nil)
       } throws: { error in
-        (error as? Failure)?.description == TabSession.noCurrent
+        (error as? Failure)?.description == TabSession.noCurrent && (error as? Failure)?.code == .tabUnavailable
       }
     }
 
@@ -177,7 +177,7 @@ struct ToolMappingTests {
 
   @Test func sessionFollowsTabCreateAndClose() {
     let created = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "tab": .object(["id": .number(31), "windowId": .number(4)])]))
-    let failed = CLIReply(ok: false, text: "", data: .object(["error": "no"]))
+    let failed = CLIReply(failing: .failed, text: "", data: .object(["error": "no"]))
     let closed = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "closed": .number(31)]))
     var session = TabSession(owned: [8], current: 8)
     session.record(.tabCreate(url: nil), reply: failed)

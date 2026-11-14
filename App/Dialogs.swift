@@ -29,7 +29,7 @@ extension AXEngine {
 
     let index: Int
 
-    do { index = try WindowMatching.byFrame(tab: tab, candidates: scan.map { candidate($0.window, urls: []) }) } catch { throw Failure(description: "a dialog is open in Safari, but tab \(tab.id)'s window could not be told apart: \(error.description)") }
+    do { index = try WindowMatching.byFrame(tab: tab, candidates: scan.map { candidate($0.window, urls: []) }) } catch { throw Failure(.safariUnavailable, "a dialog is open in Safari, but tab \(tab.id)'s window could not be told apart: \(error.description)") }
 
     guard let node = scan[index].dialog else { return nil }
 
@@ -39,7 +39,7 @@ extension AXEngine {
     let message = node.string(kAXValueAttribute) ?? ""
 
     guard let kind = JSDialog.kind(buttons: buttons.count, textField: field != nil) else {
-      throw Failure(description: "tab \(tab.id) shows a dialog SafariPilot does not recognize, \"\(message)\" with buttons \(buttons.map { "\"\($0.label)\"" }.joined(separator: ", "))\(field == nil ? "" : " and a text field")")
+      throw Failure(.failed, "tab \(tab.id) shows a dialog SafariPilot does not recognize, \"\(message)\" with buttons \(buttons.map { "\"\($0.label)\"" }.joined(separator: ", "))\(field == nil ? "" : " and a text field")")
     }
 
     let origin = JSDialog.origin(fromLine: children.first { $0.role == kAXStaticTextRole }?.string(kAXValueAttribute) ?? "")
@@ -76,20 +76,20 @@ extension Commands {
   /// handle_dialog: optionally sets a prompt's text through AXValue, presses OK (or an alert's Close) to accept or Cancel to dismiss through AXPress, and waits up to 1 s for the dialog to close.
   /// The extension cannot answer while the dialog is open, so the tab's window is found from the TabInfo last seen for it.
   func answerDialog(_ tabId: Int?, _ accept: Bool, _ promptText: String?) async throws -> CLIReply {
-    guard let tabId else { throw Failure(description: "dialog needs a tab id (--tab), since the extension that knows the active tab cannot answer while a dialog is open") }
-    guard let tab = await model.knownTabs[tabId] else { throw Failure(description: "SafariPilot has not seen tab \(tabId) since it started, so it cannot tell which window is the tab's") }
-    guard let open = try AXEngine.dialog(for: tab) else { throw Failure(description: "no dialog is open in tab \(tab.id)'s window") }
+    guard let tabId else { throw Failure(.invalidArgument, "dialog needs a tab id (--tab), since the extension that knows the active tab cannot answer while a dialog is open") }
+    guard let tab = await model.knownTabs[tabId] else { throw Failure(.tabUnavailable, "SafariPilot has not seen tab \(tabId) since it started, so it cannot tell which window is the tab's") }
+    guard let open = try AXEngine.dialog(for: tab) else { throw Failure(.notActionable, "no dialog is open in tab \(tab.id)'s window") }
 
     var lines: [String] = []
 
     if let promptText {
-      guard let field = open.field else { throw Failure(description: "prompt_text applies only to a prompt, and tab \(tab.id) shows \(open.dialog.line); nothing was pressed") }
+      guard let field = open.field else { throw Failure(.invalidArgument, "prompt_text applies only to a prompt, and tab \(tab.id) shows \(open.dialog.line); nothing was pressed") }
 
       let result = AXUIElementSetAttributeValue(field.element, kAXValueAttribute as CFString, promptText as CFString)
       let shown = field.string(kAXValueAttribute) ?? ""
 
       // The answer may be a secret and these lines reach the activity log, so they give sizes, not the text.
-      guard result == .success, shown == promptText else { throw Failure(description: "AXValue on the prompt's text field returned \(result.name) and it reads \(shown.count) characters, not the \(promptText.count) given; nothing was pressed") }
+      guard result == .success, shown == promptText else { throw Failure(.inputUnconfirmed, "AXValue on the prompt's text field returned \(result.name) and it reads \(shown.count) characters, not the \(promptText.count) given; nothing was pressed") }
 
       lines.append("typed \(promptText.count) characters into the prompt")
     }
@@ -98,7 +98,7 @@ extension Commands {
     let title = button.label
     let pressed = AXUIElementPerformAction(button.element, kAXPressAction as CFString)
 
-    guard pressed == .success else { throw Failure(description: "AXPress on the dialog's \"\(title)\" button failed: \(pressed.name)") }
+    guard pressed == .success else { throw Failure(.inputUnconfirmed, "AXPress on the dialog's \"\(title)\" button failed: \(pressed.name)") }
 
     // A page can open another dialog as soon as this one closes, which shows as a different dialog element.
     // Seen live: a press while the dialog is still appearing in a fully covered window leaves the button highlighted (AXValue 1) with its action pending until the next press, so a stuck button is pressed once more.
@@ -114,7 +114,7 @@ extension Commands {
       if attempt == 6, button.value(kAXValueAttribute) as? Int == 1 { pressedAgain = AXUIElementPerformAction(button.element, kAXPressAction as CFString) == .success }
     }
 
-    if let next, CFEqual(next.node.element, open.node.element) { throw Failure(description: "pressed \"\(title)\"\(pressedAgain ? " twice" : "") but \(open.dialog.line) is still open after 1 s") }
+    if let next, CFEqual(next.node.element, open.node.element) { throw Failure(.inputUnconfirmed, "pressed \"\(title)\"\(pressedAgain ? " twice" : "") but \(open.dialog.line) is still open after 1 s") }
 
     lines.append("\(accept ? "accepted" : "dismissed") \(open.dialog.line) by pressing \"\(title)\"\(pressedAgain ? " twice, as the first press stuck while the dialog appeared," : "") in tab \(tab.id)")
 

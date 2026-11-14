@@ -16,7 +16,7 @@ struct PageRef: Codable, Hashable, Sendable, CustomStringConvertible, Expressibl
   init(parsing text: String) throws {
     guard text.wholeMatch(of: /\d{1,9}(:\d{1,9}){0,3}/) != nil else {
       let hint = text.contains(".") ? "; refs inside frames are strings like \"5:12\", not 5.12" : ""
-      throw Failure(description: "ref \"\(text)\" must look like 12, or 5:12 for ref 12 inside the frame of iframe 5, at most \(Self.maxFrames) frames deep\(hint)")
+      throw Failure(.invalidArgument, "ref \"\(text)\" must look like 12, or 5:12 for ref 12 inside the frame of iframe 5, at most \(Self.maxFrames) frames deep\(hint)")
     }
 
     let parts = text.split(separator: ":").map { Int($0)! }

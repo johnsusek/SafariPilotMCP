@@ -83,15 +83,15 @@ final class ClientGate {
   }
 
   /// Why a command may not run, or nil when it may. Debug builds let session-less requests through for the dev CLI and smoke tests.
-  func refusal(for request: CLIRequest) -> String? {
+  func refusal(for request: CLIRequest) -> Failure? {
     #if DEBUG
       if request.session == nil { return nil }
     #else
-      if request.command.isDevTool { return "\(request.command) is a dev tool available only in Debug builds" }
+      if request.command.isDevTool { return Failure(.invalidArgument, "\(request.command) is a dev tool available only in Debug builds") }
       if request.command == .status { return nil }
     #endif
 
-    guard let key = request.session, sessions.contains(where: { $0.id == key }) else { return "not approved: this client's SafariPilot session is missing or was revoked" }
+    guard let key = request.session, sessions.contains(where: { $0.id == key }) else { return Failure(.approvalRequired, "not approved: this client's SafariPilot session is missing or was revoked") }
 
     return nil
   }
@@ -121,7 +121,7 @@ final class ClientGate {
 
   /// A credential to write into a client's MCP settings: the one already there when SafariPilot knows it, else a new untrusted one.
   func credentialForSettings(name: String, existing: String?) throws -> String {
-    guard let store else { throw Failure(description: "client credentials are unavailable: \(storeError ?? "keychain not loaded")") }
+    guard let store else { throw Failure(.failed, "client credentials are unavailable: \(storeError ?? "keychain not loaded")") }
 
     if let existing, store.record(for: existing) != nil { return existing }
 

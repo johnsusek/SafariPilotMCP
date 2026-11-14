@@ -24,17 +24,25 @@ struct ContractTests {
     #expect(try decode(ScreenshotResult.self, #"{"ok":true,"dataUrl":"data:image/png;base64,AAAA","tab":\#(tab)}"#).tab.windowId == 3)
   }
 
-  @Test func siteAccessFailuresDecodeAndKeepTheirMarkInTheReply() throws {
-    let access = try decode(SiteAccessFailure.self, #"{"ok":false,"error":"Safari has not granted SafariPilot access to https://a.test","siteAccess":"denied"}"#)
-    #expect(access == SiteAccessFailure(siteAccess: .denied, error: "Safari has not granted SafariPilot access to https://a.test"))
-    #expect(throws: (any Error).self) { try decode(SiteAccessFailure.self, #"{"ok":false,"error":"no content script answered","unreachable":true}"#) }
-    let reply = CLIReply(failed: access)
-    #expect(!reply.ok && reply.text == access.error)
-    #expect(reply.data == .object(["error": .string(access.error), "siteAccess": "denied"]))
-    #expect(CLIReply(failed: Failure(description: "other")).data == .object(["error": "other"]))
-    let held = try decode(TabResult.self, #"{"ok":true,"tab":\#(tab),"loading":false,"access":{"ok":false,"error":"Safari is asking","siteAccess":"prompt"}}"#)
-    #expect(held.access == SiteAccessFailure(siteAccess: .prompt, error: "Safari is asking"))
+  @Test func pageFailuresDecodeWithTheirCodeAndCarryItIntoTheReply() throws {
+    let access = try decode(PageFailure.self, #"{"ok":false,"error":"Safari has not granted SafariPilot access to https://a.test","code":"site_access_denied"}"#)
+    #expect(access == PageFailure(code: .siteAccessDenied, error: "Safari has not granted SafariPilot access to https://a.test"))
+    #expect(try decode(PageFailure.self, #"{"ok":false,"error":"no content script answered","code":"no_content_script"}"#).code == .noContentScript)
+    #expect(throws: (any Error).self) { try decode(PageFailure.self, #"{"ok":false,"error":"x","code":"no_such_code"}"#) }
+    let reply = CLIReply(failed: Failure(access.code, access.error))
+    #expect(!reply.ok && reply.text == access.error && reply.code == .siteAccessDenied)
+    #expect(reply.data == .object(["error": .string(access.error)]))
+    #expect(try JSONDecoder().decode(CLIReply.self, from: JSONEncoder().encode(reply)).code == .siteAccessDenied)
+    let held = try decode(TabResult.self, #"{"ok":true,"tab":\#(tab),"loading":false,"access":{"ok":false,"error":"Safari is asking","code":"site_access_prompt"}}"#)
+    #expect(held.access == PageFailure(code: .siteAccessPrompt, error: "Safari is asking"))
     #expect(try decode(TabResult.self, #"{"ok":true,"tab":\#(tab)}"#).access == nil)
+  }
+
+  @Test func errorsThatAreNotSafariPilotsOwnAreFailed() {
+    #expect(CLIReply(failed: CancellationError()).code == .failed)
+    #expect(CLIReply(failed: Failure(.pageBusy, "busy")).code == .pageBusy)
+    #expect(CLIReply(ok: true, text: "", data: .null).forClient.code == nil)
+    #expect(CLIReply(failing: .inputUnconfirmed, text: "x", data: .null).forClient.code == .inputUnconfirmed)
   }
 
   @Test func settleEncodesAndNamesWhereTheTabLanded() throws {

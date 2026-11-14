@@ -51,7 +51,7 @@ enum CommandLineParsing {
     var words = arguments
     let tabId = try option("--tab", &words).map { try integer($0, "--tab") }
 
-    guard let name = words.first else { throw Failure(description: "missing command") }
+    guard let name = words.first else { throw Failure(.invalidArgument, "missing command") }
 
     var rest = Array(words.dropFirst())
     let takesMaxChars = name == "read-page" || name == "text"
@@ -77,7 +77,7 @@ enum CommandLineParsing {
       invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth))
     case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, ref: ref(rest.first, "REF")))
     case "resize":
-      guard rest.count == 2 else { throw Failure(description: "resize needs WIDTH and HEIGHT") }
+      guard rest.count == 2 else { throw Failure(.invalidArgument, "resize needs WIDTH and HEIGHT") }
 
       invocation = try Invocation(command: .resize(tabId: tabId, width: integer(rest[0], "WIDTH"), height: integer(rest[1], "HEIGHT")))
     case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
@@ -96,12 +96,12 @@ enum CommandLineParsing {
     case "screenshot":
       let region = try option("--region", &rest).map { text in
         try text.split(separator: ",").map { word in
-          guard let number = Double(word) else { throw Failure(description: "--region must be X0,Y0,X1,Y1, not \(text)") }
+          guard let number = Double(word) else { throw Failure(.invalidArgument, "--region must be X0,Y0,X1,Y1, not \(text)") }
           return number
         }
       }
       let scale = try option("--scale", &rest).map { text in
-        guard let number = Double(text) else { throw Failure(description: "--scale must be a number, not \(text)") }
+        guard let number = Double(text) else { throw Failure(.invalidArgument, "--scale must be a number, not \(text)") }
         return number
       }
       invocation = try Invocation(command: .screenshot(tabId: tabId, corners: region, scale: scale), outputPath: rest.first)
@@ -112,11 +112,11 @@ enum CommandLineParsing {
       let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let probe = try probe(rest, ref: ref)
 
-      if !windowFields, probe.isKey { throw Failure(description: "--no-window-fields applies only to mouse actions") }
+      if !windowFields, probe.isKey { throw Failure(.invalidArgument, "--no-window-fields applies only to mouse actions") }
 
       invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, windowFields: windowFields))
     case "form-input":
-      guard rest.count >= 2 else { throw Failure(description: "form-input needs REF and VALUE") }
+      guard rest.count >= 2 else { throw Failure(.invalidArgument, "form-input needs REF and VALUE") }
 
       // Free text is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .formInput(tabId: tabId, ref: ref(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
@@ -126,7 +126,7 @@ enum CommandLineParsing {
       // CODE is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .javascript(tabId: tabId, text: rest.joined(separator: " "), frame: frame))
     case "file-upload":
-      guard rest.count >= 2 else { throw Failure(description: "file-upload needs REF and at least one PATH") }
+      guard rest.count >= 2 else { throw Failure(.invalidArgument, "file-upload needs REF and at least one PATH") }
 
       // Paths are taken verbatim, relative ones from the current directory, so they skip the stray option check below.
       let paths = rest.dropFirst().map { URL(filePath: $0, relativeTo: URL.currentDirectory()).standardizedFileURL.path }
@@ -135,18 +135,18 @@ enum CommandLineParsing {
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")
 
-      guard !name.isEmpty || !role.isEmpty else { throw Failure(description: "find needs a NAME or --role") }
+      guard !name.isEmpty || !role.isEmpty else { throw Failure(.invalidArgument, "find needs a NAME or --role") }
 
       // NAME is free text, so it skips the stray option check below.
       return Invocation(command: .find(tabId: tabId, name: name, role: role))
     case "wait-check":
-      guard let kind = rest.first, ["--text", "--selector"].contains(kind) else { throw Failure(description: "wait-check needs --text TEXT or --selector SELECTOR") }
+      guard let kind = rest.first, ["--text", "--selector"].contains(kind) else { throw Failure(.invalidArgument, "wait-check needs --text TEXT or --selector SELECTOR") }
 
       // The value is every word after its option, verbatim, so it skips the stray option check below.
       let value = rest.dropFirst().joined(separator: " ")
       return try Invocation(command: .waitCheck(tabId: tabId, condition: WaitCondition(text: kind == "--text" ? value : nil, selector: kind == "--selector" ? value : nil)))
     case "navigate":
-      guard let target = rest.first else { throw Failure(description: "navigate needs a URL, back or forward") }
+      guard let target = rest.first else { throw Failure(.invalidArgument, "navigate needs a URL, back or forward") }
 
       invocation = Invocation(command: .navigation(tabId: tabId, target: target))
     case "key":
@@ -163,18 +163,18 @@ enum CommandLineParsing {
     case "scroll":
       let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
 
-      guard let direction = rest.first else { throw Failure(description: "scroll needs a direction: up, down, left or right") }
+      guard let direction = rest.first else { throw Failure(.invalidArgument, "scroll needs a direction: up, down, left or right") }
 
       let stepsText = rest.dropFirst().first ?? "3"
 
-      guard let steps = Double(stepsText) else { throw Failure(description: "STEPS must be a number, not \(stepsText)") }
+      guard let steps = Double(stepsText) else { throw Failure(.invalidArgument, "STEPS must be a number, not \(stepsText)") }
 
       invocation = try Invocation(command: .scroll(tabId: tabId, ref: ref, direction: direction, amount: steps))
     default:
-      throw Failure(description: "unknown command \(name)")
+      throw Failure(.invalidArgument, "unknown command \(name)")
     }
 
-    if let stray = rest.first(where: { $0.hasPrefix("--") }) { throw Failure(description: "unknown option \(stray) for \(name)") }
+    if let stray = rest.first(where: { $0.hasPrefix("--") }) { throw Failure(.invalidArgument, "unknown option \(stray) for \(name)") }
 
     return invocation
   }
@@ -184,10 +184,10 @@ enum CommandLineParsing {
     let arguments = Array(words.dropFirst())
     let arity = ["key": 1, "click": 1, "hover": 1, "drag": 2]
 
-    guard let expected = arity[action] else { throw Failure(description: "debug-cg action must be key, click, hover or drag, not \(action)") }
-    guard arguments.count == expected else { throw Failure(description: "debug-cg \(action) takes \(expected) argument\(expected == 1 ? "" : "s"), got \(arguments.count)") }
+    guard let expected = arity[action] else { throw Failure(.invalidArgument, "debug-cg action must be key, click, hover or drag, not \(action)") }
+    guard arguments.count == expected else { throw Failure(.invalidArgument, "debug-cg \(action) takes \(expected) argument\(expected == 1 ? "" : "s"), got \(arguments.count)") }
 
-    if ref != nil, action != "key" { throw Failure(description: "--ref applies only to debug-cg key") }
+    if ref != nil, action != "key" { throw Failure(.invalidArgument, "--ref applies only to debug-cg key") }
 
     switch action {
     case "key": return try .key(KeyChord.parse(arguments[0]), ref: ref)
@@ -200,7 +200,7 @@ enum CommandLineParsing {
   /// Removes `name VALUE` from words and returns VALUE.
   private static func option(_ name: String, _ words: inout [String]) throws -> String? {
     guard let index = words.firstIndex(of: name) else { return nil }
-    guard index + 1 < words.count else { throw Failure(description: "\(name) needs a value") }
+    guard index + 1 < words.count else { throw Failure(.invalidArgument, "\(name) needs a value") }
 
     let value = words[index + 1]
     words.removeSubrange(index ... index + 1)
@@ -215,12 +215,12 @@ enum CommandLineParsing {
   }
 
   private static func ref(_ text: String?, _ name: String) throws -> PageRef {
-    guard let text else { throw Failure(description: "\(name) is missing") }
+    guard let text else { throw Failure(.invalidArgument, "\(name) is missing") }
     return try PageRef(parsing: text)
   }
 
   private static func integer(_ text: String?, _ name: String) throws -> Int {
-    guard let text, let value = Int(text) else { throw Failure(description: "\(name) must be an integer, not \(text ?? "missing")") }
+    guard let text, let value = Int(text) else { throw Failure(.invalidArgument, "\(name) must be an integer, not \(text ?? "missing")") }
     return value
   }
 }

@@ -40,10 +40,12 @@ describe("refs", () => {
     expect(resolveRef(ref)).toEqual({
       ok: false,
       error: `ref ${ref} is detached from the document`,
+      code: "stale_ref",
     });
     expect(resolveRef(99999)).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
+      code: "stale_ref",
     });
   });
 });

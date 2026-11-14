@@ -1,0 +1,32 @@
+{
+  "next": [
+    "fix_input",
+    "retry",
+    "read_page",
+    "handle_dialog",
+    "tabs_list",
+    "tab_create",
+    "ask_user",
+    "read_message"
+  ],
+  "codes": {
+    "invalid_argument": { "retryable": false, "next": "fix_input" },
+    "stale_ref": { "retryable": false, "next": "read_page" },
+    "not_actionable": { "retryable": false, "next": "read_page" },
+    "no_content_script": { "retryable": false, "next": "tab_create" },
+    "site_access_prompt": { "retryable": false, "next": "ask_user" },
+    "site_access_denied": { "retryable": false, "next": "ask_user" },
+    "dialog_open": { "retryable": false, "next": "handle_dialog" },
+    "tab_unavailable": { "retryable": false, "next": "tabs_list" },
+    "approval_required": { "retryable": false, "next": "ask_user" },
+    "accessibility_denied": { "retryable": false, "next": "ask_user" },
+    "app_unavailable": { "retryable": false, "next": "ask_user" },
+    "build_mismatch": { "retryable": false, "next": "ask_user" },
+    "safari_unavailable": { "retryable": false, "next": "ask_user" },
+    "input_unconfirmed": { "retryable": false, "next": "read_page" },
+    "page_busy": { "retryable": true, "next": "retry" },
+    "wait_timeout": { "retryable": true, "next": "read_page" },
+    "timed_out": { "retryable": false, "next": "read_page" },
+    "failed": { "retryable": false, "next": "read_message" }
+  }
+}

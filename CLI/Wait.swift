@@ -16,13 +16,13 @@ enum Wait {
       let reply = try await look(.waitCheck(tabId: tabId, condition: condition))
       looks += 1
 
-      guard reply.ok else { throw Failure(description: "stopped waiting for \(condition.label) in tab \(tabId) after \(waited()): \(reply.text)") }
+      guard reply.ok else { throw Failure(reply.code ?? .failed, "stopped waiting for \(condition.label) in tab \(tabId) after \(waited()): \(reply.text)") }
 
       if case .object = reply.data["match"] { return "\(reply.text)\nafter \(waited())" }
 
       let left = deadline - .now
 
-      guard left > .zero else { throw Failure(description: "\(condition.label) did not appear in tab \(tabId) within \(timeout.formatted()) s (\(looks) looks); last look: \(reply.text)") }
+      guard left > .zero else { throw Failure(.waitTimeout, "\(condition.label) did not appear in tab \(tabId) within \(timeout.formatted()) s (\(looks) looks); last look: \(reply.text)") }
 
       try await Task.sleep(for: min(interval, left))
     }

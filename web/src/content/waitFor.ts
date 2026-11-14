@@ -101,7 +101,11 @@ export function waitFor(
   selector: string | null,
 ): WaitForResult | Failure {
   if ((text === null) === (selector === null))
-    return { ok: false, error: "waitFor takes either text or selector" };
+    return {
+      ok: false,
+      error: "waitFor takes either text or selector",
+      code: "invalid_argument",
+    };
 
   if (selector !== null) {
     try {
@@ -110,6 +114,7 @@ export function waitFor(
       return {
         ok: false,
         error: `${JSON.stringify(selector)} is not a valid CSS selector`,
+        code: "invalid_argument",
       };
     }
   }

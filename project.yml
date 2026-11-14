@@ -57,6 +57,7 @@ targets:
     sources:
       - Appex
       - Shared/Wire.swift
+      - Shared/ErrorCode.swift
       - Shared/JSONValue.swift
       - path: extension
         buildPhase: resources
@@ -90,6 +91,7 @@ targets:
     sources:
       - CLI
       - Shared/Wire.swift
+      - Shared/ErrorCode.swift
       - Shared/JSONValue.swift
       - Shared/CLIWire.swift
       - Shared/KeyChord.swift
@@ -116,6 +118,7 @@ targets:
       - CLI/TabSession.swift
       - CLI/CommandLineParsing.swift
       - CLI/Wait.swift
+      - CLI/ToolResult.swift
       - App/ClaudeSetup.swift
       - App/ClientCredentials.swift
       - App/ApprovalQueue.swift

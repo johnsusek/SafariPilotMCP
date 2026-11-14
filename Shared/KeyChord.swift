@@ -70,7 +70,7 @@ struct KeyChord: Codable, Sendable, Equatable {
     if character == "\t" { return try parse("Tab") }
 
     guard character.isASCII, let chord = try? parse(String(character)) else {
-      throw Failure(description: "cannot type \"\(character)\": text takes printable ASCII characters, line breaks and tabs")
+      throw Failure(.invalidArgument, "cannot type \"\(character)\": text takes printable ASCII characters, line breaks and tabs")
     }
 
     return chord
@@ -82,7 +82,7 @@ struct KeyChord: Codable, Sendable, Equatable {
 
     // A trailing "+" is the key itself, so "cmd++" is cmd plus the + key.
     while let modifier = Modifier.allCases.first(where: { rest.lowercased().hasPrefix("\($0.rawValue)+") && rest.count > $0.rawValue.count + 1 }) {
-      guard !modifiers.contains(modifier) else { throw Failure(description: "modifier \(modifier.rawValue) repeated in \(text)") }
+      guard !modifiers.contains(modifier) else { throw Failure(.invalidArgument, "modifier \(modifier.rawValue) repeated in \(text)") }
 
       modifiers.append(modifier)
       rest = rest.dropFirst(modifier.rawValue.count + 1)
@@ -105,7 +105,7 @@ struct KeyChord: Codable, Sendable, Equatable {
     }
 
     guard let named = namedKeys.first(where: { $0.name.lowercased() == rest.lowercased() }) else {
-      throw Failure(description: "unknown key \"\(rest)\" in \(text); \(accepted)")
+      throw Failure(.invalidArgument, "unknown key \"\(rest)\" in \(text); \(accepted)")
     }
 
     return KeyChord(key: named.name, keyCode: named.code, modifiers: modifiers, character: named.name == "Space" ? " " : nil)

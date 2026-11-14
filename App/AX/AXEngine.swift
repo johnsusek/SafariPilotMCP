@@ -27,9 +27,9 @@ enum AXEngine {
   }
 
   static func safari() throws -> AXNode {
-    guard AXIsProcessTrusted() else { throw Failure(description: "Accessibility permission not granted to SafariPilot.app") }
-    guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(description: "Safari is not running") }
-    guard !safari.isHidden else { throw Failure(description: "Safari is hidden; unhide it so AX can reach its windows") }
+    guard AXIsProcessTrusted() else { throw Failure(.accessibilityDenied, "Accessibility permission not granted to SafariPilot.app") }
+    guard let safari = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Safari").first else { throw Failure(.safariUnavailable, "Safari is not running") }
+    guard !safari.isHidden else { throw Failure(.safariUnavailable, "Safari is hidden; unhide it so AX can reach its windows") }
 
     let app = AXNode(element: AXUIElementCreateApplication(safari.processIdentifier))
     AXUIElementSetMessagingTimeout(app.element, 3)
@@ -42,7 +42,7 @@ enum AXEngine {
 
     // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
     guard roles.allSatisfy({ $0 == kAXWindowRole }) else {
-      throw Failure(description: "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
+      throw Failure(.safariUnavailable, "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
     }
 
     return windows
@@ -74,7 +74,7 @@ enum AXEngine {
         attempt += 1
         try await Task.sleep(for: .milliseconds(100))
       } catch {
-        throw Failure(description: error.description)
+        throw Failure(.safariUnavailable, error.description)
       }
     }
   }
@@ -104,8 +104,8 @@ enum AXEngine {
     let target = try await target(for: tab)
     let viewport = located.viewport
 
-    guard let webFrame = target.webArea.frame else { throw Failure(description: "AXWebArea has no frame") }
-    guard viewport.innerWidth > 0 else { throw Failure(description: "viewport innerWidth is 0") }
+    guard let webFrame = target.webArea.frame else { throw Failure(.safariUnavailable, "AXWebArea has no frame") }
+    guard viewport.innerWidth > 0 else { throw Failure(.safariUnavailable, "viewport innerWidth is 0") }
 
     let frame = ViewportMapping.viewportFrame(webArea: webFrame, scrollArea: target.scrollArea?.frame)
     let zoom = ViewportMapping.zoom(viewport: viewport, frame: frame)
@@ -113,7 +113,7 @@ enum AXEngine {
     let screenRect = ViewportMapping.screenRect(css: located.rect, viewport: viewport, frame: frame)
 
     guard frame.contains(screenPoint) else {
-      throw Failure(description: "mapped point \(format(screenPoint)) is outside the viewport frame \(format(frame)); element is probably off screen")
+      throw Failure(.notActionable, "mapped point \(format(screenPoint)) is outside the viewport frame \(format(frame)); element is probably off screen")
     }
 
     // WebKit moves a frame's AX elements a while after the frame scrolls (seen live: over a second), so an element inside a frame that matches nothing is searched again for up to 2 s.
@@ -142,7 +142,7 @@ enum AXEngine {
 
     guard let best, best.score >= FrameMatching.minimum else {
       let found = best.map { "best was \($0.lineage[0].summary) \(format($0.lineage[0].frame)) scoring \(String(format: "%.2f", $0.score))" } ?? "no element under the web area has a frame"
-      throw Failure(description: "no AX element matches the element's mapped frame \(format(screenRect)) (needs \(FrameMatching.minimum)); \(found) after \(visited) elements")
+      throw Failure(.notActionable, "no AX element matches the element's mapped frame \(format(screenRect)) (needs \(FrameMatching.minimum)); \(found) after \(visited) elements")
     }
 
     return Match(target: target, screenPoint: screenPoint, screenRect: screenRect, viewportFrame: frame, zoom: zoom, score: best.score, chain: best.lineage)
@@ -162,7 +162,7 @@ enum AXEngine {
 
   static func press(_ match: Match) throws -> Pressed {
     guard let depth = match.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else {
-      throw Failure(description: "no element from the match up to the web area supports AXPress:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "no element from the match up to the web area supports AXPress:\n\(describe(match.chain))")
     }
 
     let node = match.chain[depth]
@@ -170,12 +170,12 @@ enum AXEngine {
 
     // WebKit dispatches AXPress at the element's center, so a delegating ancestor (Booking's calendar month) would click whatever sits there instead.
     if let frame = node.frame, !match.screenRect.insetBy(dx: -1, dy: -1).contains(CGPoint(x: frame.midX, y: frame.midY)) {
-      throw Failure(description: "the nearest element supporting AXPress is \(pressed.summary) \(format(frame)), \(depth) up from the match, and pressing it would click its center, outside the element at \(format(match.screenRect)); key Enter or Space with this ref may reach it from the keyboard:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "the nearest element supporting AXPress is \(pressed.summary) \(format(frame)), \(depth) up from the match, and pressing it would click its center, outside the element at \(format(match.screenRect)); key Enter or Space with this ref may reach it from the keyboard:\n\(describe(match.chain))")
     }
 
     let error = AXUIElementPerformAction(node.element, kAXPressAction as CFString)
 
-    guard error == .success else { throw Failure(description: "AXPress on \(pressed.summary) failed: \(error.name)") }
+    guard error == .success else { throw Failure(.inputUnconfirmed, "AXPress on \(pressed.summary) failed: \(error.name)") }
 
     return pressed
   }
@@ -183,7 +183,7 @@ enum AXEngine {
   /// Sets AXFocused on the first element from the match up that allows it.
   static func focus(_ match: Match) throws -> (focused: AXNode, result: AXError) {
     guard let focused = match.chain.first(where: { $0.isSettable(kAXFocusedAttribute) }) else {
-      throw Failure(description: "no element from the match up to the web area has a settable AXFocused:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "no element from the match up to the web area has a settable AXFocused:\n\(describe(match.chain))")
     }
 
     return (focused, AXUIElementSetAttributeValue(focused.element, kAXFocusedAttribute as CFString, kCFBooleanTrue))
@@ -192,7 +192,7 @@ enum AXEngine {
   /// Sets AXValue on the first element from the match up that allows it.
   static func setValue(_ text: String, in match: Match) throws -> (node: AXNode, result: AXError) {
     guard let node = match.chain.first(where: { $0.isSettable(kAXValueAttribute) }) else {
-      throw Failure(description: "nothing from the match up to the web area has a settable AXValue:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "nothing from the match up to the web area has a settable AXValue:\n\(describe(match.chain))")
     }
 
     return (node, AXUIElementSetAttributeValue(node.element, kAXValueAttribute as CFString, text as CFString))
@@ -201,12 +201,12 @@ enum AXEngine {
   /// Opens a popup select's native menu with AXPress and presses the `occurrence`th AXMenuItem titled `label`; WebKit exposes the menu under the window only while it is open, and a closed popup has no AX children.
   static func pickOption(_ label: String, occurrence: Int, in match: Match) async throws -> AXNode {
     guard let popup = match.chain.first(where: { $0.role == kAXPopUpButtonRole }) else {
-      throw Failure(description: "no AXPopUpButton from the match up to the web area:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "no AXPopUpButton from the match up to the web area:\n\(describe(match.chain))")
     }
 
     let opened = AXUIElementPerformAction(popup.element, kAXPressAction as CFString)
 
-    guard opened == .success else { throw Failure(description: "AXPress on \(popup.summary) to open its menu failed: \(opened.name)") }
+    guard opened == .success else { throw Failure(.inputUnconfirmed, "AXPress on \(popup.summary) to open its menu failed: \(opened.name)") }
 
     var menu: AXNode?
 
@@ -218,7 +218,7 @@ enum AXEngine {
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    guard let menu else { throw Failure(description: "pressed \(popup.summary) but no open AXMenu appeared under \(match.target.window.summary) within 1 s") }
+    guard let menu else { throw Failure(.inputUnconfirmed, "pressed \(popup.summary) but no open AXMenu appeared under \(match.target.window.summary) within 1 s") }
 
     let wanted = label.trimmingCharacters(in: .whitespaces)
     let items = menu.children.filter { $0.role == kAXMenuItemRole }
@@ -226,7 +226,7 @@ enum AXEngine {
 
     guard occurrence < matching.count else {
       AXUIElementPerformAction(menu.element, kAXCancelAction as CFString)
-      throw Failure(description: "the open menu of \(popup.summary) has \(matching.count) items titled \"\(label)\", needed \(occurrence + 1); items: \(items.map { "\"\($0.label)\"" }.joined(separator: ", "))")
+      throw Failure(.inputUnconfirmed, "the open menu of \(popup.summary) has \(matching.count) items titled \"\(label)\", needed \(occurrence + 1); items: \(items.map { "\"\($0.label)\"" }.joined(separator: ", "))")
     }
 
     let item = matching[occurrence]
@@ -234,7 +234,7 @@ enum AXEngine {
 
     guard pressed == .success else {
       AXUIElementPerformAction(menu.element, kAXCancelAction as CFString)
-      throw Failure(description: "AXPress on \(item.summary) in the open menu failed: \(pressed.name)")
+      throw Failure(.inputUnconfirmed, "AXPress on \(item.summary) in the open menu failed: \(pressed.name)")
     }
 
     return item
@@ -258,7 +258,7 @@ enum AXEngine {
   /// The AXIncrementor fields of a date or time input in display order, each with its title and current value description.
   static func dateTimeFields(in match: Match) throws -> [AXNode] {
     guard let area = match.chain.first(where: { $0.role == "AXDateTimeArea" }) else {
-      throw Failure(description: "no AXDateTimeArea from the match up to the web area:\n\(describe(match.chain))")
+      throw Failure(.notActionable, "no AXDateTimeArea from the match up to the web area:\n\(describe(match.chain))")
     }
 
     var fields: [AXNode] = []

@@ -41,7 +41,7 @@ enum FrameMatching {
     while let lineage = frontier.popLast() {
       visited += 1
 
-      guard visited <= limit else { throw Failure(description: "visited \(limit) AX elements under the web area without finishing; page is too large to resolve by frame") }
+      guard visited <= limit else { throw Failure(.notActionable, "visited \(limit) AX elements under the web area without finishing; page is too large to resolve by frame") }
 
       let node = lineage[0]
       let nodeFrame = frame(node)

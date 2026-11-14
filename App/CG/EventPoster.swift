@@ -36,7 +36,7 @@ struct EventPoster {
 
     guard close.count == 1 else {
       let listed = matches.map { "\($0.id) \(AXEngine.format($0.bounds))" }.joined(separator: ", ")
-      throw Failure(description: "found \(close.count) CGWindows of pid \(pid) matching AX frame \(AXEngine.format(frame)); layer-0 windows: \(listed.isEmpty ? "none" : listed)")
+      throw Failure(.safariUnavailable, "found \(close.count) CGWindows of pid \(pid) matching AX frame \(AXEngine.format(frame)); layer-0 windows: \(listed.isEmpty ? "none" : listed)")
     }
 
     return close[0].id
@@ -54,7 +54,7 @@ struct EventPoster {
   }
 
   private mutating func keyEvent(_ code: UInt16, down: Bool, flags: CGEventFlags, character: String?, label: String, modifier: Bool) throws {
-    guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { throw Failure(description: "could not create a key event for \(label)") }
+    guard let event = CGEvent(keyboardEventSource: source, virtualKey: code, keyDown: down) else { throw Failure(.failed, "could not create a key event for \(label)") }
 
     // Hardware reports modifier keys as flagsChanged, not keyDown/keyUp.
     if modifier { event.type = .flagsChanged }
@@ -92,7 +92,7 @@ struct EventPoster {
 
   private mutating func mouse(_ type: CGEventType, _ point: CGPoint, pressed: Bool) throws {
     guard let event = CGEvent(mouseEventSource: source, mouseType: type, mouseCursorPosition: point, mouseButton: .left) else {
-      throw Failure(description: "could not create a mouse event at \(AXEngine.format(point))")
+      throw Failure(.failed, "could not create a mouse event at \(AXEngine.format(point))")
     }
 
     event.setIntegerValueField(.mouseEventClickState, value: type == .mouseMoved ? 0 : 1)

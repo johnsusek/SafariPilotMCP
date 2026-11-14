@@ -381,6 +381,7 @@ describe("readPage", () => {
     expect(readPage("all", 10000, 99999, null, "")).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
+      code: "stale_ref",
     });
   });
 });

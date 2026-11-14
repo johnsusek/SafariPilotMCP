@@ -26,6 +26,7 @@ import type {
   WaitForResult,
 } from "../shared/protocol";
 import {
+  failureFrom,
   inFrame,
   locatePath,
   maxFrameDepth,
@@ -39,7 +40,6 @@ import {
   timed,
   walkPath,
 } from "./frames";
-import { accessFrom } from "./access";
 
 let findLimit = 20;
 // Frames smaller than this hold widgets, not text worth reading.
@@ -106,7 +106,7 @@ async function find(send: Send, request: PageRequest & { op: "find" }) {
 
 // A page whose top frame has no content script yet or is mid-navigation is pending, not failed, so a wait polls on through a navigation; any other failure is the caller's.
 let pending = (failure: Failure): PageWaitResult | Failure =>
-  failure.unreachable || failure.timeout
+  failure.code === "no_content_script" || failure.code === "timed_out"
     ? { ok: true, url: null, title: null, match: null, pending: failure.error }
     : failure;
 
@@ -183,6 +183,7 @@ async function consoleMessages(
       return {
         ok: false as const,
         error: `pattern is not a valid regular expression: ${(error as Error).message}`,
+        code: "invalid_argument" as const,
       };
     }
   }
@@ -269,7 +270,7 @@ async function events(send: Send, request: PageRequest & { op: "events" }) {
   let logged: PageEvent[] = [];
 
   for (let { frame, reply } of answers) {
-    if (!reply.ok && reply.timeout) busy.push(frame.path);
+    if (!reply.ok && reply.code === "timed_out") busy.push(frame.path);
 
     if (!reply.ok) continue;
 
@@ -515,9 +516,10 @@ export async function runPage(
     return await dispatch(send, request);
   } catch (error) {
     return (
-      accessFrom(error) ?? {
+      failureFrom(error) ?? {
         ok: false,
         error: error instanceof Error ? error.message : String(error),
+        code: "failed",
       }
     );
   }

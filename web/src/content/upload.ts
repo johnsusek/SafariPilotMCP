@@ -34,12 +34,17 @@ function setInput(
   let count = transfer.files.length;
 
   if (input.disabled)
-    return { ok: false, error: `${describe(input)} is disabled` };
+    return {
+      ok: false,
+      error: `${describe(input)} is disabled`,
+      code: "not_actionable",
+    };
 
   if (count > 1 && !input.multiple)
     return {
       ok: false,
       error: `${describe(input)} takes one file (it has no multiple attribute) and ${count} were given; nothing was set`,
+      code: "invalid_argument",
     };
 
   input.files = transfer.files;
@@ -50,6 +55,7 @@ function setInput(
     return {
       ok: false,
       error: `${describe(input)} holds ${JSON.stringify(taken)} after assigning ${JSON.stringify(wanted)}`,
+      code: "input_unconfirmed",
     };
 
   // As after a pick in the file panel: input bubbles and is composed, change bubbles.
@@ -109,6 +115,7 @@ function drop(
     return {
       ok: false,
       error: `${describe(target)} did not accept a drop (no dragover listener called preventDefault), so nothing was dropped${hint}`,
+      code: "not_actionable",
     };
   }
 
@@ -136,6 +143,7 @@ export function upload(
     return {
       ok: false,
       error: `${describe(element)} is an iframe; pass the ref of the file input or drop zone inside its frame, such as ${ref}:12`,
+      code: "invalid_argument",
     };
 
   let transfer = new DataTransfer();
@@ -162,6 +170,7 @@ export function upload(
     return {
       ok: false,
       error: `${describe(element)} holds ${inside.length} file inputs, so pass the ref of one: ${listed(inside)}`,
+      code: "invalid_argument",
     };
 
   return drop(ref, element, transfer);

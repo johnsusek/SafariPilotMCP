@@ -14,7 +14,7 @@ extension Commands {
       let position = (located.viewport.scrollX, located.viewport.scrollY)
 
       // Locate centers each element, so a second ref that scrolls the page has moved the first one.
-      if let scroll, scroll != position { throw Failure(description: "locating ref \(ref) scrolled the page; FROM and TO must be visible together") }
+      if let scroll, scroll != position { throw Failure(.invalidArgument, "locating ref \(ref) scrolled the page; FROM and TO must be visible together") }
 
       scroll = position
       let match = try await AXEngine.resolve(located, tab: tab)
@@ -37,7 +37,7 @@ extension Commands {
     var windowID: CGWindowID?
 
     if !probe.isKey, windowFields {
-      guard let frame = target.window.frame else { throw Failure(description: "target window \(target.window.summary) has no AX frame") }
+      guard let frame = target.window.frame else { throw Failure(.safariUnavailable, "target window \(target.window.summary) has no AX frame") }
 
       windowID = try EventPoster.windowID(pid: pid, frame: frame)
     }

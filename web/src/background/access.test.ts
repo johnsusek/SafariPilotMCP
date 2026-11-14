@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { thrown } from "./frames";
 import {
   accessDeadlineMs,
-  accessError,
   accessFailure,
   accessFrom,
   probeAccess,
@@ -73,7 +73,7 @@ describe("withinAccess", () => {
     vi.useFakeTimers();
     let held = withinAccess(new Promise(() => {}), 5).catch(accessFrom);
     await vi.advanceTimersByTimeAsync(accessDeadlineMs);
-    expect(await held).toMatchObject({ ok: false, siteAccess: "prompt" });
+    expect(await held).toMatchObject({ ok: false, code: "site_access_prompt" });
   });
 });
 
@@ -94,7 +94,7 @@ describe("failures", () => {
 
   test("the prompt and the refusal name the site and what the user does", () => {
     let prompt = accessFailure("prompt", 5, "https://a.test/page");
-    expect(prompt).toMatchObject({ ok: false, siteAccess: "prompt" });
+    expect(prompt).toMatchObject({ ok: false, code: "site_access_prompt" });
     expect(prompt.error).toMatch(
       /^Safari is asking the user whether SafariPilot may use https:\/\/a\.test and holds every call for tab 5 /,
     );
@@ -115,7 +115,11 @@ describe("failures", () => {
 
   test("a thrown access failure comes back intact; other errors do not", () => {
     let failure = accessFailure("denied", 5, "https://a.test/");
-    expect(accessFrom(accessError(failure))).toBe(failure);
+    expect(failure.code).toBe("site_access_denied");
+    expect(accessFrom(thrown(failure))).toBe(failure);
+    expect(
+      accessFrom(thrown({ ok: false, error: "x", code: "timed_out" })),
+    ).toBeNull();
     expect(accessFrom(new Error("other"))).toBeNull();
     expect(accessFrom(null)).toBeNull();
   });

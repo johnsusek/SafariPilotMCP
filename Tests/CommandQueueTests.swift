@@ -27,7 +27,7 @@ struct CommandQueueTests {
   @Test func aThrowingCommandGivesUpItsTurn() async throws {
     let queue = CommandQueue()
 
-    await #expect(throws: Failure.self) { try await queue.run { throw Failure(description: "failed") } }
+    await #expect(throws: Failure.self) { try await queue.run { throw Failure(.failed, "failed") } }
     #expect(await queue.run { 5 } == 5)
   }
 }

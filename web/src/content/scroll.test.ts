@@ -60,6 +60,7 @@ describe("scroll", () => {
     expect(scroll(99999, 0, 40)).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
+      code: "stale_ref",
     });
   });
 });
@@ -81,6 +82,7 @@ describe("scrollIntoView", () => {
     expect(scrollIntoView(99999)).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
+      code: "stale_ref",
     });
   });
 });

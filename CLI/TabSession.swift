@@ -7,7 +7,7 @@ struct TabSession: Equatable, Sendable {
 
   /// An explicit tabId wins; otherwise the session's tab; never the user's active tab.
   func page(_ explicit: Int?) throws -> Int {
-    guard let tab = explicit ?? current else { throw Failure(description: Self.noCurrent) }
+    guard let tab = explicit ?? current else { throw Failure(.tabUnavailable, Self.noCurrent) }
     return tab
   }
 

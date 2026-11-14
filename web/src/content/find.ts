@@ -11,7 +11,11 @@ export function find(name: string, role: string): FindResult | Failure {
   let wantedRole = role.trim().toLowerCase();
 
   if (!needle && !wantedRole)
-    return { ok: false, error: "find needs a name or a role" };
+    return {
+      ok: false,
+      error: "find needs a name or a role",
+      code: "invalid_argument",
+    };
 
   let visible = visibleArea(readViewport());
   let matches: ElementInfo[] = [];

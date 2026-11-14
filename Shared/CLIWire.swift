@@ -32,24 +32,35 @@ struct HelloRequest: Codable, Sendable {
 struct HelloReply: Codable, Sendable {
   let session: String?
   let text: String
+
+  var approvedSession: String {
+    get throws {
+      guard let session else { throw Failure(.approvalRequired, text) }
+      return session
+    }
+  }
 }
 
+/// code is set on every failed reply and nil on a success.
 struct CLIReply: Codable, Sendable {
   let ok: Bool
   let text: String
   let data: JSONValue
+  var code: ErrorCode?
 }
 
 extension CLIReply {
-  /// A failed command; a site Safari has not granted is marked with siteAccess and another copy of the extension with buildMismatch, so a caller can tell them from other failures.
+  init(failing code: ErrorCode, text: String, data: JSONValue) {
+    self.init(ok: false, text: text, data: data, code: code)
+  }
+
+  /// A failed command with its error's code; another copy of the extension also names the copies in buildMismatch, since its path is how the user finds the stale one.
   init(failed error: any Error) {
     var data: [String: JSONValue] = ["error": .string("\(error)")]
 
-    if let access = error as? SiteAccessFailure { data["siteAccess"] = .string(access.siteAccess.rawValue) }
-
     if let mismatch = error as? BuildMismatch { data["buildMismatch"] = try? JSONValue(encoding: mismatch) }
 
-    self.init(ok: false, text: "\(error)", data: .object(data))
+    self.init(failing: ErrorCode(of: error), text: "\(error)", data: .object(data))
   }
 }
 
@@ -107,30 +118,30 @@ enum AppCommand: Codable, Sendable, Equatable {
   static func screenshot(tabId: Int?, corners region: [Double]?, scale: Double?) throws -> AppCommand {
     let scale = scale ?? 1
 
-    guard scaleRange.contains(scale) else { throw Failure(description: "scale must be from 0.1 to 1, not \(scale)") }
+    guard scaleRange.contains(scale) else { throw Failure(.invalidArgument, "scale must be from 0.1 to 1, not \(scale)") }
     guard let region else { return .screenshot(tabId: tabId, region: nil, scale: scale) }
 
     let corners = region.compactMap { Int(exactly: $0.rounded()) }
 
-    guard region.count == 4, corners.count == 4 else { throw Failure(description: "region must be four numbers [x0, y0, x1, y1], not \(region)") }
-    guard corners.allSatisfy({ $0 >= 0 }), corners[2] > corners[0], corners[3] > corners[1] else { throw Failure(description: "region needs 0 <= x0 < x1 and 0 <= y0 < y1, not \(corners)") }
+    guard region.count == 4, corners.count == 4 else { throw Failure(.invalidArgument, "region must be four numbers [x0, y0, x1, y1], not \(region)") }
+    guard corners.allSatisfy({ $0 >= 0 }), corners[2] > corners[0], corners[3] > corners[1] else { throw Failure(.invalidArgument, "region needs 0 <= x0 < x1 and 0 <= y0 < y1, not \(corners)") }
 
     return .screenshot(tabId: tabId, region: PixelRect(x0: corners[0], y0: corners[1], x1: corners[2], y1: corners[3]), scale: scale)
   }
 
   static func resize(tabId: Int?, width: Int, height: Int) throws -> AppCommand {
-    guard width > 0, height > 0 else { throw Failure(description: "width and height must be positive, not \(width) x \(height)") }
+    guard width > 0, height > 0 else { throw Failure(.invalidArgument, "width and height must be positive, not \(width) x \(height)") }
     return .resizeWindow(tabId: tabId, width: width, height: height)
   }
 
   static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: PageRef?, depth: Int?) throws -> AppCommand {
-    if let depth, depth < 1 { throw Failure(description: "depth must be at least 1, not \(depth)") }
+    if let depth, depth < 1 { throw Failure(.invalidArgument, "depth must be at least 1, not \(depth)") }
 
     return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth)
   }
 
   static func javascript(tabId: Int?, text: String, frame: PageRef?) throws -> AppCommand {
-    guard !text.allSatisfy(\.isWhitespace) else { throw Failure(description: "javascript needs some code to run") }
+    guard !text.allSatisfy(\.isWhitespace) else { throw Failure(.invalidArgument, "javascript needs some code to run") }
     return .javascript(tabId: tabId, code: text, frame: frame)
   }
 
@@ -167,15 +178,15 @@ enum AppCommand: Codable, Sendable, Equatable {
   static func click(tabId: Int?, ref: PageRef, actionName: String?, modifierNames: String?) throws -> AppCommand {
     let actionName = actionName ?? ClickAction.left.rawValue
 
-    guard let action = ClickAction(rawValue: actionName) else { throw Failure(description: "action must be \(ClickAction.allCases.map(\.rawValue).joined(separator: ", ")), not \(actionName)") }
+    guard let action = ClickAction(rawValue: actionName) else { throw Failure(.invalidArgument, "action must be \(ClickAction.allCases.map(\.rawValue).joined(separator: ", ")), not \(actionName)") }
 
     var modifiers: [KeyChord.Modifier] = []
 
     for word in (modifierNames ?? "").split(separator: "+") {
       let name = word.lowercased()
 
-      guard let modifier = name == "meta" ? .cmd : KeyChord.Modifier(rawValue: name) else { throw Failure(description: "modifiers takes ctrl, shift, alt and cmd (or meta) joined by +, not \(modifierNames ?? "")") }
-      guard !modifiers.contains(modifier) else { throw Failure(description: "modifier \(name) repeated in \(modifierNames ?? "")") }
+      guard let modifier = name == "meta" ? .cmd : KeyChord.Modifier(rawValue: name) else { throw Failure(.invalidArgument, "modifiers takes ctrl, shift, alt and cmd (or meta) joined by +, not \(modifierNames ?? "")") }
+      guard !modifiers.contains(modifier) else { throw Failure(.invalidArgument, "modifier \(name) repeated in \(modifierNames ?? "")") }
 
       modifiers.append(modifier)
     }
@@ -190,7 +201,7 @@ enum AppCommand: Codable, Sendable, Equatable {
 
   /// "accept" or "dismiss", as Playwright's dialog.accept() and dialog.dismiss().
   static func dialog(tabId: Int?, action: String, promptText: String?) throws -> AppCommand {
-    guard ["accept", "dismiss"].contains(action) else { throw Failure(description: "action must be accept or dismiss, not \(action)") }
+    guard ["accept", "dismiss"].contains(action) else { throw Failure(.invalidArgument, "action must be accept or dismiss, not \(action)") }
 
     return .dialog(tabId: tabId, accept: action == "accept", promptText: promptText)
   }
@@ -199,7 +210,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   static func console(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int?, clear: Bool) throws -> AppCommand {
     let limit = limit ?? defaultConsoleLimit
 
-    guard consoleLimits.contains(limit) else { throw Failure(description: "limit must be from 1 to 200, not \(limit)") }
+    guard consoleLimits.contains(limit) else { throw Failure(.invalidArgument, "limit must be from 1 to 200, not \(limit)") }
 
     return .consoleMessages(tabId: tabId, onlyErrors: onlyErrors, pattern: pattern?.isEmpty == false ? pattern : nil, limit: limit, clear: clear)
   }
@@ -219,7 +230,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     case "down": return .scroll(tabId: tabId, ref: ref, left: 0, top: distance)
     case "left": return .scroll(tabId: tabId, ref: ref, left: -distance, top: 0)
     case "right": return .scroll(tabId: tabId, ref: ref, left: distance, top: 0)
-    default: throw Failure(description: "scroll direction must be up, down, left or right, not \(direction)")
+    default: throw Failure(.invalidArgument, "scroll direction must be up, down, left or right, not \(direction)")
     }
   }
 
@@ -230,18 +241,18 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch (keys, text) {
     case let (keys?, nil): chords = try keys.split(whereSeparator: \.isWhitespace).map { try KeyChord.parse(String($0)) }
     case let (nil, text?): chords = try text.map(KeyChord.typing)
-    default: throw Failure(description: "key takes either keys or text, not \(keys == nil ? "neither" : "both")")
+    default: throw Failure(.invalidArgument, "key takes either keys or text, not \(keys == nil ? "neither" : "both")")
     }
 
-    guard !chords.isEmpty else { throw Failure(description: "key needs at least one key, such as Enter or shift+Tab, or some text") }
+    guard !chords.isEmpty else { throw Failure(.invalidArgument, "key needs at least one key, such as Enter or shift+Tab, or some text") }
 
     if let chord = chords.first(where: { $0.modifiers.contains(.cmd) }) {
-      throw Failure(description: "\(chord.name) refused: Safari acts on its own shortcuts such as cmd+t and cmd+w before the page sees them, so cmd chords are not sent")
+      throw Failure(.invalidArgument, "\(chord.name) refused: Safari acts on its own shortcuts such as cmd+t and cmd+w before the page sees them, so cmd chords are not sent")
     }
 
-    guard times >= 1 else { throw Failure(description: "repeat must be at least 1, not \(times)") }
+    guard times >= 1 else { throw Failure(.invalidArgument, "repeat must be at least 1, not \(times)") }
     // Divided rather than multiplied, so a huge repeat cannot overflow.
-    guard times <= maxKeyPresses / chords.count else { throw Failure(description: "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
+    guard times <= maxKeyPresses / chords.count else { throw Failure(.invalidArgument, "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
   }
@@ -256,15 +267,15 @@ enum WaitCondition: Codable, Sendable, Equatable {
   init(text: String?, selector: String?) throws {
     switch (text, selector) {
     case let (text?, nil):
-      guard !text.allSatisfy(\.isWhitespace) else { throw Failure(description: "text to wait for is empty") }
+      guard !text.allSatisfy(\.isWhitespace) else { throw Failure(.invalidArgument, "text to wait for is empty") }
 
       self = .text(text)
     case let (nil, selector?):
-      guard !selector.allSatisfy(\.isWhitespace) else { throw Failure(description: "selector to wait for is empty") }
+      guard !selector.allSatisfy(\.isWhitespace) else { throw Failure(.invalidArgument, "selector to wait for is empty") }
 
       self = .selector(selector)
     default:
-      throw Failure(description: "wait takes either text or selector, not \(text == nil ? "neither" : "both")")
+      throw Failure(.invalidArgument, "wait takes either text or selector, not \(text == nil ? "neither" : "both")")
     }
   }
 
@@ -300,28 +311,28 @@ struct UploadFile: Codable, Sendable, Equatable, CustomStringConvertible, Custom
 
   /// Sizes are checked before anything is read, so an oversized file is never loaded.
   static func read(_ paths: [String]) throws -> [UploadFile] {
-    guard !paths.isEmpty else { throw Failure(description: "file_upload needs at least one path") }
+    guard !paths.isEmpty else { throw Failure(.invalidArgument, "file_upload needs at least one path") }
 
     var total = 0
     var found: [(url: URL, size: Int, modified: Date)] = []
 
     for path in paths {
-      guard path.hasPrefix("/") else { throw Failure(description: "\(path) is not an absolute path; nothing was uploaded") }
+      guard path.hasPrefix("/") else { throw Failure(.invalidArgument, "\(path) is not an absolute path; nothing was uploaded") }
 
       let url = URL(filePath: path)
       let attributes: [FileAttributeKey: Any]
 
       // A symlink is uploaded as its target's bytes under the link's name.
-      do { attributes = try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path) } catch { throw Failure(description: "cannot read \(path), so nothing was uploaded: \(error.localizedDescription)") }
+      do { attributes = try FileManager.default.attributesOfItem(atPath: url.resolvingSymlinksInPath().path) } catch { throw Failure(.invalidArgument, "cannot read \(path), so nothing was uploaded: \(error.localizedDescription)") }
 
-      guard attributes[.type] as? FileAttributeType == .typeRegular else { throw Failure(description: "\(path) is not a regular file; nothing was uploaded") }
+      guard attributes[.type] as? FileAttributeType == .typeRegular else { throw Failure(.invalidArgument, "\(path) is not a regular file; nothing was uploaded") }
 
       let size = (attributes[.size] as? NSNumber)?.intValue ?? 0
       total += size
 
       guard total <= maxUploadBytes else {
         let together = found.isEmpty ? "is \(megabytes(size))" : "brings the files to \(megabytes(total))"
-        throw Failure(description: "\(url.lastPathComponent) \(together), over file_upload's limit of \(megabytes(maxUploadBytes)) for all files of one call; nothing was uploaded")
+        throw Failure(.invalidArgument, "\(url.lastPathComponent) \(together), over file_upload's limit of \(megabytes(maxUploadBytes)) for all files of one call; nothing was uploaded")
       }
 
       found.append((url, size, attributes[.modificationDate] as? Date ?? .now))
@@ -330,9 +341,9 @@ struct UploadFile: Codable, Sendable, Equatable, CustomStringConvertible, Custom
     return try found.map { url, size, modified in
       let data: Data
 
-      do { data = try Data(contentsOf: url) } catch { throw Failure(description: "cannot read \(url.path), so nothing was uploaded: \(error.localizedDescription)") }
+      do { data = try Data(contentsOf: url) } catch { throw Failure(.invalidArgument, "cannot read \(url.path), so nothing was uploaded: \(error.localizedDescription)") }
 
-      guard data.count == size else { throw Failure(description: "\(url.path) changed size while being read; nothing was uploaded") }
+      guard data.count == size else { throw Failure(.invalidArgument, "\(url.path) changed size while being read; nothing was uploaded") }
 
       let mimeType = UTType(filenameExtension: url.pathExtension)?.preferredMIMEType ?? ""
       return UploadFile(name: url.lastPathComponent, mimeType: mimeType, lastModified: (modified.timeIntervalSince1970 * 1000).rounded(), size: size, data: data.base64EncodedString())

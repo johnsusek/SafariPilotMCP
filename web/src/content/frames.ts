@@ -126,6 +126,7 @@ function iframeFor(ref: number): HTMLIFrameElement | Failure {
     return {
       ok: false,
       error: `ref ${ref} is a <${element.localName}>, not an iframe`,
+      code: "invalid_argument",
     };
 
   return element;

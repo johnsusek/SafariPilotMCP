@@ -1,8 +1,15 @@
 import Foundation
 import Security
 
+/// A failure with the code a caller acts on; description is the text it reads.
 struct Failure: Error, CustomStringConvertible {
+  let code: ErrorCode
   let description: String
+
+  init(_ code: ErrorCode, _ description: String) {
+    self.code = code
+    self.description = description
+  }
 }
 
 /// Loopback TCP, one connection per exchange: the client sends a token line then one JSON line; the app replies with one JSON line,
@@ -17,7 +24,7 @@ enum Wire {
   /// group container access to anything attributed to another team (Terminal, the MCP host).
   static var groupTokenURL: URL {
     get throws {
-      guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { throw Failure(description: "app group \(appGroup) is not available to this process") }
+      guard let container = FileManager.default.containerURL(forSecurityApplicationGroupIdentifier: appGroup) else { throw Failure(.appUnavailable, "app group \(appGroup) is not available to this process") }
       return container.appending(path: "token")
     }
   }
@@ -47,7 +54,7 @@ enum Wire {
     do {
       return try Data(contentsOf: url)
     } catch {
-      throw Failure(description: "cannot read the SafariPilot token at \(url.path) (is SafariPilot.app running?): \(error.localizedDescription)")
+      throw Failure(.appUnavailable, "cannot read the SafariPilot token at \(url.path) (is SafariPilot.app running?): \(error.localizedDescription)")
     }
   }
 
@@ -60,10 +67,10 @@ enum Wire {
   /// Checks the token line at the head of `buffer`. Nil means the line is not complete yet; success carries the bytes after it.
   static func authenticate(_ buffer: Data, token: Data) -> Result<Data, Failure>? {
     guard let newline = buffer.firstIndex(of: 0x0A) else {
-      return buffer.count > maxTokenLine ? .failure(Failure(description: "no token line")) : nil
+      return buffer.count > maxTokenLine ? .failure(Failure(.appUnavailable, "no token line")) : nil
     }
 
-    guard tokensMatch(buffer[buffer.startIndex ..< newline], token) else { return .failure(Failure(description: "token mismatch")) }
+    guard tokensMatch(buffer[buffer.startIndex ..< newline], token) else { return .failure(Failure(.appUnavailable, "token mismatch")) }
 
     return .success(Data(buffer[(newline + 1)...]))
   }
@@ -81,7 +88,7 @@ enum Wire {
   static func exchange(_ request: Data, timeoutSeconds: Int = 120) throws -> Data {
     let token = try readToken()
     let descriptor = socket(AF_INET, SOCK_STREAM, 0)
-    guard descriptor >= 0 else { throw Failure(description: "socket() failed: errno \(errno)") }
+    guard descriptor >= 0 else { throw Failure(.appUnavailable, "socket() failed: errno \(errno)") }
     defer { close(descriptor) }
 
     var timeout = timeval(tv_sec: timeoutSeconds, tv_usec: 0)
@@ -96,20 +103,20 @@ enum Wire {
     let connected = withUnsafePointer(to: &address) {
       $0.withMemoryRebound(to: sockaddr.self, capacity: 1) { connect(descriptor, $0, socklen_t(MemoryLayout<sockaddr_in>.size)) }
     }
-    guard connected == 0 else { throw Failure(description: "SafariPilot.app is not listening on 127.0.0.1:\(port) (errno \(errno))") }
+    guard connected == 0 else { throw Failure(.appUnavailable, "SafariPilot.app is not listening on 127.0.0.1:\(port) (errno \(errno))") }
 
     let payload = token + Data([0x0A]) + request + Data([0x0A])
     let written = payload.withUnsafeBytes { write(descriptor, $0.baseAddress, payload.count) }
-    guard written == payload.count else { throw Failure(description: "write failed: errno \(errno)") }
+    guard written == payload.count else { throw Failure(.appUnavailable, "write failed: errno \(errno)") }
 
     var reply = Data()
     var buffer = [UInt8](repeating: 0, count: 65536)
 
     while true {
       let count = read(descriptor, &buffer, buffer.count)
-      if count < 0, errno == EAGAIN { throw Failure(description: "SafariPilot.app sent no reply within \(timeoutSeconds) s; it is still busy with this or an earlier command") }
+      if count < 0, errno == EAGAIN { throw Failure(.timedOut, "SafariPilot.app sent no reply within \(timeoutSeconds) s; it is still busy with this or an earlier command") }
 
-      guard count > 0 else { throw Failure(description: count == 0 ? "connection closed before reply" : "read failed: errno \(errno)") }
+      guard count > 0 else { throw Failure(.timedOut, count == 0 ? "connection closed before reply" : "read failed: errno \(errno)") }
       reply.append(buffer, count: count)
 
       if buffer[0 ..< count].contains(0x0A) { break }
@@ -118,7 +125,7 @@ enum Wire {
     let line = reply[..<(newline(in: reply) ?? reply.endIndex)]
 
     if line.starts(with: rejection) {
-      throw Failure(description: "SafariPilot.app rejected the connection: \(String(decoding: line.dropFirst(rejection.count), as: UTF8.self))")
+      throw Failure(.appUnavailable, "SafariPilot.app rejected the connection: \(String(decoding: line.dropFirst(rejection.count), as: UTF8.self))")
     }
 
     return line

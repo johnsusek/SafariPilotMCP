@@ -40,11 +40,17 @@ let frames: Record<number, FrameEntry[]> = {
   41: [iframe(3, 43, "allow-scripts")],
 };
 let send: Send = async (frameId, request: ContentRequest) => {
-  if (request.op !== "frameBox") return { ok: false, error: "unhandled" };
+  if (request.op !== "frameBox")
+    return { ok: false, error: "unhandled", code: "failed" };
 
   let frame = frames[frameId]?.find((each) => each.ref === request.ref);
 
-  if (!frame) return { ok: false, error: `ref ${request.ref} is unknown` };
+  if (!frame)
+    return {
+      ok: false,
+      error: `ref ${request.ref} is unknown`,
+      code: "stale_ref",
+    };
 
   return { ok: true, frame, moved: false, viewport, origin: 1 };
 };
@@ -155,14 +161,17 @@ describe("runJavascript", () => {
     expect(await run("throw new TypeError('nope')")).toEqual({
       ok: false,
       error: "the code threw TypeError: nope",
+      code: "invalid_argument",
     });
     expect(await run("await Promise.reject(new Error('later'))")).toEqual({
       ok: false,
       error: "the code threw Error: later",
+      code: "invalid_argument",
     });
     expect(await run("throw 'plain'")).toEqual({
       ok: false,
       error: "the code threw plain",
+      code: "invalid_argument",
     });
   });
 
@@ -189,6 +198,7 @@ describe("runJavascript", () => {
       ok: false,
       error:
         "the frame of iframe 6 is sandboxed without allow-scripts, so no code runs there",
+      code: "not_actionable",
     });
     await expect(run("1", "7")).rejects.toThrow("ref 7 is unknown");
     await expect(run("1", "5:")).rejects.toThrow(/must look like/);
@@ -200,6 +210,7 @@ describe("runJavascript", () => {
     expect(await run("1")).toEqual({
       ok: false,
       error: "injection failed: denied",
+      code: "failed",
     });
     executeScript.mockResolvedValueOnce([{ frameId: 0, result: {} }]);
     expect(await run("1")).toMatchObject({
@@ -219,7 +230,7 @@ describe("runJavascript", () => {
     await vi.advanceTimersByTimeAsync(javascriptTimeoutMs);
     expect(await answer).toMatchObject({
       ok: false,
-      timeout: true,
+      code: "timed_out",
       error: expect.stringMatching(/did not finish within 15 s/),
     });
   });

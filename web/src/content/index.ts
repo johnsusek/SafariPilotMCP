@@ -60,11 +60,13 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,
+      code: "failed",
     };
   } catch (error) {
     return {
       ok: false,
       error: `${request.op} failed: ${error instanceof Error ? error.message : String(error)}`,
+      code: "failed",
     };
   }
 }

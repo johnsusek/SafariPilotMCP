@@ -6,7 +6,7 @@ struct WaitTests {
   let pending = CLIReply(ok: true, text: "the page cannot be read yet: no content script answered in tab 4", data: .object(["match": .null, "pending": "no content script answered in tab 4"]))
   let missing = CLIReply(ok: true, text: "no text \"Ready\" on https://a.test/ yet", data: .object(["match": .null, "pending": .null]))
   let found = CLIReply(ok: true, text: "found text \"Ready\" at [5:12] paragraph <p> \"Ready now\"", data: .object(["match": .object(["ref": "5:12"]), "pending": .null]))
-  let dialog = CLIReply(ok: false, text: "tab 4 shows an alert \"Saved\"; Safari's extension, and so every page tool, waits until handle_dialog accepts or dismisses it", data: .object(["error": "dialog"]))
+  let dialog = CLIReply(ok: false, text: "tab 4 shows an alert \"Saved\"; Safari's extension, and so every page tool, waits until handle_dialog accepts or dismisses it", data: .object(["error": "dialog"]), code: .dialogOpen)
 
   final class Script: @unchecked Sendable {
     var replies: [CLIReply]
@@ -39,7 +39,7 @@ struct WaitTests {
       try await poll(script, timeout: 0.05)
     } throws: { error in
       let text = (error as? Failure)?.description ?? ""
-      return text.hasPrefix("text \"Ready\" did not appear in tab 4 within 0.05 s (") && text.hasSuffix("last look: no text \"Ready\" on https://a.test/ yet")
+      return (error as? Failure)?.code == .waitTimeout && text.hasPrefix("text \"Ready\" did not appear in tab 4 within 0.05 s (") && text.hasSuffix("last look: no text \"Ready\" on https://a.test/ yet")
     }
 
     #expect(ContinuousClock.now - started >= .milliseconds(50))
@@ -52,20 +52,20 @@ struct WaitTests {
     await #expect {
       try await poll(script, timeout: 10)
     } throws: { error in
-      (error as? Failure)?.description.hasPrefix("stopped waiting for text \"Ready\" in tab 4 after ") == true && (error as? Failure)?.description.hasSuffix(": \(dialog.text)") == true
+      (error as? Failure)?.code == .dialogOpen && (error as? Failure)?.description.hasPrefix("stopped waiting for text \"Ready\" in tab 4 after ") == true && (error as? Failure)?.description.hasSuffix(": \(dialog.text)") == true
     }
 
     #expect(script.looks.count == 2)
   }
 
   @Test func aSiteSafariHasNotGrantedStopsTheWaitAtOnce() async throws {
-    let access = SiteAccessFailure(siteAccess: .prompt, error: "Safari is asking the user whether SafariPilot may use https://a.test and holds every call for tab 4 until they answer.")
+    let access = Failure(.siteAccessPrompt, "Safari is asking the user whether SafariPilot may use https://a.test and holds every call for tab 4 until they answer.")
     let script = Script([pending, CLIReply(failed: access), found])
 
     await #expect {
       try await poll(script, timeout: 10)
     } throws: { error in
-      (error as? Failure)?.description.hasSuffix(": \(access.error)") == true
+      (error as? Failure)?.code == .siteAccessPrompt && (error as? Failure)?.description.hasSuffix(": \(access.description)") == true
     }
 
     #expect(script.looks.count == 2)

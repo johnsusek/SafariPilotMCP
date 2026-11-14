@@ -78,6 +78,7 @@ let send: Send = async (frameId, request) => {
     return {
       ok: false,
       error: `no content script answered in frame ${frameId}`,
+      code: "no_content_script",
     };
 
   let custom = page.answer?.(request);
@@ -96,7 +97,12 @@ let send: Send = async (frameId, request) => {
   if (request.op === "frameBox") {
     let frame = page.frames.find((each) => each.ref === request.ref);
 
-    if (!frame) return { ok: false, error: `ref ${request.ref} is unknown` };
+    if (!frame)
+      return {
+        ok: false,
+        error: `ref ${request.ref} is unknown`,
+        code: "stale_ref",
+      };
 
     return {
       ok: true,
@@ -117,7 +123,7 @@ let send: Send = async (frameId, request) => {
   if (request.op === "scrollIntoView")
     return { ok: true, moved: true, viewport: page.viewport };
 
-  return { ok: false, error: `unhandled ${request.op}` };
+  return { ok: false, error: `unhandled ${request.op}`, code: "failed" };
 };
 
 let located = (candidates: { left: number; top: number }[]) => ({
@@ -278,6 +284,7 @@ describe("locatePath", () => {
     expect(await locatePath(send, "5:3:12")).toMatchObject({
       ok: false,
       error: expect.stringMatching(/CSS-transformed/),
+      code: "not_actionable",
     });
     documents[100].frames[0].transformed = false;
     documents[200].answer = (request) =>
@@ -293,11 +300,12 @@ describe("locatePath", () => {
   test("a child error names its frame", async () => {
     documents[200].answer = (request) =>
       request.op === "scrollIntoView"
-        ? { ok: false, error: "ref 12 is unknown" }
+        ? { ok: false, error: "ref 12 is unknown", code: "stale_ref" }
         : undefined;
     expect(await locatePath(send, "5:3:12")).toEqual({
       ok: false,
       error: "ref 12 is unknown (in the frame of iframe 5:3)",
+      code: "stale_ref",
     });
   });
 });
@@ -579,7 +587,7 @@ describe("runPage reads", () => {
       request.op === "events" ? { ok: true, events: [], origin: 1 } : undefined;
     documents[100].answer = (request) =>
       request.op === "events"
-        ? { ok: false, error: "no answer within 2000 ms", timeout: true }
+        ? { ok: false, error: "no answer within 2000 ms", code: "timed_out" }
         : undefined;
     documents[200].answer = (request) =>
       request.op === "events" ? { ok: true, events: [], origin: 3 } : undefined;
@@ -672,6 +680,7 @@ describe("runPage reads", () => {
       error: expect.stringMatching(
         /^pattern is not a valid regular expression/,
       ),
+      code: "invalid_argument",
     });
     expect(calls).toEqual([]);
   });
@@ -848,6 +857,7 @@ describe("runPage reads", () => {
     expect(await runPage(send, { op: "inspect", ref: "5.4" })).toMatchObject({
       ok: false,
       error: expect.stringMatching(/must look like 12/),
+      code: "invalid_argument",
     });
   });
 });
@@ -907,7 +917,9 @@ describe("runPage waitFor", () => {
     documents[0].answer = (asked) =>
       asked.op === "waitFor" ? none : undefined;
     documents[100].answer = (asked) =>
-      asked.op === "waitFor" ? { ok: false, error: "busy" } : undefined;
+      asked.op === "waitFor"
+        ? { ok: false, error: "busy", code: "timed_out" }
+        : undefined;
     documents[200].answer = (asked) =>
       asked.op === "waitFor" ? none : undefined;
     expect(await runPage(send, request)).toEqual({
@@ -923,7 +935,7 @@ describe("runPage waitFor", () => {
     documents[0].answer = () => ({
       ok: false,
       error: "no content script answered in tab 5",
-      unreachable: true,
+      code: "no_content_script",
     });
     expect(await runPage(send, request)).toEqual({
       ok: true,
@@ -935,7 +947,7 @@ describe("runPage waitFor", () => {
 
     documents[0].answer = (asked) =>
       asked.op === "waitFor"
-        ? { ok: false, error: "no answer within 15 s", timeout: true }
+        ? { ok: false, error: "no answer within 15 s", code: "timed_out" }
         : undefined;
     expect(await runPage(send, request)).toMatchObject({
       ok: true,
@@ -946,10 +958,18 @@ describe("runPage waitFor", () => {
   test("any other top-frame failure, such as a bad selector, fails", async () => {
     documents[0].answer = (asked) =>
       asked.op === "waitFor"
-        ? { ok: false, error: '"li[" is not a valid CSS selector' }
+        ? {
+            ok: false,
+            error: '"li[" is not a valid CSS selector',
+            code: "invalid_argument",
+          }
         : undefined;
     expect(
       await runPage(send, { op: "waitFor", text: null, selector: "li[" }),
-    ).toEqual({ ok: false, error: '"li[" is not a valid CSS selector' });
+    ).toEqual({
+      ok: false,
+      error: '"li[" is not a valid CSS selector',
+      code: "invalid_argument",
+    });
   });
 });

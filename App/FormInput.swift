@@ -9,21 +9,21 @@ extension Commands {
 
     switch control.kind {
     case .text:
-      guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a text field, so value must be a string") }
+      guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a text field, so value must be a string") }
 
       return try await setText(tab, ref, control.secure, text)
     case .checkbox, .radio: return try await setChecked(tab, ref, control, value)
     case .select: return try await select(tab, ref, control, value)
     case .date, .time, .dateTimeLocal:
-      guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a \(control.kind.rawValue) input, so value must be a string") }
+      guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a \(control.kind.rawValue) input, so value must be a string") }
 
       return try await setDateTime(tab, ref, control.kind, text)
     case .color:
-      guard case let .text(text) = value else { throw Failure(description: "ref \(ref) is a color input, so value must be a string such as #00ff00") }
+      guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a color input, so value must be a string such as #00ff00") }
 
       return try await setColor(tab, ref, text)
-    case .listbox: throw Failure(description: "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
-    case .other: throw Failure(description: "ref \(ref) is not a text field, slider, checkbox, radio, select or color input; use click or key")
+    case .listbox: throw Failure(.invalidArgument, "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
+    case .other: throw Failure(.invalidArgument, "ref \(ref) is not a text field, slider, checkbox, radio, select or color input; use click or key")
     }
   }
 
@@ -74,7 +74,7 @@ extension Commands {
       "valueResult": .string(valueResult.name),
       "readBack": after.value.map { .string($0) } ?? .null,
     ])
-    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
+    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data, code: matched ? nil : .inputUnconfirmed), tab, since: acted)
   }
 
   private func setChecked(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
@@ -85,7 +85,7 @@ extension Commands {
     case let .checked(flag): wanted = flag
     case .text("true"): wanted = true
     case .text("false"): wanted = false
-    case let .text(other): throw Failure(description: "ref \(ref) is a \(kind), so value must be true or false, not \"\(other)\"")
+    case let .text(other): throw Failure(.invalidArgument, "ref \(ref) is a \(kind), so value must be true or false, not \"\(other)\"")
     }
 
     let state = { (checked: Bool?) in checked == true ? "checked" : "unchecked" }
@@ -93,7 +93,7 @@ extension Commands {
 
     if control.checked == wanted { return CLIReply(ok: true, text: "\(kind) ref \(ref) is already \(state(wanted)); nothing pressed", data: .object(data)) }
 
-    if control.kind == .radio, !wanted { throw Failure(description: "radio ref \(ref) cannot be unchecked directly; check another radio in its group") }
+    if control.kind == .radio, !wanted { throw Failure(.invalidArgument, "radio ref \(ref) cannot be unchecked directly; check another radio in its group") }
 
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
@@ -105,20 +105,20 @@ extension Commands {
     guard after.checked == wanted else {
       data["checked"] = .bool(after.checked == true)
       let lines = ["pressed \(pressed.summary) but \(kind) ref \(ref) is still \(state(after.checked))"] + matchLines(located, match)
-      return await withLanding(CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
+      return await withLanding(CLIReply(failing: .inputUnconfirmed, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
     }
 
     return await withLanding(CLIReply(ok: true, text: "\(state(wanted)) \(kind) ref \(ref) by pressing \(pressed.summary)", data: .object(data)), tab, since: acted)
   }
 
   private func select(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
-    guard case let .text(wanted) = value else { throw Failure(description: "ref \(ref) is a select, so value must be an option's value or label") }
+    guard case let .text(wanted) = value else { throw Failure(.invalidArgument, "ref \(ref) is a select, so value must be an option's value or label") }
 
     let options = control.options ?? []
     let listed = options.map { "\"\($0.label)\"" }.joined(separator: ", ")
 
     guard let index = options.firstIndex(where: { $0.value == wanted }) ?? options.firstIndex(where: { $0.label == wanted }) else {
-      throw Failure(description: "select ref \(ref) has no option whose value or label is \"\(wanted)\"; options: \(listed)")
+      throw Failure(.invalidArgument, "select ref \(ref) has no option whose value or label is \"\(wanted)\"; options: \(listed)")
     }
 
     let option = options[index]
@@ -126,7 +126,7 @@ extension Commands {
 
     if control.selectedIndex == index { return CLIReply(ok: true, text: "select ref \(ref) already shows \"\(option.label)\"; nothing changed", data: .object(data)) }
 
-    guard !option.disabled else { throw Failure(description: "option \"\(option.label)\" of select ref \(ref) is disabled") }
+    guard !option.disabled else { throw Failure(.notActionable, "option \"\(option.label)\" of select ref \(ref) is disabled") }
 
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
@@ -139,7 +139,7 @@ extension Commands {
       let shown = after.selectedIndex.flatMap { options.indices.contains($0) ? options[$0].label : nil } ?? "nothing"
       data["selectedIndex"] = after.selectedIndex.map { .number(Double($0)) } ?? .null
       let lines = ["pressed \(item.summary) in the open menu but select ref \(ref) still shows \"\(shown)\""] + matchLines(located, match)
-      return await withLanding(CLIReply(ok: false, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
+      return await withLanding(CLIReply(failing: .inputUnconfirmed, text: lines.joined(separator: "\n"), data: .object(data)), tab, since: acted)
     }
 
     return await withLanding(CLIReply(ok: true, text: "selected \"\(option.label)\" in select ref \(ref) by pressing \(item.summary) in its menu", data: .object(data)), tab, since: acted)
@@ -182,14 +182,14 @@ extension Commands {
       case "seconds": text = parts[title] ?? "00"
       case "milliseconds": text = parts[title] ?? "000"
       default:
-        guard let part = parts[title] else { throw Failure(description: "ref \(ref) shows a field titled \"\(title)\" that \"\(value)\" has no part for; fields: \(titles.map { "\"\($0)\"" }.joined(separator: ", "))") }
+        guard let part = parts[title] else { throw Failure(.notActionable, "ref \(ref) shows a field titled \"\(title)\" that \"\(value)\" has no part for; fields: \(titles.map { "\"\($0)\"" }.joined(separator: ", "))") }
 
         text = part
       }
 
       let focused = AXUIElementSetAttributeValue(field.element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
 
-      guard focused == .success else { throw Failure(description: "AXFocused=true on \(field.summary) failed: \(focused.name)") }
+      guard focused == .success else { throw Failure(.notActionable, "AXFocused=true on \(field.summary) failed: \(focused.name)") }
 
       try await awaitFocus(field, in: match.target)
 
@@ -212,13 +212,13 @@ extension Commands {
       "read back: \"\(after.value ?? "")\" \(matched ? "(matches)" : "(DIFFERS)")",
     ] + matchLines(located, match)
     let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string(kind.rawValue), "readBack": .string(after.value ?? "")])
-    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
+    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data, code: matched ? nil : .inputUnconfirmed), tab, since: acted)
   }
 
   /// Splits an input value (YYYY-MM-DD, HH:MM[:SS[.mmm]], or both joined by T) into parts keyed by WebKit's field titles, hour in 24 h.
   private func dateTimeParts(_ kind: ControlKind, _ value: String, _ ref: PageRef) throws -> [String: String] {
     let formats: [ControlKind: String] = [.date: "YYYY-MM-DD", .time: "HH:MM or HH:MM:SS", .dateTimeLocal: "YYYY-MM-DDTHH:MM"]
-    let bad = Failure(description: "ref \(ref) is a \(kind.rawValue) input, so value must look like \(formats[kind] ?? "?"), not \"\(value)\"")
+    let bad = Failure(.invalidArgument, "ref \(ref) is a \(kind.rawValue) input, so value must look like \(formats[kind] ?? "?"), not \"\(value)\"")
     let pieces = value.split(separator: "T", omittingEmptySubsequences: false)
 
     guard pieces.count == (kind == .dateTimeLocal ? 2 : 1) else { throw bad }
@@ -261,6 +261,6 @@ extension Commands {
       try await Task.sleep(for: .milliseconds(50))
     }
 
-    throw Failure(description: "set AXFocused on \(field.summary) but Safari reports focus on \(focused()?.summary ?? "nothing") in \(isMain() ? "the main window" : "a window that is not main"); no keys were posted to it")
+    throw Failure(.notActionable, "set AXFocused on \(field.summary) but Safari reports focus on \(focused()?.summary ?? "nothing") in \(isMain() ? "the main window" : "a window that is not main"); no keys were posted to it")
   }
 }

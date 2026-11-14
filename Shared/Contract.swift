@@ -82,6 +82,14 @@ struct EventsResult: Codable, Sendable {
 
   /// Whether a frame answered with another document than in before, or is gone; a busy frame is neither.
   func replaced(_ frame: String, since before: EventsResult) -> Bool { !busy.contains(frame) && origins[frame] != before.origins[frame] }
+
+  /// Refuses an action whose frame this read, taken before it, did not reach: a busy frame may answer a retry, while one that could not be read is gone or navigated.
+  func requireAnswered(_ frame: String, so consequence: String) throws {
+    guard origins[frame] == nil else { return }
+    guard busy.contains(frame) else { throw Failure(.staleRef, "the frame of iframe \(frame) could not be read, so \(consequence)") }
+
+    throw Failure(.pageBusy, "the frame of iframe \(frame) did not answer within 2 s, so \(consequence)")
+  }
 }
 /// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; checked is set for checkbox and radio, selectedIndex and options for both select kinds.
 enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", color, other }
@@ -110,17 +118,13 @@ struct WaitResult: Codable, Sendable {
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
 struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
-/// Safari has not granted the tab's site: prompt while it is asking the user, denied when refused or never allowed.
-enum SiteAccess: String, Codable, Sendable { case prompt, denied }
-/// A background failure Safari's website access caused; error names the site and what the user has to do, and no retry helps until they do it.
-struct SiteAccessFailure: Codable, Sendable, Error, Equatable, CustomStringConvertible {
-  let siteAccess: SiteAccess
+/// A background or content failure as it comes over the wire: error is the text, code what the caller does about it.
+struct PageFailure: Codable, Sendable, Equatable {
+  let code: ErrorCode
   let error: String
-
-  var description: String { error }
 }
 /// loading is true when a created tab was still loading after the background's load timeout; access is set when Safari held the loaded tab behind its website access prompt, and tab is then as known before the load.
-struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool?; var access: SiteAccessFailure? }
+struct TabResult: Codable, Sendable { let tab: TabInfo; var loading: Bool?; var access: PageFailure? }
 /// Where a tab is after an action: navigation is load when it started loading (loading: still loading at the 15 s cap), sameDocument when only its address changed.
 struct SettleResult: Codable, Sendable {
   enum Navigation: String, Codable, Sendable { case none, load, sameDocument }
