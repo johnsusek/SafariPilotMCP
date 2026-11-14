@@ -72,11 +72,11 @@ codesign --sign "Developer ID Application" --timestamp "$dmg"
 
 echo "notarizing $dmg"
 result=$(xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait --output-format json)
-status=$(plutil -extract status raw - <<< "$result")
+verdict=$(plutil -extract status raw - <<< "$result")
 
-if [[ $status != Accepted ]]; then
+if [[ $verdict != Accepted ]]; then
   xcrun notarytool log "$(plutil -extract id raw - <<< "$result")" --keychain-profile "$profile" >&2
-  fail "notarization: $status"
+  fail "notarization: $verdict"
 fi
 
 xcrun stapler staple -q "$dmg"
