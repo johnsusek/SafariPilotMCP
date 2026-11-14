@@ -37,6 +37,8 @@ targets:
       path: App/Info.plist
       properties:
         CFBundleDisplayName: SafariPilot
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         LSApplicationCategoryType: public.app-category.developer-tools
         NSSupportsSuddenTermination: false
     entitlements:
@@ -72,6 +74,8 @@ targets:
       path: Appex/Info.plist
       properties:
         CFBundleDisplayName: SafariPilot
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
         NSExtension:
           NSExtensionPointIdentifier: com.apple.Safari.web-extension
           NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).SafariWebExtensionHandler
@@ -109,6 +113,7 @@ targets:
         PRODUCT_MODULE_NAME: SafariPilotCLI
         PRODUCT_BUNDLE_IDENTIFIER: net.johnsolo.SafariPilot.cli
         ENABLE_HARDENED_RUNTIME: YES
+        SKIP_INSTALL: YES
   SafariPilotTests:
     type: bundle.unit-test
     platform: macOS
