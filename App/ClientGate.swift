@@ -135,7 +135,7 @@ final class ClientGate {
   }
 
   private func present(key: String, request: Request) {
-    windows.show(key: key, onClose: { [weak self] in self?.finish(key: key, approved: false, alwaysTrust: false) }) {
+    windows.show(key: key, title: "Connection Request", onClose: { [weak self] in self?.finish(key: key, approved: false, alwaysTrust: false) }) {
       ApprovalView(request: request) { [weak self] approved, alwaysTrust in self?.finish(key: key, approved: approved, alwaysTrust: alwaysTrust) }
     }
   }
@@ -176,7 +176,7 @@ final class ClientGate {
         try store.trust(id: record.id)
       } else {
         let credential = try store.issue(name: request.name, trusted: true)
-        windows.show(key: "credential:\(credential)", onClose: {}) {
+        windows.show(key: "credential:\(credential)", title: "SafariPilot", onClose: {}) {
           CredentialView(name: request.name, credential: credential) { [weak self] in self?.windows.close(key: "credential:\(credential)") }
         }
       }
@@ -200,10 +200,10 @@ private final class GateWindows: NSObject, NSWindowDelegate {
   private var windows: [String: NSWindow] = [:]
   private var onClose: [String: () -> Void] = [:]
 
-  func show<Content: View>(key: String, onClose: @escaping () -> Void, @ViewBuilder content: () -> Content) {
+  func show<Content: View>(key: String, title: String, onClose: @escaping () -> Void, @ViewBuilder content: () -> Content) {
     let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable], backing: .buffered, defer: false)
-    window.title = "SafariPilot"
-    window.contentView = NSHostingView(rootView: content().padding(20).frame(width: 380))
+    window.title = title
+    window.contentView = NSHostingView(rootView: content().padding(24).frame(width: 380))
     window.isReleasedWhenClosed = false
     window.delegate = self
     window.level = .floating
@@ -237,16 +237,19 @@ private struct ApprovalView: View {
   @State private var alwaysTrust = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 48, height: 48)
-      Text("Allow \u{201C}\(request.name)\u{201D} to use Safari?").font(.headline)
-      Text(request.identityNote).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+    VStack(alignment: .leading, spacing: 16) {
+      Image("Logo").resizable().scaledToFit().frame(height: 44).foregroundStyle(.tint)
+      Text("Client Connection Request").font(.title2.weight(.semibold))
+      VStack(alignment: .leading, spacing: 6) {
+        Text("Allow \u{201C}\(request.name)\u{201D} to use Safari?")
+        Text(request.identityNote).font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      }
       Toggle("Always trust this client", isOn: $alwaysTrust)
       HStack {
-        Spacer()
         Button("Deny") { decide(false, false) }.keyboardShortcut(.cancelAction)
         Button("Allow") { decide(true, alwaysTrust) }.keyboardShortcut(.defaultAction)
       }
+      .controlSize(.large)
     }
   }
 }
