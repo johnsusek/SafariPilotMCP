@@ -85,3 +85,7 @@ Comparison as of November 2026, from each project's source and documentation. De
 
 - [Architecture](docs/ARCHITECTURE.md): how it works inside, building and testing.
 - [DECISIONS.md](DECISIONS.md): why it works that way.
+
+## Thanks
+
+To [iMCP](https://github.com/mattt/iMCP), whose app UI and client approval flow inspired SafariPilot's.
