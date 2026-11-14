@@ -58,6 +58,9 @@ private struct MenuBarMenu: View {
   @Environment(\.openWindow) private var openWindow
 
   var body: some View {
+    @Bindable var model = model
+    Toggle("Enable MCP Server", isOn: $model.serverEnabled)
+    Divider()
     Button("Add to Claude Desktop") {
       model.addToClaudeDesktop()
       showWindow()

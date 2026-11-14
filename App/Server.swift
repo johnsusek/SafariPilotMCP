@@ -93,6 +93,7 @@ enum Server {
 
     switch try decoder.decode(Envelope.self, from: line).kind {
     case "cli": reply = try await JSONEncoder().encode(model.runCLI(decoder.decode(CLIRequest.self, from: line)))
+    case "hello" where !model.serverEnabled: reply = try JSONEncoder().encode(HelloReply(session: nil, text: AppModel.serverOff))
     case "hello": reply = try await JSONEncoder().encode(model.gate.approve(decoder.decode(HelloRequest.self, from: line)))
     default:
       // The relay sends nothing after its request, so a read that ends while its poll is held means the relay is gone (Safari quit or reloaded the extension),
