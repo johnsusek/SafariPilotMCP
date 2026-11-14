@@ -65,17 +65,17 @@ What it doesn't hide: the text of the page itself, which is what Claude is there
 | | SafariPilot | [safari-mcp](https://github.com/achiya-automation/safari-mcp) | [MCPSafari](https://github.com/Epistates/MCPSafari) | [Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) (`safaridriver --mcp`) |
 | --- | --- | --- | --- | --- |
 | Built on | Safari extension and Accessibility | AppleScript, optional extension | Safari extension | WebDriver and WebKit text extraction |
-| Your signed-in Safari | ✅ | ✅ | ✅ | ❌ Its own agent window |
-| Native (trusted) clicks and keys | ✅ Every click and key, checked after | ⚠️ Scripted; click falls back to native | ⚠️ Opt-in keys; clicks are scripted | ⚠️ Engine-dispatched; typing pastes |
-| Safari can stay in the background | ✅ Typing included | ⚠️ Except native input, which fronts the tab and moves the cursor | ⚠️ Except native input, which fronts Safari and moves the pointer | Not documented |
-| Approval per client | ✅ With credentials | ❌ | ❌ | ❌ One Safari setting |
-| Tabs it can reach | Its own and their popups | Its own; lists all; yours by opt-in | Every tab on sites you granted | Reportedly its own window |
-| Hides secrets | ✅ Fields, URLs, cookies, headers, bodies | ❌ Snapshots show field values | ⚠️ Fields and URLs | ⚠️ Field values in page text |
-| Iframes | ✅ Read and act in | ⚠️ Script, frame list, scripted actions | ⚠️ Native input top frame only | ✅ Read and act in |
-| Alert and confirm dialogs | ✅ | ⚠️ Only when set up before they open | ⚠️ Only when set up before they open | ✅ |
-| Network request bodies | ✅ Fetch and XHR | ❌ Headers and timing | ❌ URL, status, timing | ✅ All request types |
-| File upload | ✅ | ✅ | ✅ | ❌ |
-| Hover and drag | ⚠️ Drag only, scripted | ✅ Scripted; opt-in native hover | ✅ Scripted; opt-in native | ⚠️ Hover only |
+| Your signed-in Safari | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/no.svg" width="12" alt="No"> Its own agent window |
+| Native (trusted) clicks and keys | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Every click and key, checked after | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Scripted; click falls back to native | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Opt-in keys; clicks are scripted | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Engine-dispatched; typing pastes |
+| Safari can stay in the background | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Typing included | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Except native input, which fronts the tab and moves the cursor | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Except native input, which fronts Safari and moves the pointer | Not documented |
+| Approval per client | <img src="docs/marks/yes.svg" width="12" alt="Yes"> With credentials | <img src="docs/marks/no.svg" width="12" alt="No"> | <img src="docs/marks/no.svg" width="12" alt="No"> | <img src="docs/marks/no.svg" width="12" alt="No"> One Safari setting |
+| Tabs it can reach | Its own and their popups | Its own; lists all; yours by opt-in | Every tab on sites you granted | Its own window |
+| Hides secrets | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Fields, URLs, cookies, headers, bodies | <img src="docs/marks/no.svg" width="12" alt="No"> Snapshots show field values | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Fields and URLs | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Field values in page text |
+| Iframes | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Read and act in | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Script, frame list, scripted actions | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Native input top frame only | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Read and act in |
+| Alert and confirm dialogs | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Only when set up before they open | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Only when set up before they open | <img src="docs/marks/yes.svg" width="12" alt="Yes"> |
+| Network request bodies | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Fetch and XHR | <img src="docs/marks/no.svg" width="12" alt="No"> Headers and timing | <img src="docs/marks/no.svg" width="12" alt="No"> URL, status, timing | <img src="docs/marks/yes.svg" width="12" alt="Yes"> All request types |
+| File upload | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/yes.svg" width="12" alt="Yes"> | <img src="docs/marks/no.svg" width="12" alt="No"> |
+| Hover and drag | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Drag only, scripted | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Scripted; opt-in native hover | <img src="docs/marks/yes.svg" width="12" alt="Yes"> Scripted; opt-in native | <img src="docs/marks/partial.svg" width="12" alt="Partly"> Hover only |
 | Install | Signed DMG | npm or Homebrew | Homebrew, notarized | Built into Safari 27 |
 | Requires | macOS 26, Safari 27 | Node.js 20 | macOS 14, Safari 17 | Safari 27 |
 
