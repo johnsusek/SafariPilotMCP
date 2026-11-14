@@ -2,6 +2,7 @@
 # Live smoke test against real sites through the installed CLI; prints PASS or FAIL per check and exits nonzero on any failure.
 # Sites change, so a failure means look, not necessarily a regression. Run: scripts/smoke.sh [site ...]
 # Needs the Debug app (scripts/install.sh --debug): Release builds run only mcp and status.
+# The mcp site drives `safaripilot mcp` over stdio and needs approval: export a trusted SAFARIPILOT_CREDENTIAL, or approve the dialog when it appears.
 setopt pipe_fail
 failures=0
 tab=""
@@ -15,18 +16,33 @@ open_tab() {
 
 close_tab() { [[ -n $tab ]] && safaripilot tab-close $tab >/dev/null; tab="" }
 
+# verdict LABEL PATTERN: greps the last output for PATTERN.
+verdict() {
+  if print -r -- "$output" | grep -qE -- "$2"; then
+    print "PASS $1"
+    return
+  fi
+
+  print "FAIL $1\n$(print -r -- "$output" | head -8 | sed 's/^/    /')"
+  failures=$((failures + 1))
+}
+
 # check LABEL PATTERN COMMAND...: runs the CLI command on the current tab and greps its output for PATTERN.
 check() {
   local label=$1 pattern=$2
   shift 2
   output=$(safaripilot --timeout 30 --tab $tab "$@" 2>&1)
+  verdict $label $pattern
+}
 
-  if print -r -- "$output" | grep -qE -- "$pattern"; then
-    print "PASS $label"
+# refute LABEL PATTERN: passes when the last output does not match PATTERN.
+refute() {
+  if ! print -r -- "$output" | grep -qE -- "$2"; then
+    print "PASS $1"
     return
   fi
 
-  print "FAIL $label\n$(print -r -- "$output" | head -8 | sed 's/^/    /')"
+  print "FAIL $1\n    $(print -r -- "$output" | grep -E -- "$2" | head -1)"
   failures=$((failures + 1))
 }
 
@@ -147,7 +163,7 @@ site_discourse() {
   safaripilot --tab $tab scroll down 25 >/dev/null
   sleep 2
   check "discourse: find after scrolling lists on-screen links" '^\[[0-9]+\] link' find --role link
-  print -r -- "$output" | grep -q offscreen && { print "FAIL discourse: no offscreen links crowd the cap"; failures=$((failures + 1)) } || print "PASS discourse: no offscreen links crowd the cap"
+  refute "discourse: no offscreen links crowd the cap" offscreen
   close_tab
 }
 
@@ -192,8 +208,91 @@ site_facebook() {
   close_tab
 }
 
+site_theinternet() {
+  local base="https://the-internet.herokuapp.com"
+  open_tab "$base/dropdown"
+  check "the-internet: select option by label" 'selected "Option 2"' form-input $(ref "" combobox) "Option 2"
+  check "the-internet: select value read back" '^"2"$' javascript "document.querySelector('select').value"
+  check "the-internet: navigate" 'loaded tab' navigate "$base/checkboxes"
+  check "the-internet: checkbox" 'checked checkbox' form-input $(ref "" checkbox) true
+  check "the-internet: both boxes checked" '^\[true,true\]$' javascript "[...document.querySelectorAll('input[type=checkbox]')].map((box) => box.checked)"
+  check "the-internet: navigate back" '/dropdown' navigate back
+  safaripilot --tab $tab navigate "$base/javascript_alerts" >/dev/null
+  check "the-internet: alert opened" 'opened an alert' click $(ref "JS Alert" button)
+  check "the-internet: alert accepted" 'accepted an alert' dialog accept
+  check "the-internet: page saw the alert close" '^You successfully clicked an alert$' text
+  check "the-internet: confirm opened" 'opened a confirm' click $(ref "JS Confirm" button)
+  check "the-internet: confirm accepted" 'accepted a confirm' dialog accept
+  check "the-internet: page saw OK" '^You clicked: Ok$' text
+  check "the-internet: prompt opened" 'opened a prompt' click $(ref "JS Prompt" button)
+  check "the-internet: prompt answered" 'typed 5 characters' dialog accept --text pilot
+  check "the-internet: page saw the prompt text" '^You entered: pilot$' text
+  safaripilot --tab $tab navigate "$base/shadowdom" >/dev/null
+  check "the-internet: slotted text read through shadow roots" '^In a list!$' text
+  refute "the-internet: replaced slot defaults left out" 'My default text'
+  safaripilot --tab $tab navigate "$base/upload" >/dev/null
+  local file=$(mktemp -d)/smoke-upload.txt
+  print "smoke upload" >$file
+  check "the-internet: file input took the file" 'to smoke-upload.txt \(13 bytes' file-upload $(ref "" button) $file
+  check "the-internet: upload submitted" 'navigated' click $(ref "Upload" button)
+  sleep 2
+  check "the-internet: server got the file" '^smoke-upload.txt$' text
+  rm -r ${file:h}
+  close_tab
+}
+
+# mcp_request METHOD PARAMS [SECONDS]: sends one JSON-RPC request to the coprocess and leaves its response in $output.
+mcp_id=0
+mcp_request() {
+  mcp_id=$((mcp_id + 1))
+  print -p -- "$(jq -nc --argjson id $mcp_id --arg method $1 --argjson params $2 '{jsonrpc: "2.0", id: $id, method: $method, params: $params}')"
+  local line
+
+  while read -r -t ${3:-60} -p line; do
+    [[ $(jq -r '.id // empty' <<<$line) == $mcp_id ]] || continue
+    output=$line
+    return
+  done
+
+  output="no reply to $1 within ${3:-60} s"
+}
+
+# mcp_check LABEL PATTERN TOOL ARGS [SECONDS]: calls a tool; output is its text, [image] per image and isError when it failed.
+mcp_check() {
+  mcp_request tools/call "$(jq -nc --arg name $3 --argjson arguments $4 '{name: $name, arguments: $arguments}')" $5
+  [[ $output == \{* ]] && output=$(jq -r '((.result.content // [])[] | if .type == "text" then .text else "[\(.type)]" end), (if .result.isError then "isError" else empty end), (.error.message // empty)' <<<$output)
+  verdict $1 $2
+}
+
+site_mcp() {
+  local log=$(mktemp)
+  coproc safaripilot mcp 2>$log
+  local server=$!
+  mcp_request initialize '{"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "SafariPilot smoke", "version": "1"}}'
+  verdict "mcp: initialize" '"name":"safaripilot"'
+  print -p '{"jsonrpc": "2.0", "method": "notifications/initialized"}'
+  mcp_request tools/list '{}'
+  output=$(jq -r '.result.tools[].name' <<<$output)
+  verdict "mcp: tools listed" '^browser_batch$'
+  # The first call that touches Safari waits for approval.
+  mcp_check "mcp: tab_create" '^opened tab' tab_create '{"url": "https://the-internet.herokuapp.com/javascript_alerts"}' 120
+  local opened=$(print -r -- "$output" | awk '/^opened tab/ {print $3; exit}')
+  sleep 2
+  mcp_check "mcp: find" '\] button "Click for JS Prompt"' find '{"name": "JS Prompt", "role": "button"}'
+  local prompt=$(print -r -- "$output" | sed -nE '1s/^\[([0-9:]+)\].*/\1/p')
+  mcp_check "mcp: click opens a prompt" 'opened a prompt' click "$(jq -nc --arg ref $prompt '{ref: $ref}')"
+  mcp_check "mcp: handle_dialog" 'accepted a prompt' handle_dialog '{"action": "accept", "prompt_text": "mcp"}'
+  mcp_check "mcp: browser_batch" '^2/2 screenshot:' browser_batch '{"actions": [{"name": "get_page_text"}, {"name": "screenshot", "input": {"scale": 0.3}}]}'
+  verdict "mcp: page text in batch" '^You entered: mcp$'
+  verdict "mcp: screenshot image in batch" '^\[image\]$'
+  mcp_check "mcp: tab_close" 'closed tab' tab_close "{\"tabId\": ${opened:-0}}"
+  kill $server 2>/dev/null
+  grep -q failed $log && print "    server stderr:\n$(grep failed $log | head -5 | sed 's/^/    /')"
+  rm $log
+}
+
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit facebook)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
 
 for site in $sites; do
   site_$site
