@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Usage: scripts/release.sh X.Y.Z [--no-publish]
-# Builds a Developer ID signed, notarized and stapled DMG at that version, then commits the version bump, tags vX.Y.Z, pushes and publishes a GitHub release.
+# Builds a Developer ID signed, notarized and stapled DMG at that version, then commits the version bump, tags vX.Y.Z, pushes and publishes a GitHub release with docs/releases/X.Y.Z.md as its notes.
 # --no-publish stops after the DMG and puts the version files back. Notary credentials come from `xcrun notarytool store-credentials SafariPilot` (or $NOTARY_PROFILE).
 set -euo pipefail
 
@@ -14,6 +14,7 @@ derived="$root/build/ReleaseData"
 archive="$out/SafariPilot.xcarchive"
 app="$out/export/SafariPilot.app"
 dmg="$out/SafariPilot-$version.dmg"
+notes="docs/releases/$version.md"
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 fail() { echo "$1" >&2; exit 1; }
@@ -23,6 +24,7 @@ cd "$root"
 [[ $(git branch --show-current) == main ]] || fail "release from main"
 git diff --quiet HEAD || fail "commit or stash tracked changes first"
 git rev-parse -q --verify "refs/tags/v$version" >/dev/null && fail "tag v$version already exists"
+git cat-file -e "HEAD:$notes" 2>/dev/null || fail "commit release notes at $notes first"
 xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1 || fail "no notary credentials: run xcrun notarytool store-credentials $profile"
 
 # Put the version files back unless the release commit took them.
@@ -91,4 +93,4 @@ fi
 git commit -q -m "Release $version" -- project.yml extension/manifest.json
 git tag -a "v$version" -m "SafariPilot $version"
 git push -q origin main "v$version"
-gh release create "v$version" "$dmg" --title "SafariPilot $version" --generate-notes --verify-tag
+gh release create "v$version" "$dmg" --title "SafariPilot $version" --notes-file "$notes" --verify-tag
