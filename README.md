@@ -62,22 +62,22 @@ What it doesn't hide: the text of the page itself, which is what Claude is there
 
 ## How it compares
 
-| | SafariPilot | [Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) (`safaridriver --mcp`) | [safari-mcp](https://github.com/achiya-automation/safari-mcp) | [MCPSafari](https://github.com/Epistates/MCPSafari) |
+| | SafariPilot | [safari-mcp](https://github.com/achiya-automation/safari-mcp) | [MCPSafari](https://github.com/Epistates/MCPSafari) | [Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/) (`safaridriver --mcp`) |
 | --- | --- | --- | --- | --- |
-| Built on | Safari extension and Accessibility | WebDriver and WebKit text extraction | AppleScript, optional extension | Safari extension |
-| Your signed-in Safari | Yes | No, its own agent window | Yes | Yes |
-| Native (trusted) clicks and keys | Every click and key, checked after | Engine-dispatched; typing pastes | Scripted; click falls back to native | Opt-in keys; clicks are scripted |
-| Safari can stay in the background | Yes, typing included | Not documented | Yes, except native input, which fronts the tab and moves the cursor | Yes, except native input, which fronts Safari and moves the pointer |
-| Approval per client | Yes, with credentials | No, one Safari setting | No | No |
-| Tabs it can reach | Its own and their popups | Reportedly its own window | Its own; lists all; yours by opt-in | Every tab on sites you granted |
-| Hides secrets | Fields, URLs, cookies, headers, bodies | Field values in page text | No; snapshots show field values | Fields and URLs |
-| Iframes | Read and act in | Read and act in | Script, frame list, scripted actions | Read and act in; native input top frame only |
-| Alert and confirm dialogs | Yes | Yes | Only when set up before they open | Only when set up before they open |
-| Network request bodies | Fetch and XHR | All request types | No; headers and timing | No; URL, status, timing |
-| File upload | Yes | No | Yes | Yes |
-| Hover and drag | Drag, scripted | Hover; no drag | Scripted; opt-in native hover | Yes |
-| Install | Signed DMG | Built into Safari 27 | npm or Homebrew | Homebrew, notarized |
-| Requires | macOS 26, Safari 27 | Safari 27 | Node.js 20 | macOS 14, Safari 17 |
+| Built on | Safari extension and Accessibility | AppleScript, optional extension | Safari extension | WebDriver and WebKit text extraction |
+| Your signed-in Safari | ✅ | ✅ | ✅ | ❌ Its own agent window |
+| Native (trusted) clicks and keys | ✅ Every click and key, checked after | ⚠️ Scripted; click falls back to native | ⚠️ Opt-in keys; clicks are scripted | ⚠️ Engine-dispatched; typing pastes |
+| Safari can stay in the background | ✅ Typing included | ⚠️ Except native input, which fronts the tab and moves the cursor | ⚠️ Except native input, which fronts Safari and moves the pointer | Not documented |
+| Approval per client | ✅ With credentials | ❌ | ❌ | ❌ One Safari setting |
+| Tabs it can reach | Its own and their popups | Its own; lists all; yours by opt-in | Every tab on sites you granted | Reportedly its own window |
+| Hides secrets | ✅ Fields, URLs, cookies, headers, bodies | ❌ Snapshots show field values | ⚠️ Fields and URLs | ⚠️ Field values in page text |
+| Iframes | ✅ Read and act in | ⚠️ Script, frame list, scripted actions | ⚠️ Native input top frame only | ✅ Read and act in |
+| Alert and confirm dialogs | ✅ | ⚠️ Only when set up before they open | ⚠️ Only when set up before they open | ✅ |
+| Network request bodies | ✅ Fetch and XHR | ❌ Headers and timing | ❌ URL, status, timing | ✅ All request types |
+| File upload | ✅ | ✅ | ✅ | ❌ |
+| Hover and drag | ⚠️ Drag only, scripted | ✅ Scripted; opt-in native hover | ✅ Scripted; opt-in native | ⚠️ Hover only |
+| Install | Signed DMG | npm or Homebrew | Homebrew, notarized | Built into Safari 27 |
+| Requires | macOS 26, Safari 27 | Node.js 20 | macOS 14, Safari 17 | Safari 27 |
 
 Comparison as of November 2026, from each project's source and documentation. Details and sources are in [docs/COMPETITORS.md](docs/COMPETITORS.md).
 
