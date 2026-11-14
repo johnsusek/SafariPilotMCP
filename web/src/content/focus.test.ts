@@ -11,7 +11,10 @@ let element = (id: string) => document.getElementById(id)!;
 
 describe("focusRef", () => {
   test("focuses a field", () => {
-    expect(focusRef(refFor(element("field")))).toMatchObject({ ok: true });
+    expect(focusRef(refFor(element("field")))).toMatchObject({
+      ok: true,
+      taken: true,
+    });
     expect(document.activeElement).toBe(element("field"));
   });
 
@@ -19,7 +22,7 @@ describe("focusRef", () => {
     let host = element("plain");
     let input = document.createElement("input");
     host.attachShadow({ mode: "open" }).append(input);
-    expect(focusRef(refFor(input))).toMatchObject({ ok: true });
+    expect(focusRef(refFor(input))).toMatchObject({ ok: true, taken: true });
     expect(host.shadowRoot!.activeElement).toBe(input);
   });
 });

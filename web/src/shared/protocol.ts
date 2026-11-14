@@ -176,8 +176,13 @@ export type ClickResult = {
   dispatched: { type: string; canceled: boolean }[];
   focused: string;
 };
-// focus: focused is the element that took focus, ref or an ancestor.
-export type FocusResult = { ok: true; ref: number; focused: string };
+// focus: focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
+export type FocusResult = {
+  ok: true;
+  ref: number;
+  focused: string;
+  taken: boolean;
+};
 // upload: target is the file input that took the files, or what the drop events went to; via says which; files are read back from
 // the input or the DataTransfer; dispatched lists the events in order, canceled when a listener called preventDefault.
 export type UploadResult = {

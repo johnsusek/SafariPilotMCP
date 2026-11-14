@@ -17,19 +17,17 @@ export function focusRef(ref: number): FocusResult | Failure {
 
   for (
     let candidate: Element | null = element;
-    candidate;
+    candidate && candidate !== document.body;
     candidate = flatParent(candidate)
   ) {
     if (!(candidate instanceof HTMLElement || candidate instanceof SVGElement))
       continue;
 
     candidate.focus({ preventScroll: true });
+
     if (active() === candidate)
-      return { ok: true, ref, focused: describe(candidate) };
+      return { ok: true, ref, focused: describe(candidate), taken: true };
   }
 
-  return {
-    ok: false,
-    error: `ref ${ref} ${describe(element)} and its ancestors do not take focus`,
-  };
+  return { ok: true, ref, focused: describe(active()), taken: false };
 }

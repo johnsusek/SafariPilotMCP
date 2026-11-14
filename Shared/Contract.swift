@@ -60,8 +60,8 @@ struct SyntheticClickResult: Codable, Sendable {
   let dispatched: [Dispatched]
   let focused: String
 }
-/// focused is the element that took focus, ref or an ancestor.
-struct FocusResult: Codable, Sendable { let ref: PageRef; let focused: String }
+/// focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
+struct FocusResult: Codable, Sendable { let ref: PageRef; let focused: String; let taken: Bool }
 /// via says whether a file input took the files or they were dropped on target; files are read back from the page; dispatched lists the events in order, canceled when a listener called preventDefault.
 struct UploadResult: Codable, Sendable {
   enum Via: String, Codable, Sendable { case input, drop }
