@@ -26,6 +26,7 @@ struct Commands {
     case let .readPage(tabId, filter, maxChars, ref, depth): try await readPage(tabId, filter, maxChars, ref, depth)
     case let .find(tabId, name, role): try await find(tabId, name, role)
     case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
+    case let .waitCheck(tabId, condition): try await waitCheck(tabId, condition)
     case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
     case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
@@ -219,6 +220,19 @@ struct Commands {
     let lines = try response.decode(FindResult.self).matches.map(describe)
     let wanted = [role, name.isEmpty ? "" : "\"\(name)\""].filter { !$0.isEmpty }.joined(separator: " ")
     return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \(wanted)" : lines.joined(separator: "\n"), data: response)
+  }
+
+  /// A page not readable yet answers ok with pending rather than failing, so the MCP server's wait polls on through a navigation.
+  private func waitCheck(_ tabId: Int?, _ condition: WaitCondition) async throws -> CLIReply {
+    let response = try await content(tabId, .waitFor(condition))
+    let result = try response.decode(WaitResult.self)
+
+    if let pending = result.pending { return CLIReply(ok: true, text: "the page cannot be read yet: \(pending)", data: response) }
+
+    guard let match = result.match else { return CLIReply(ok: true, text: "no \(condition.label) on \(result.url ?? "?") yet", data: response) }
+
+    let offscreen = match.inViewport ? "" : " (offscreen)"
+    return CLIReply(ok: true, text: "found \(condition.label) at [\(match.ref)] \(match.role) <\(match.tag)> \"\(match.text)\"\(offscreen)", data: response)
   }
 
   private func pageText(_ tabId: Int?, _ maxChars: Int) async throws -> CLIReply {

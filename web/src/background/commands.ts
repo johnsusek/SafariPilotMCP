@@ -30,9 +30,14 @@ async function sendToContent(
         (answer as ContentResponse | undefined) ?? {
           ok: false as const,
           error: noScript,
+          unreachable: true as const,
         },
     )
-    .catch((error) => ({ ok: false as const, error: `${noScript}: ${error}` }));
+    .catch((error) => ({
+      ok: false as const,
+      error: `${noScript}: ${error}`,
+      unreachable: true as const,
+    }));
   return await withTimeout(
     response,
     contentTimeoutMs,

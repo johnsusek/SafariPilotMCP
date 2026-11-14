@@ -76,9 +76,14 @@ enum MCPServer {
   static func run(_ name: String, _ arguments: [String: JSONValue]) async -> (content: [Tool.Content], ok: Bool) {
     do {
       if name == "wait" {
-        let seconds = try Tools.waitSeconds(arguments)
-        try await Task.sleep(for: .seconds(seconds))
-        return ([text("waited \(seconds.formatted()) s")], true)
+        switch try Tools.wait(arguments, session: session.withLock { $0 }) {
+        case let .sleep(seconds):
+          try await Task.sleep(for: .seconds(seconds))
+          return ([text("waited \(seconds.formatted()) s")], true)
+        case let .condition(tabId, condition, timeout):
+          try await requireOwned(tabId)
+          return try await ([text(Wait.poll(condition, tabId: tabId, timeout: timeout, look: exchange))], true)
+        }
       }
 
       let command = try Tools.command(name: name, arguments: arguments, session: session.withLock { $0 })

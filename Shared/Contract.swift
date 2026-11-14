@@ -98,6 +98,15 @@ struct InspectResult: Codable, Sendable {
 }
 struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
+/// One wait look: the first match, top frame first, with the text it shows; pending says why the page could not be read yet (no content script, mid-navigation), and url and title are then nil.
+struct WaitResult: Codable, Sendable {
+  struct Match: Codable, Sendable, Equatable { let ref: PageRef; let tag: String; let role: String; let text: String; let inViewport: Bool }
+
+  let url: String?
+  let title: String?
+  let match: Match?
+  let pending: String?
+}
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
 struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
@@ -152,6 +161,7 @@ enum ContentRequest: Equatable, Sendable {
   case upload(ref: PageRef, files: [UploadFile])
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
+  case waitFor(WaitCondition)
   case pageText(maxChars: Int)
   case scroll(ref: PageRef?, left: Double, top: Double)
   case scrollIntoView(ref: PageRef)
@@ -171,6 +181,8 @@ enum ContentRequest: Equatable, Sendable {
     case let .upload(ref, files): ["op": "upload", "ref": .string(ref.description), "files": .array(files.map { .object(["name": .string($0.name), "mimeType": .string($0.mimeType), "lastModified": .number($0.lastModified), "data": .string($0.data)]) })]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
+    case let .waitFor(.text(text)): ["op": "waitFor", "text": .string(text), "selector": .null]
+    case let .waitFor(.selector(selector)): ["op": "waitFor", "text": .null, "selector": .string(selector)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .string($0.description) } ?? .null, "left": .number(left), "top": .number(top)]
     case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .string(ref.description)]

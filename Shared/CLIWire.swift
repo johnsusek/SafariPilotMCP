@@ -75,6 +75,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case consoleMessages(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
+  /// One look for the condition in every reached frame; the MCP server's wait repeats it, so no command holds the queue for a whole wait.
+  case waitCheck(tabId: Int?, condition: WaitCondition)
   case debugAX(tabId: Int?, ref: PageRef?)
   /// Each frame's content script, iframes and trusted clicks and keydowns logged since the last call; a frame logs nothing before its first read.
   case debugFrames(tabId: Int?)
@@ -142,7 +144,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     switch self {
     case .status, .tabs, .tabCreate: nil
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .dialog(tabId, _, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -227,6 +229,35 @@ enum AppCommand: Codable, Sendable, Equatable {
     guard times <= maxKeyPresses / chords.count else { throw Failure(description: "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
 
     return .key(tabId: tabId, chords: chords, ref: ref, times: times)
+  }
+}
+
+/// What wait looks for: text a person can see on the page (case and runs of whitespace ignored), or a shown element matching a CSS selector.
+enum WaitCondition: Codable, Sendable, Equatable {
+  case text(String)
+  case selector(String)
+
+  /// Blank text or a blank selector would match at once, so they are refused.
+  init(text: String?, selector: String?) throws {
+    switch (text, selector) {
+    case let (text?, nil):
+      guard !text.allSatisfy(\.isWhitespace) else { throw Failure(description: "text to wait for is empty") }
+
+      self = .text(text)
+    case let (nil, selector?):
+      guard !selector.allSatisfy(\.isWhitespace) else { throw Failure(description: "selector to wait for is empty") }
+
+      self = .selector(selector)
+    default:
+      throw Failure(description: "wait takes either text or selector, not \(text == nil ? "neither" : "both")")
+    }
+  }
+
+  var label: String {
+    switch self {
+    case let .text(text): "text \"\(text)\""
+    case let .selector(selector): "selector \"\(selector)\""
+    }
   }
 }
 

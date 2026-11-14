@@ -94,6 +94,15 @@ struct ContractTests {
     #expect(select.options == [SelectOption(value: "1", label: "One", disabled: false)])
   }
 
+  @Test func waitForEncodesAndDecodes() throws {
+    #expect(ContentRequest.waitFor(.text("Ready")).json == ["op": "waitFor", "text": "Ready", "selector": .null])
+    #expect(ContentRequest.waitFor(.selector("#a li")).json == ["op": "waitFor", "text": .null, "selector": "#a li"])
+    let found = try decode(WaitResult.self, #"{"ok":true,"url":"u","title":"t","pending":null,"match":{"ref":"5:12","tag":"p","role":"paragraph","name":"","rect":{"left":0,"top":0,"width":1,"height":1},"inViewport":false,"text":"Ready now"}}"#)
+    #expect(found.match == WaitResult.Match(ref: PageRef(frames: [5], local: 12), tag: "p", role: "paragraph", text: "Ready now", inViewport: false))
+    let pending = try decode(WaitResult.self, #"{"ok":true,"url":null,"title":null,"match":null,"pending":"navigating"}"#)
+    #expect(pending.pending == "navigating" && pending.match == nil && pending.url == nil)
+  }
+
   @Test func commandsEncodeTheContractShapes() {
     #expect(BackgroundCommand.tab(tabId: nil).json == ["type": "tab", "tabId": .null])
     #expect(BackgroundCommand.tabCreate(url: nil).json == ["type": "tabCreate", "url": .null])

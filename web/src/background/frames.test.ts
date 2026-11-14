@@ -851,3 +851,105 @@ describe("runPage reads", () => {
     });
   });
 });
+
+describe("runPage waitFor", () => {
+  let request = {
+    op: "waitFor" as const,
+    text: "Ready",
+    selector: null,
+  };
+  let found = (ref: number, top: number) => ({
+    ok: true as const,
+    url: "u",
+    title: "t",
+    match: {
+      ref,
+      tag: "p",
+      role: "paragraph",
+      name: "",
+      rect: rect(0, top, 10, 10),
+      inViewport: true,
+      text: "Ready now",
+    },
+  });
+  let none = { ok: true as const, url: "u", title: "t", match: null };
+
+  test("the top frame's match wins over a frame's", async () => {
+    documents[0].answer = (asked) =>
+      asked.op === "waitFor" ? found(7, 0) : undefined;
+    documents[100].answer = (asked) =>
+      asked.op === "waitFor" ? found(2, 0) : undefined;
+    expect(await runPage(send, request)).toMatchObject({
+      ok: true,
+      pending: null,
+      match: { ref: "7", text: "Ready now" },
+    });
+  });
+
+  test("a match inside a nested frame gets its path and top-frame rect", async () => {
+    documents[0].answer = (asked) =>
+      asked.op === "waitFor" ? { ...none, url: "top" } : undefined;
+    documents[100].answer = (asked) =>
+      asked.op === "waitFor" ? none : undefined;
+    documents[200].answer = (asked) =>
+      asked.op === "waitFor" ? found(9, 5) : undefined;
+    expect(await runPage(send, request)).toMatchObject({
+      ok: true,
+      url: "top",
+      match: { ref: "5:3:9", rect: { left: 30, top: 135 }, text: "Ready now" },
+    });
+    expect(
+      calls.filter(([, asked]) => asked.op === "waitFor").map(([id]) => id),
+    ).toEqual([0, 100, 200]);
+  });
+
+  test("no match anywhere is an empty answer, and a frame that does not answer is skipped", async () => {
+    documents[0].answer = (asked) =>
+      asked.op === "waitFor" ? none : undefined;
+    documents[100].answer = (asked) =>
+      asked.op === "waitFor" ? { ok: false, error: "busy" } : undefined;
+    documents[200].answer = (asked) =>
+      asked.op === "waitFor" ? none : undefined;
+    expect(await runPage(send, request)).toEqual({
+      ok: true,
+      url: "u",
+      title: "t",
+      match: null,
+      pending: null,
+    });
+  });
+
+  test("a top frame with no content script or no answer is pending, not failed", async () => {
+    documents[0].answer = () => ({
+      ok: false,
+      error: "no content script answered in tab 5",
+      unreachable: true,
+    });
+    expect(await runPage(send, request)).toEqual({
+      ok: true,
+      url: null,
+      title: null,
+      match: null,
+      pending: "no content script answered in tab 5",
+    });
+
+    documents[0].answer = (asked) =>
+      asked.op === "waitFor"
+        ? { ok: false, error: "no answer within 15 s", timeout: true }
+        : undefined;
+    expect(await runPage(send, request)).toMatchObject({
+      ok: true,
+      pending: "no answer within 15 s",
+    });
+  });
+
+  test("any other top-frame failure, such as a bad selector, fails", async () => {
+    documents[0].answer = (asked) =>
+      asked.op === "waitFor"
+        ? { ok: false, error: '"li[" is not a valid CSS selector' }
+        : undefined;
+    expect(
+      await runPage(send, { op: "waitFor", text: null, selector: "li[" }),
+    ).toEqual({ ok: false, error: '"li[" is not a valid CSS selector' });
+  });
+});

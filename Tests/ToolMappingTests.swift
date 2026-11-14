@@ -25,7 +25,7 @@ struct ToolMappingTests {
   }
 
   @Test func pageToolsAcceptTabId() {
-    let tabless: Set = ["tabs_list", "tab_create", "browser_batch", "wait"]
+    let tabless: Set = ["tabs_list", "tab_create", "browser_batch"]
 
     for tool in Tools.definitions where !tabless.contains(tool.name) {
       #expect(tool.properties["tabId"] != nil, "\(tool.name)")
@@ -93,7 +93,6 @@ struct ToolMappingTests {
     #expect(try map("resize_window", ["width": .number(1200), "height": .number(800)]) == .resizeWindow(tabId: 20, width: 1200, height: 800))
     #expect(try map("read_page", ["ref_id": .number(5), "depth": .number(2)]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: 5, depth: 2))
     #expect(try map("screenshot", ["region": .array([.number(10), .number(20), .number(110.4), .number(220)]), "scale": .number(0.5)]) == .screenshot(tabId: 20, region: PixelRect(x0: 10, y0: 20, x1: 110, y1: 220), scale: 0.5))
-    #expect(try Tools.waitSeconds(["seconds": .number(2.5)]) == 2.5)
   }
 
   @Test func tierOneToolsRefuseBadArguments() {
@@ -106,8 +105,40 @@ struct ToolMappingTests {
     ]
 
     for (name, arguments) in bad { #expect(throws: Failure.self, "\(name) \(arguments)") { try map(name, arguments) } }
+  }
 
-    #expect(throws: Failure.self) { try Tools.waitSeconds(["seconds": .number(11)]) }
+  @Test func waitSleepsOrWaitsForTextOrSelector() throws {
+    let session = TabSession(owned: [20, 7], current: 20)
+    let wait = { (arguments: [String: JSONValue]) in try Tools.wait(arguments, session: session) }
+    #expect(try wait(["seconds": .number(2.5)]) == .sleep(seconds: 2.5))
+    #expect(try Tools.wait(["seconds": "1"], session: TabSession()) == .sleep(seconds: 1))
+    #expect(try wait(["text": "Results"]) == .condition(tabId: 20, condition: .text("Results"), timeout: Tools.defaultWaitTimeout))
+    #expect(try wait(["selector": "#list li", "timeout": .number(0), "tabId": .number(7)]) == .condition(tabId: 7, condition: .selector("#list li"), timeout: 0))
+    #expect(try wait(["text": "Done", "timeout": .number(30)]) == .condition(tabId: 20, condition: .text("Done"), timeout: 30))
+
+    let bad: [[String: JSONValue]] = [
+      [:],
+      ["seconds": .number(11)],
+      ["seconds": .number(-1)],
+      ["seconds": .number(1), "text": "x"],
+      ["seconds": .number(1), "timeout": .number(2)],
+      ["seconds": .number(1), "tabId": .number(7)],
+      ["text": "x", "selector": "y"],
+      ["text": "  "],
+      ["selector": ""],
+      ["text": "x", "timeout": .number(31)],
+      ["text": "x", "timeout": .number(-1)],
+      ["text": .number(4)],
+    ]
+
+    for arguments in bad { #expect(throws: Failure.self, "\(arguments)") { try wait(arguments) } }
+
+    #expect { try Tools.wait(["text": "x"], session: TabSession()) } throws: { ($0 as? Failure)?.description == TabSession.noCurrent }
+    #expect(AppCommand.waitCheck(tabId: 7, condition: .text("x")).targetTab == 7)
+    #expect(try CommandLineParsing.parse(["wait-check", "--text", "Ready", "now"]).command == .waitCheck(tabId: nil, condition: .text("Ready now")))
+    #expect(try CommandLineParsing.parse(["--tab", "3", "wait-check", "--selector", "li", ">", "a"]).command == .waitCheck(tabId: 3, condition: .selector("li > a")))
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["wait-check", "Ready"]) }
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["wait-check", "--text"]) }
   }
 
   @Test func handleDialogMapsAcceptOrDismiss() throws {
@@ -209,8 +240,9 @@ struct ToolMappingTests {
     let actions = try Tools.batchActions(["actions": .array([
       .object(["name": "click", "input": .object(["ref": .number(3)])]),
       .object(["name": "tabs_list"]),
+      .object(["name": "wait", "input": .object(["text": "Saved"])]),
     ])])
-    #expect(actions.map(\.name) == ["click", "tabs_list"])
+    #expect(actions.map(\.name) == ["click", "tabs_list", "wait"])
     #expect(actions[0].input == ["ref": .number(3)])
     #expect(actions[1].input == [:])
 

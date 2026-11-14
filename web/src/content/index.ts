@@ -12,6 +12,7 @@ import { scroll, scrollIntoView } from "./scroll";
 import { snapshot } from "./snapshot";
 import { readPage } from "./tree";
 import { upload } from "./upload";
+import { waitFor } from "./waitFor";
 
 installLogger();
 installReader();
@@ -40,6 +41,8 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
         request.prefix,
       );
     if (request.op === "find") return find(request.name, request.role);
+    if (request.op === "waitFor")
+      return waitFor(request.text, request.selector);
     if (request.op === "pageText") return pageText(request.maxChars);
     if (request.op === "scroll")
       return scroll(request.ref, request.left, request.top);

@@ -148,7 +148,7 @@ describe("runCommand", () => {
       tabId: null,
       request: { op: "ping" },
     });
-    expect(rejected).toMatchObject({ ok: false });
+    expect(rejected).toMatchObject({ ok: false, unreachable: true });
     expect((rejected as { error: string }).error).toMatch(
       /^no content script answered in tab 5 .*open the URL in a new tab/,
     );
@@ -158,8 +158,24 @@ describe("runCommand", () => {
       tabId: null,
       request: { op: "ping" },
     });
+    expect(silent).toMatchObject({ ok: false, unreachable: true });
     expect((silent as { error: string }).error).toMatch(
       /open the URL in a new tab/,
+    );
+  });
+
+  test("a wait on a tab with no content script yet is pending, not failed", async () => {
+    fake.tabs.sendMessage.mockRejectedValue(
+      new Error("Could not establish connection"),
+    );
+    let result = await run({
+      type: "content",
+      tabId: null,
+      request: { op: "waitFor", text: "Ready", selector: null },
+    });
+    expect(result).toMatchObject({ ok: true, match: null, url: null });
+    expect((result as { pending: string }).pending).toMatch(
+      /^no content script answered in tab 5/,
     );
   });
 

@@ -47,6 +47,7 @@ export type PageRequest =
       depth: number | null;
     }
   | { op: "find"; name: string; role: string }
+  | { op: "waitFor"; text: string | null; selector: string | null }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: RefPath | null; left: number; top: number }
   | { op: "scrollIntoView"; ref: RefPath }
@@ -93,6 +94,14 @@ export type PageClickResult = Omit<ClickResult, "ref"> & { ref: RefPath };
 export type PageUploadResult = Omit<UploadResult, "ref"> & { ref: RefPath };
 export type PageFocusResult = Omit<FocusResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
+// The first match over the top frame, then each reached frame in document order; pending says why the page could not be read yet (no content script, mid-navigation), and url and title are then null.
+export type PageWaitResult = {
+  ok: true;
+  url: string | null;
+  title: string | null;
+  match: (PageElement & { text: string }) | null;
+  pending: string | null;
+};
 export type PageSnapshotResult = {
   ok: true;
   url: string;
@@ -186,6 +195,7 @@ export type CommandResponse =
   | PageUploadResult
   | PageFocusResult
   | PageFindResult
+  | PageWaitResult
   | PageSnapshotResult
   | PageReadResult
   | TabsResult

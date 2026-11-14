@@ -114,6 +114,7 @@ targets:
       - CLI/Tools.swift
       - CLI/TabSession.swift
       - CLI/CommandLineParsing.swift
+      - CLI/Wait.swift
       - App/ClaudeSetup.swift
       - App/ClientCredentials.swift
       - App/ApprovalQueue.swift

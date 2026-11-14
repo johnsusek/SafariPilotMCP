@@ -51,7 +51,10 @@ export type LoggedEvent = {
 
 // Click kinds named like Claude in Chrome's computer actions, and the keys held during a click.
 export type ClickAction =
-  "left_click" | "double_click" | "triple_click" | "right_click";
+  | "left_click"
+  | "double_click"
+  | "triple_click"
+  | "right_click";
 export type Modifier = "cmd" | "shift" | "alt" | "ctrl";
 // A local file handed to the page: data is its bytes in base64, lastModified epoch ms, mimeType "" when unknown (as browsers report it).
 export type UploadFile = {
@@ -93,6 +96,8 @@ export type ContentRequest =
       prefix: string;
     }
   | { op: "find"; name: string; role: string }
+  // The first shown element holding text (case and whitespace ignored) or matching selector; exactly one of them is set.
+  | { op: "waitFor"; text: string | null; selector: string | null }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: number | null; left: number; top: number }
   | { op: "scrollIntoView"; ref: number }
@@ -110,8 +115,13 @@ export type ContentRequest =
       clear: boolean;
     };
 
-// timeout marks a frame that did not answer in time, as opposed to one that is gone.
-export type Failure = { ok: false; error: string; timeout?: true };
+// timeout marks a frame that did not answer in time, as opposed to one that is gone; unreachable one whose content script did not answer at all (none yet, or mid-navigation).
+export type Failure = {
+  ok: false;
+  error: string;
+  timeout?: true;
+  unreachable?: true;
+};
 
 // An iframe in this document: frameId is the id Safari gives its frame (-1 when it has none yet), box its content box,
 // clip the part of box this document shows (null when none), and transformed whether a CSS transform or zoom moves it,
@@ -250,6 +260,15 @@ export type ReadPageResult = {
 // Matches get refs even when they are not interactive.
 export type FindResult = { ok: true; matches: ElementInfo[] };
 
+// waitFor: the matched element with the text it shows, collapsed to 80 characters, or null when nothing matches yet.
+export type WaitMatch = ElementInfo & { text: string };
+export type WaitForResult = {
+  ok: true;
+  url: string;
+  title: string;
+  match: WaitMatch | null;
+};
+
 // pageText: readable text of the page, main or article content first, else the body.
 export type PageTextResult = {
   ok: true;
@@ -265,7 +284,12 @@ export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
 
 // exception is an uncaught error or an unhandled promise rejection.
 export type ConsoleLevel =
-  "log" | "info" | "warn" | "error" | "debug" | "exception";
+  | "log"
+  | "info"
+  | "warn"
+  | "error"
+  | "debug"
+  | "exception";
 // time is epoch ms, url the frame's document URL when logged, source the caller's url:line:column when known.
 export type ConsoleEntry = {
   level: ConsoleLevel;
@@ -296,6 +320,7 @@ export type ContentResponse =
   | UploadResult
   | ReadPageResult
   | FindResult
+  | WaitForResult
   | PageTextResult
   | ScrollResult
   | FramesResult

@@ -27,6 +27,7 @@ enum CommandLineParsing {
     read-page [--all] [--max-chars N] [--ref REF] [--depth N]  element tree with refs
     find [NAME] [--role ROLE]       visible elements whose name contains NAME and role is ROLE
     text [--max-chars N]            readable page text
+    wait-check --text TEXT | --selector SELECTOR  one look in every frame for shown text or a shown element (MCP wait repeats it)
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
     scroll-to REF                   center REF in the view
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
@@ -138,6 +139,12 @@ enum CommandLineParsing {
 
       // NAME is free text, so it skips the stray option check below.
       return Invocation(command: .find(tabId: tabId, name: name, role: role))
+    case "wait-check":
+      guard let kind = rest.first, ["--text", "--selector"].contains(kind) else { throw Failure(description: "wait-check needs --text TEXT or --selector SELECTOR") }
+
+      // The value is every word after its option, verbatim, so it skips the stray option check below.
+      let value = rest.dropFirst().joined(separator: " ")
+      return try Invocation(command: .waitCheck(tabId: tabId, condition: WaitCondition(text: kind == "--text" ? value : nil, selector: kind == "--selector" ? value : nil)))
     case "navigate":
       guard let target = rest.first else { throw Failure(description: "navigate needs a URL, back or forward") }
 

@@ -6,6 +6,7 @@ import type {
   PageElement,
   PageEvent,
   PageRequest,
+  PageWaitResult,
 } from "../shared/commands";
 import { toTop } from "../shared/frameGeometry";
 import type {
@@ -22,6 +23,7 @@ import type {
   PageTextResult,
   ReadPageResult,
   UploadResult,
+  WaitForResult,
 } from "../shared/protocol";
 import {
   inFrame,
@@ -99,6 +101,43 @@ async function find(send: Send, request: PageRequest & { op: "find" }) {
     ...matches.filter((match) => !match.inViewport),
   ];
   return { ok: true as const, matches: ordered.slice(0, findLimit) };
+}
+
+// A page whose top frame has no content script yet or is mid-navigation is pending, not failed, so a wait polls on through a navigation; any other failure is the caller's.
+let pending = (failure: Failure): PageWaitResult | Failure =>
+  failure.unreachable || failure.timeout
+    ? { ok: true, url: null, title: null, match: null, pending: failure.error }
+    : failure;
+
+// The top frame's match wins, then each reached frame's in document order; frames that do not answer are skipped, as find skips them.
+async function waitFor(send: Send, request: PageRequest & { op: "waitFor" }) {
+  let answers = await fanOut(send, request);
+
+  if (!Array.isArray(answers)) return pending(answers);
+
+  let top = answers[0].reply;
+
+  if (!top.ok) return pending(top);
+
+  let found = answers.find(
+    ({ reply }) => reply.ok && (reply as WaitForResult).match,
+  );
+  let { url, title } = top as WaitForResult;
+  let result: PageWaitResult = {
+    ok: true,
+    url,
+    title,
+    match: null,
+    pending: null,
+  };
+
+  if (!found) return result;
+
+  let match = (found.reply as WaitForResult).match!;
+  return {
+    ...result,
+    match: { ...element(match, found.frame), text: match.text },
+  };
 }
 
 async function pageText(send: Send, maxChars: number) {
@@ -392,6 +431,8 @@ async function dispatch(
   if (request.op === "readPage") return await readPage(send, request);
 
   if (request.op === "find") return await find(send, request);
+
+  if (request.op === "waitFor") return await waitFor(send, request);
 
   if (request.op === "pageText") return await pageText(send, request.maxChars);
 
