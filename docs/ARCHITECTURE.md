@@ -105,6 +105,6 @@ Runs live checks against real sites and an MCP stdio session. Sites change, so a
 scripts/release.sh X.Y.Z
 ```
 
-Sets the version, commits, tags `vX.Y.Z` and pushes. The tag starts the Release workflow, which builds a Developer ID signed DMG, notarizes and staples it, signs the Sparkle appcast, publishes a GitHub release with `docs/releases/X.Y.Z.md` as its notes and bumps the Homebrew cask. Running the workflow by hand from a branch is a dry run that attaches the DMG to the run.
+Sets the version, builds a Developer ID signed DMG, notarizes and staples it, then commits, tags `vX.Y.Z`, pushes and publishes a GitHub release with `docs/releases/X.Y.Z.md` as its notes. `--no-publish` stops after the DMG. Needs notary credentials saved once with `xcrun notarytool store-credentials SafariPilot`.
 
 Every build gets a unique identity; the app refuses commands when Safari runs an extension from a different build, naming the stale copy's path.

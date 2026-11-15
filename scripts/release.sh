@@ -1,11 +1,26 @@
 #!/bin/zsh
-# Usage: scripts/release.sh X.Y.Z
-# Bumps the version, commits it, tags vX.Y.Z and pushes; the Release workflow then builds, notarizes and publishes it with docs/releases/X.Y.Z.md as its notes and bumps the johnsusek/tap cask.
+# Usage: scripts/release.sh X.Y.Z [--no-publish]
+# Builds a Developer ID signed, notarized and stapled DMG at that version and a Sparkle appcast for it, then commits the version bump, tags vX.Y.Z, pushes, publishes a GitHub release with docs/releases/X.Y.Z.md as its notes and bumps the johnsusek/tap cask.
+# The appcast is signed with the EdDSA key that Sparkle's generate_keys keeps in the login keychain; project.yml's SUPublicEDKey must be its public half.
+# --no-publish stops after the DMG and puts the version files back. Notary credentials come from `xcrun notarytool store-credentials SafariPilot` (or $NOTARY_PROFILE).
 set -euo pipefail
 
-version=${1:?usage: scripts/release.sh X.Y.Z}
+version=${1:?usage: scripts/release.sh X.Y.Z [--no-publish]}
+publish=1
+[[ ${2:-} == --no-publish ]] && publish=0
 root="${0:A:h:h}"
+profile=${NOTARY_PROFILE:-SafariPilot}
+out="$root/build/release"
+derived="$root/build/ReleaseData"
+archive="$out/SafariPilot.xcarchive"
+app="$out/export/SafariPilot.app"
+dmg="$out/SafariPilot-$version.dmg"
 notes="docs/releases/$version.md"
+sparkle="$derived/SourcePackages/artifacts/sparkle/Sparkle/bin"
+repo=https://github.com/johnsusek/SafariPilotMCP
+tap=$(brew --repository johnsusek/tap)
+cask="$tap/Casks/safaripilot.rb"
+lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 fail() { echo "$1" >&2; exit 1; }
 
@@ -15,12 +30,84 @@ cd "$root"
 git diff --quiet HEAD || fail "commit or stash tracked changes first"
 git rev-parse -q --verify "refs/tags/v$version" >/dev/null && fail "tag v$version already exists"
 git cat-file -e "HEAD:$notes" 2>/dev/null || fail "commit release notes at $notes first"
+(( ! publish )) || git -C "$tap" remote get-url origin >/dev/null 2>&1 || fail "no pushable tap at $tap: create johnsusek/homebrew-tap and brew tap it"
+xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1 || fail "no notary credentials: run xcrun notarytool store-credentials $profile"
 
+# Put the version files back unless the release commit took them.
+trap 'git checkout -q HEAD -- project.yml extension/manifest.json' EXIT
 build=$(( $(git rev-list --count HEAD) + 1 ))
 sed -i '' -E "s/^(    MARKETING_VERSION: ).*/\1\"$version\"/; s/^(    CURRENT_PROJECT_VERSION: ).*/\1\"$build\"/" project.yml
 sed -i '' -E "s/^(  \"version\": ).*/\1\"$version\",/" extension/manifest.json
 
+rm -rf "$out"
+mkdir -p "$out"
+npm --prefix web ci --silent && npm --prefix web run --silent build
+xcodegen generate --quiet
+xcodebuild archive -project SafariPilot.xcodeproj -scheme SafariPilot -configuration Release -destination 'generic/platform=macOS' -archivePath "$archive" -derivedDataPath "$derived" -allowProvisioningUpdates | grep -E " error:|^\*\* ARCHIVE" || true
+[[ -d $archive ]] || fail "archive failed"
+[[ $("$sparkle/generate_keys" -p 2>/dev/null) == $(sed -nE 's/^ +SUPublicEDKey: (.*)/\1/p' project.yml) ]] || fail "SUPublicEDKey in project.yml does not match the keychain's Sparkle key: run $sparkle/generate_keys"
+
+cat > "$out/ExportOptions.plist" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>method</key>
+  <string>developer-id</string>
+  <key>signingStyle</key>
+  <string>automatic</string>
+  <key>teamID</key>
+  <string>WX2UGCD2SK</string>
+</dict>
+</plist>
+EOF
+xcodebuild -exportArchive -archivePath "$archive" -exportPath "$out/export" -exportOptionsPlist "$out/ExportOptions.plist" -allowProvisioningUpdates | grep -E " error:|^\*\* EXPORT" || true
+[[ -d $app ]] || fail "export failed"
+codesign --verify --deep --strict "$app"
+
+# Xcode registers what it builds; Safari must keep running the installed copy, not these.
+for stale in "$out"/**/SafariPilot.app(N) "$derived"/**/SafariPilot.app(N); do
+  pluginkit -r "$stale/Contents/PlugIns/SafariPilotExtension.appex" 2>/dev/null || true
+  "$lsregister" -u "$stale" 2>/dev/null || true
+done
+
+[[ -d /Applications/SafariPilot.app ]] && pluginkit -a /Applications/SafariPilot.app/Contents/PlugIns/SafariPilotExtension.appex
+
+mkdir "$out/dmg"
+ditto "$app" "$out/dmg/SafariPilot.app"
+ln -s /Applications "$out/dmg/Applications"
+hdiutil create -quiet -volname SafariPilot -srcfolder "$out/dmg" -format UDZO "$dmg"
+codesign --sign "Developer ID Application" --timestamp "$dmg"
+
+echo "notarizing $dmg"
+result=$(xcrun notarytool submit "$dmg" --keychain-profile "$profile" --wait --output-format json)
+verdict=$(plutil -extract status raw - <<< "$result")
+
+if [[ $verdict != Accepted ]]; then
+  xcrun notarytool log "$(plutil -extract id raw - <<< "$result")" --keychain-profile "$profile" >&2
+  fail "notarization: $verdict"
+fi
+
+xcrun stapler staple -q "$dmg"
+spctl --assess --type open --context context:primary-signature "$dmg"
+spctl --assess --type execute "$app"
+
+# The feed URL reads appcast.xml from the latest release, so it lists only this version; its .md twin becomes the embedded notes.
+mkdir "$out/feed"
+cp "$dmg" "$out/feed/"
+cp "$notes" "$out/feed/SafariPilot-$version.md"
+"$sparkle/generate_appcast" --embed-release-notes --maximum-deltas 0 --download-url-prefix "$repo/releases/download/v$version/" --link "$repo" "$out/feed"
+
+if (( ! publish )); then
+  echo "built $dmg (not published)"
+  exit 0
+fi
+
 git commit -q -m "Release $version" -- project.yml extension/manifest.json
 git tag -a "v$version" -m "SafariPilot $version"
 git push -q origin main "v$version"
-echo "pushed v$version; follow it with: gh run watch \$(gh run list -w Release -L 1 --json databaseId -q '.[0].databaseId')"
+gh release create "v$version" "$dmg" "$out/feed/appcast.xml" --title "SafariPilot $version" --notes-file "$notes" --verify-tag
+
+sed -i '' -E "s/^(  version ).*/\1\"$version\"/; s/^(  sha256 ).*/\1\"$(shasum -a 256 "$dmg" | cut -d' ' -f1)\"/" "$cask"
+git -C "$tap" commit -q -m "safaripilot $version" -- Casks/safaripilot.rb
+git -C "$tap" push -q
