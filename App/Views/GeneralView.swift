@@ -4,6 +4,7 @@ import SwiftUI
 struct GeneralView: View {
   let model: AppModel
   @AppStorage("showInMenuBar") private var showInMenuBar = true
+  @AppStorage(PageFetchRequest.writesKey) private var pageFetchWrites = false
 
   var body: some View {
     Form {
@@ -28,6 +29,13 @@ struct GeneralView: View {
         }
 
         Toggle("Check for Updates Automatically", isOn: Bindable(model.updates).automatic)
+      }
+
+      Section {
+        Toggle(isOn: $pageFetchWrites) {
+          Text(PageFetchRequest.writesLabel)
+          Text("Lets Claude send POST, PUT, DELETE and other requests that can change a site's data, not only GET and HEAD.")
+        }
       }
 
       Section("Status") {

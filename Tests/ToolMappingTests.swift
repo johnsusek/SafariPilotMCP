@@ -10,9 +10,11 @@ struct ToolMappingTests {
     defer { try? FileManager.default.removeItem(at: file) }
     let samples: [String: JSONValue] = ["tabId": .number(7), "url": "https://example.com", "name": "Sign in", "ref": .number(3), "to": .number(4), "value": "hello", "direction": "down", "width": .number(800), "height": .number(600), "text": "document.title", "action": "accept", "paths": .array([.string(file.path)])]
 
-    // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
+    // key needs keys or text and page_fetch url or requestId, but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
+    let either: [String: [String: JSONValue]] = ["key": ["keys": "Enter"], "page_fetch": ["url": "/api"]]
+
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
-      let arguments = samples.filter { tool.required.contains($0.key) }.merging(tool.name == "key" ? ["keys": "Enter"] : [:]) { $1 }
+      let arguments = samples.filter { tool.required.contains($0.key) }.merging(either[tool.name] ?? [:]) { $1 }
       #expect(throws: Never.self) { try map(tool.name, arguments) }
     }
   }

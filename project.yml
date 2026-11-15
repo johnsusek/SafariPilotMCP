@@ -113,6 +113,7 @@ targets:
       - Shared/Contract.swift
       - Shared/PageRef.swift
       - Shared/Redaction.swift
+      - Shared/PageFetch.swift
       - Shared/ViewportMapping.swift
     dependencies:
       - package: MCP

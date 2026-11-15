@@ -103,6 +103,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case networkRequests(tabId: Int?, urlPattern: String?, limit: Int, clear: Bool)
   /// One logged request with its headers and, for a fetch or XMLHttpRequest call, its bodies.
   case networkRequest(tabId: Int?, requestId: String)
+  /// Sends a request from the page's main world, or replays a logged one with its headers, and returns the redacted response.
+  case pageFetch(tabId: Int?, request: PageFetchRequest)
   /// Presses OK (accept) or Cancel on the alert, confirm or prompt shown over the tab, typing promptText into a prompt first.
   case dialog(tabId: Int?, accept: Bool, promptText: String?)
   /// One look for the condition in every reached frame; the MCP server's wait repeats it, so no command holds the queue for a whole wait.
@@ -161,6 +163,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     case let .dialog(tabId, accept, promptText?): "dialog(tabId: \(String(describing: tabId)), accept: \(accept), promptText: \(promptText.count) characters)"
     case let .navigate(tabId, url): "navigate(tabId: \(String(describing: tabId)), url: \(Redaction.url(url)))"
     case let .tabCreate(url?): "tabCreate(url: \(Redaction.url(url)))"
+    case let .pageFetch(tabId, request): "pageFetch(tabId: \(String(describing: tabId)), \(request.logLabel))"
     default: String(describing: self)
     }
   }
@@ -177,6 +180,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   var targetTab: Int? {
     switch self {
     case .status, .tabs, .tabCreate: nil
+    case let .pageFetch(tabId, _): tabId
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
     case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }

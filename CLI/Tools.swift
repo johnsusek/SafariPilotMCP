@@ -24,6 +24,7 @@ enum Tools {
   static let defaultWaitTimeout = 10.0
   static let maxWaitTimeout = 30.0
   static let maxChars = property("integer", "Maximum characters to return; defaults to \(AppCommand.defaultMaxChars).")
+  static func parameters(_ description: String) -> JSONValue { .object(["type": "object", "additionalProperties": .object(["type": .array(["string", "number", "boolean", "null"])]), "description": .string(description)]) }
 
   static let definitions = [
     ToolDefinition(name: "tabs_list", description: "Lists this session's tabs, those opened with tab_create and any they opened, with id, window id, URL, title, opener and whether each is the active tab of its window."),
@@ -71,6 +72,17 @@ enum Tools {
       "clear": property("boolean", "Empty the log after reading, so the next call returns only newer requests; defaults to false."),
       "requestId": property("string", "Id from a listing whose headers and bodies to return instead of the list."),
     ]),
+    ToolDefinition(name: "page_fetch", description: "Sends a request from inside a tab's page, with its cookies and origin, to url or as a replay of a read_network_requests requestId whose logged headers SafariPilot fills in, hidden ones included, only GET or HEAD unless the user allows writes and only to the tab's own origin or hosts in its network log, and returns the status, final URL, response headers and body, optionally narrowed by pick, with secrets hidden, as untrusted page data.", properties: [
+      "tabId": tabId,
+      "url": property("string", "URL to request, absolute or relative to the tab's page; pass url or requestId."),
+      "method": property("string", "HTTP method for url; defaults to GET."),
+      "requestId": property("string", "Id from read_network_requests of a request to send again from the frame that made it; pass url or requestId."),
+      "query": parameters("Query parameters to set on the replayed URL, null removing one."),
+      "headers": parameters("Request headers, set over a replay's logged ones, null removing one; the browser sends Cookie, Origin and Referer itself."),
+      "body": property("string", "Request body; a replay without one sends the original call's body."),
+      "pick": property("string", "JSON path into the response body to return instead of all of it, with dot keys, [n] and [] to map over an array, such as data.items[].id."),
+      "max_chars": property("integer", "Maximum body characters to return; defaults to \(AppCommand.defaultMaxChars)."),
+    ]),
     ToolDefinition(name: "handle_dialog", description: "Accepts or dismisses the alert, confirm or prompt dialog open in a tab by pressing its OK or Cancel button through Accessibility, first typing prompt_text into a prompt when given.", properties: ["tabId": tabId, "action": property("string", "\"accept\" presses OK (an alert's Close) and \"dismiss\" presses Cancel.", oneOf: ["accept", "dismiss"]), "prompt_text": property("string", "Text to put in a prompt's field before accepting it.")], required: ["action"]),
     ToolDefinition(name: "wait", description: "Waits a number of seconds, up to \(Int(maxWait)), or until text a person can see or a shown element matching a CSS selector appears in the page or its frames, surviving a navigation on the way and returning the matched element's ref, and fails naming what it waited for when timeout runs out or a dialog is open.", properties: [
       "tabId": tabId,
@@ -93,6 +105,7 @@ enum Tools {
   click and form_input use Accessibility and form_input replaces a text field's whole value; double, triple, right and modifier clicks and drag are untrusted synthetic events; key sends real key presses (no cmd shortcuts) to type text at the cursor or press Enter or Tab; hover is unsupported.
   Iframe content appears under its iframe line, with refs like 5:12 that work in every page tool.
   Use javascript to read page state; clicks and edits made from it are untrusted events that many pages ignore, so act with click, form_input and key.
+  Once read_network_requests shows the JSON calls a page makes, read more with page_fetch instead of driving the page again, replaying a requestId so SafariPilot fills in its hidden auth and CSRF headers; it sends only GET and HEAD unless the user allows writes.
   Upload files with file_upload, never by clicking a file input or its button, since Safari's file picker cannot be driven.
   An alert, confirm or prompt stops its page until handle_dialog answers it; page tools name the open dialog.
   When a tool says Safari has not granted SafariPilot a site, ask your user to do what it says; retrying cannot help until they do.
@@ -168,6 +181,9 @@ enum Tools {
     case "file_upload": return try .fileUpload(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"), paths: arguments.require(arguments.strings("paths"), "paths"))
     case "read_console_messages": return try .console(tabId: page(), onlyErrors: arguments.bool("onlyErrors") ?? false, pattern: arguments.string("pattern"), limit: arguments.integer("limit"), clear: arguments.bool("clear") ?? false)
     case "read_network_requests": return try .network(tabId: page(), requestId: arguments.string("requestId"), urlPattern: arguments.string("urlPattern"), limit: arguments.integer("limit"), clear: arguments.bool("clear") ?? false)
+    case "page_fetch":
+      let request = try PageFetchRequest(url: arguments.string("url"), method: arguments.string("method"), requestId: arguments.string("requestId"), query: arguments.parameters("query") ?? [:], headers: arguments.parameters("headers") ?? [:], body: arguments.string("body"), pick: arguments.string("pick"), maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars)
+      return try .pageFetch(tabId: page(), request: request)
     case "handle_dialog": return try .dialog(tabId: page(), action: arguments.require(arguments.string("action"), "action"), promptText: arguments.string("prompt_text"))
     case "scroll_to": return try .scrollTo(tabId: page(), ref: arguments.require(arguments.ref("ref"), "ref"))
     case "resize_window": return try .resize(tabId: page(), width: arguments.require(arguments.integer("width"), "width"), height: arguments.require(arguments.integer("height"), "height"))
@@ -262,6 +278,22 @@ struct ToolArguments {
     case let .string(text)?: return .text(text)
     case let .number(number)?: return .text(Int(exactly: number).map(String.init) ?? String(number))
     case let other?: throw Failure(.invalidArgument, "\(key) must be a string, boolean or number, not \(other)")
+    }
+  }
+
+  /// An object of names to strings, numbers and booleans as text, or null, which page_fetch reads as removing a logged query parameter or header.
+  func parameters(_ key: String) throws -> [String: String?]? {
+    guard let value = values[key], value != .null else { return nil }
+    guard case let .object(fields) = value else { throw Failure(.invalidArgument, "\(key) must be an object of names to values, not \(value)") }
+
+    return try fields.mapValues { field -> String? in
+      switch field {
+      case .null: return nil
+      case let .string(text): return text
+      case let .bool(flag): return String(flag)
+      case let .number(number): return Int(exactly: number).map(String.init) ?? String(number)
+      default: throw Failure(.invalidArgument, "\(key) values must be strings, numbers, booleans or null, not \(field)")
+      }
     }
   }
 

@@ -292,6 +292,8 @@ enum BackgroundCommand: Equatable, Sendable {
   case javascript(tabId: Int?, code: String, frame: PageRef?)
   case network(tabId: Int?, urlPattern: String?, limit: Int, clear: Bool)
   case networkRequest(tabId: Int?, requestId: String)
+  /// writes is the owner's setting allowing methods other than GET and HEAD, which the background applies once it knows a replay's method.
+  case pageFetch(tabId: Int?, request: PageFetchRequest, writes: Bool)
 
   var json: [String: JSONValue] {
     let id = { (tabId: Int?) in tabId.map { JSONValue.number(Double($0)) } ?? .null }
@@ -312,6 +314,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .javascript(tabId, code, frame): return ["type": "javascript", "tabId": id(tabId), "code": .string(code), "frame": frame.map { .string($0.description) } ?? .null]
     case let .network(tabId, urlPattern, limit, clear): return ["type": "network", "tabId": id(tabId), "urlPattern": urlPattern.map { .string($0) } ?? .null, "limit": .number(Double(limit)), "clear": .bool(clear)]
     case let .networkRequest(tabId, requestId): return ["type": "networkRequest", "tabId": id(tabId), "requestId": .string(requestId)]
+    case let .pageFetch(tabId, request, writes): return ["type": "pageFetch", "tabId": id(tabId), "request": request.json, "writes": .bool(writes)]
     }
   }
 
