@@ -1,0 +1,38 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: xcode-27
+    timeout-minutes: 30
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # The runner's Node 24 lacks Uint8Array.fromBase64, which upload.ts uses.
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+
+      - name: Web tests
+        run: |
+          npm --prefix web ci --silent
+          npm --prefix web run typecheck
+          npm --prefix web test
+
+      - name: Swift tests
+        run: |
+          brew install --quiet xcodegen
+          xcodegen generate --quiet
+          xcodebuild test -quiet -project SafariPilot.xcodeproj -scheme SafariPilot -destination 'platform=macOS' -derivedDataPath build/TestData CODE_SIGNING_ALLOWED=NO
