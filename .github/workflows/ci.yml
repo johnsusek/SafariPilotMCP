@@ -25,10 +25,11 @@ jobs:
         with:
           node-version: 26
 
-      - name: Web tests
+      - name: Web lint and tests
         run: |
           npm --prefix web ci --silent
           npm --prefix web run typecheck
+          npm --prefix web run lint
           npm --prefix web test
 
       - name: Swift tests

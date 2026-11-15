@@ -186,7 +186,7 @@ let pilot = (tabId: number) => {
   pilotTabs.add(tabId);
   logs.set(tabId, pending.get(tabId) ?? { entries: [], dropped: 0 });
   pending.delete(tabId);
-  save();
+  void save();
   updateListening();
 };
 
@@ -200,7 +200,7 @@ export let forget = (tabId: number) => {
   for (let [requestId, request] of open)
     if (request.tabId === tabId) open.delete(requestId);
 
-  save();
+  void save();
   updateListening();
 };
 
@@ -240,7 +240,7 @@ export async function restorePilotTabs() {
   for (let tabId of Array.isArray(saved) ? saved : [])
     if (typeof tabId === "number" && openIds.has(tabId)) pilot(tabId);
 
-  save();
+  void save();
 }
 
 // A tab a pilot tab opens, such as a popup, is piloted too.

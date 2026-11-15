@@ -7,12 +7,16 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
     "format": "prettier --write src build.mjs ../testpage",
-    "testpage": "python3 -m http.server 8765 --bind 127.0.0.1 --directory ../testpage"
+    "testpage": "python3 -m http.server 8765 --bind 127.0.0.1 --directory ../testpage",
+    "lint": "oxlint --deny-warnings src build.mjs && prettier --check src build.mjs ../testpage"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.7",
     "esbuild": "^0.28.2",
     "happy-dom": "^21.0.4",
+    "oxlint": "^1.93.0",
+    "oxlint-tsgolint": "^7.0.2007",
+    "prettier": "^3.10.1",
     "typescript": "^7.0.2",
     "vitest": "^5.1.0"
   },

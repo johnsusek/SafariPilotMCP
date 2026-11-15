@@ -248,23 +248,22 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
       if (call) {
         let record = start(call.method, call.url, describeBody(args[0], page));
         keepBody(record, args[0]);
-        let request = this;
-        request.addEventListener("loadend", () => {
+        this.addEventListener("loadend", () => {
           try {
-            if (request.status === 0) {
+            if (this.status === 0) {
               record.note = "failed: no response";
               return;
             }
 
             finish(
               record,
-              request.status,
-              request.getResponseHeader("content-type") ?? "",
+              this.status,
+              this.getResponseHeader("content-type") ?? "",
             );
 
             if (record.note !== null) return;
 
-            let type = request.responseType;
+            let type = this.responseType;
 
             if (type !== "" && type !== "text" && type !== "json") {
               record.note = `not text (responseType ${type})`;
@@ -272,9 +271,7 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
             }
 
             let text =
-              type === "json"
-                ? stringify(request.response)
-                : request.responseText;
+              type === "json" ? stringify(this.response) : this.responseText;
             let clipped = clip(text);
             record.responseBody = clipped.text;
             record.truncated = clipped.cut;

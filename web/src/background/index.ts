@@ -54,7 +54,7 @@ let pollLoop = async () => {
 
 let wake = (reason: string) => {
   lifecycle(polling ? `event ${reason}` : `wake ${reason}`);
-  pollLoop();
+  void pollLoop();
 };
 
 browser.runtime.onStartup.addListener(() => wake("onStartup"));
@@ -92,9 +92,9 @@ let connect = () => {
 };
 let port: chrome.runtime.Port | null = connect();
 
-browser.alarms.create("keepalive", { periodInMinutes: 1 });
+void browser.alarms.create("keepalive", { periodInMinutes: 1 });
 lifecycle("start");
 restorePilotTabs().catch((error) =>
   lifecycle(`pilot tabs not restored: ${error}`),
 );
-pollLoop();
+void pollLoop();
