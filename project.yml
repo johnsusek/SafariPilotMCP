@@ -49,7 +49,7 @@ targets:
         NSHumanReadableCopyright: © 2026 John Susek
         NSSupportsSuddenTermination: false
         SUFeedURL: https://github.com/johnsusek/SafariPilotMCP/releases/latest/download/appcast.xml
-        SUPublicEDKey: MISSING-RUN-generate_keys
+        SUPublicEDKey: af0mLsWu4Mkhz7apmzdIVpUOb173cCsfwVp0mWSHUOE=
         SUEnableAutomaticChecks: true
     entitlements:
       path: App/SafariPilot.entitlements
