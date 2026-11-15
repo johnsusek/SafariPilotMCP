@@ -1,4 +1,4 @@
-<p align="center"><img src="docs/logo/logo-color.svg" width="128" alt="SafariPilot"></p>
+<p align="center"><img src="docs/logo/logo-color.svg" height="160" alt="SafariPilot"></p>
 
 # SafariPilot
 
