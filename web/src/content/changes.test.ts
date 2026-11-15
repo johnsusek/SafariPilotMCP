@@ -250,6 +250,22 @@ describe("waiting for quiet", () => {
     expect(refless(result.lines)).toEqual(['~ paragraph "c" (was "a")']);
   });
 
+  test("inline style changes alone do not restart the quiet clock", async () => {
+    document.body.innerHTML = "<main><p id=bar>Loading</p></main>";
+    let bar = document.querySelector("#bar")!;
+    startDiff();
+    let ticking = setInterval(
+      () => bar.setAttribute("style", `width: ${Date.now() % 100}px`),
+      20,
+    );
+    let begun = Date.now();
+    let result = await takeDiff("", 2000, 2000);
+    clearInterval(ticking);
+    expect(Date.now() - begun).toBeLessThan(1000);
+    expect(result.settled).toBe(true);
+    expect(result.lines).toEqual([]);
+  });
+
   test("waits for fetch and XHR calls the main-world capture counts", async () => {
     let asked: number[] = [];
     let answer = (event: Event) => {

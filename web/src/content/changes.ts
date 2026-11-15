@@ -131,7 +131,9 @@ export function startDiff(): DiffStartResult {
     changed: started,
     before: snapshot(),
     observer: new MutationObserver((records) => {
-      state.changed = Date.now();
+      // A page that animates from script (a carousel, a progress bar) rewrites inline styles nonstop, so those alone never restart the quiet clock.
+      if (records.some((record) => record.attributeName !== "style"))
+        state.changed = Date.now();
 
       for (let record of records) {
         for (let node of record.addedNodes) observe(node, state.observer);
