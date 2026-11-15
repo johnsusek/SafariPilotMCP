@@ -57,10 +57,10 @@ describe("markdownOf", () => {
     );
   });
 
-  test("a data table becomes a markdown table: header row, spans, escaped pipes and links", () => {
+  test("a data table becomes a markdown table: header row, spans, escaped pipes and backslashes, links", () => {
     expect(
       markdown(
-        '<table><caption>Plans</caption><thead><tr><th>Plan</th><th>Price</th><th>Note</th></tr></thead><tbody><tr><td><a href="/pro">Pro</a></td><td>$5 | mo</td><td>Best</td></tr><tr style="display: none"><td>Old</td></tr><tr><td colspan="2">Team</td><td>Soon</td></tr><tr><td>Free</td></tr></tbody></table>',
+        '<table><caption>Plans</caption><thead><tr><th>Plan</th><th>Price</th><th>Note</th></tr></thead><tbody><tr><td><a href="/pro">Pro</a></td><td>$5 | mo</td><td>Best</td></tr><tr style="display: none"><td>Old</td></tr><tr><td colspan="2">Team</td><td>Soon</td></tr><tr><td>Free</td><td>a\\|b</td><td>C:\\</td></tr></tbody></table>',
       ),
     ).toBe(
       [
@@ -70,7 +70,7 @@ describe("markdownOf", () => {
           "| --- | --- | --- |",
           "| [Pro](/pro) | $5 \\| mo | Best |",
           "| Team |  | Soon |",
-          "| Free |  |  |",
+          "| Free | a\\\\\\|b | C:\\\\ |",
         ].join("\n"),
       ].join("\n\n"),
     );

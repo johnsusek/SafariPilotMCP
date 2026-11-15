@@ -191,7 +191,7 @@ function table(element: HTMLTableElement, sink: Sink) {
       let cells = Array.from(row.cells)
         .filter(isShown)
         .flatMap((cell) => [
-          inlineText(cell, sink).replace(/\|/g, "\\|"),
+          inlineText(cell, sink).replace(/[\\|]/g, "\\$&"),
           ...Array<string>(Math.max(cell.colSpan - 1, 0)).fill(""),
         ]);
 
