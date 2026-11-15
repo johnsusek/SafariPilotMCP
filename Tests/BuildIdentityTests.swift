@@ -33,7 +33,7 @@ struct BuildIdentityTests {
     #expect(try ExtensionBuild(message: message(background: nil, appex: "x")).mismatch(app: "x") != nil)
     #expect(try ExtensionBuild(message: message(background: "x", appex: nil)).mismatch(app: "x") != nil)
     #expect(try ExtensionBuild(message: message(background: nil, appex: nil)).mismatch(app: nil) != nil)
-    #expect(try ExtensionBuild(message: .object(["kind": "poll"])).mismatch(app: "x") != nil)
+    #expect(ExtensionBuild(message: .object(["kind": "poll"])).mismatch(app: "x") != nil)
   }
 
   @Test func theMismatchNamesBothSidesTheCopyAndTheFix() {
