@@ -6,4 +6,4 @@ extension/content.js
 extension/main.js
 .DS_Store
 extension/build.json
-DECISIONS.md
+notes/
