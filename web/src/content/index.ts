@@ -10,6 +10,7 @@ import { inspect, setColor } from "./inspect";
 import { locate } from "./locate";
 import { installNetworkReader, takeBody } from "./network";
 import { syntheticClick } from "./mouse";
+import { installPageFetchReader, pageFetch } from "./pageFetch";
 import { pageText } from "./pageText";
 import { scroll, scrollIntoView } from "./scroll";
 import { snapshot } from "./snapshot";
@@ -20,6 +21,7 @@ import { waitFor } from "./waitFor";
 installLogger();
 installReader();
 installNetworkReader();
+installPageFetchReader();
 
 async function handle(request: ContentRequest): Promise<ContentResponse> {
   try {
@@ -64,6 +66,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       );
     if (request.op === "networkBody")
       return takeBody(request.url, request.method, request.time);
+    if (request.op === "pageFetch") return await pageFetch(request);
     if (request.op === "diffStart") return startDiff();
     if (request.op === "diff")
       return await takeDiff(request.prefix, request.waitMs, request.maxChars);

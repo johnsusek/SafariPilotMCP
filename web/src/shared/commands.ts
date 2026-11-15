@@ -194,7 +194,27 @@ export type Command =
       clear: boolean;
     }
   // One logged request with its headers and, for a fetch or XMLHttpRequest call, the bodies its frame's capture kept.
-  | { type: "networkRequest"; tabId: number | null; requestId: string };
+  | { type: "networkRequest"; tabId: number | null; requestId: string }
+  // Sends a request from the page's main world; writes is the app's setting allowing methods other than GET and HEAD.
+  | {
+      type: "pageFetch";
+      tabId: number | null;
+      request: PageFetchRequest;
+      writes: boolean;
+    };
+
+// Either url (absolute or relative to the tab's URL) with method, or requestId to replay with query parameters set; a null query or header value removes
+// the logged one, and a null body in a replay sends the original call's body.
+export type PageFetchRequest = {
+  url: string | null;
+  method: string | null;
+  requestId: string | null;
+  query: Record<string, string | null>;
+  headers: Record<string, string | null>;
+  body: string | null;
+  pick: string | null;
+  maxChars: number;
+};
 
 export type TabsResult = { ok: true; tabs: TabInfo[] };
 // loading is set by commands that wait for a load: true when a created tab was still loading after the timeout.
@@ -270,6 +290,29 @@ export type NetworkRequestResult = {
   } | null;
   bodyNote: string | null;
 };
+// A page_fetch reply with secrets hidden: url is what was sent and finalUrl where redirects ended; replayOf is the replayed request's id and sentHeaders the
+// header names sent, never values. size is the body's length as read, in characters for text and bytes when binary; body is the text after pick and the
+// max_chars cut (omitted counts the characters cut), null when binary or empty; truncated says the text was cut at the capture's limit as it was read.
+export type PageFetchResult = {
+  ok: true;
+  method: string;
+  url: string;
+  frameId: number;
+  replayOf: string | null;
+  sentHeaders: string[];
+  status: number;
+  statusText: string;
+  finalUrl: string;
+  redirected: boolean;
+  headers: NetworkHeader[];
+  contentType: string;
+  binary: boolean;
+  size: number;
+  truncated: boolean;
+  pick: string | null;
+  body: string | null;
+  omitted: number;
+};
 
 export type CommandResponse =
   | ContentResponse
@@ -294,4 +337,5 @@ export type CommandResponse =
   | FramesTree
   | JavascriptResult
   | NetworkResult
-  | NetworkRequestResult;
+  | NetworkRequestResult
+  | PageFetchResult;
