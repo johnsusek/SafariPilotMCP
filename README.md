@@ -11,15 +11,14 @@ Just like Claude in Chrome: Open Safari tabs and work on them in the background,
 - **Your signed-in Safari.** Claude works in the Safari you already use, with your logins and cookies.
 - **No cursor takeover.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. 
 - **Real clicks and typing.** Clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
-- **Optimized token usage.** Actions return only what they changed on the page, so Claude rarely reads it again. Claude can read just what's onscreen, or one table or list of links as markdown, instead of the whole page.
+- **Optimized token usage.** Actions return what they changed on the page, avoiding reading the page again. Claude can also read only what's onscreen, or just one table or list of links as markdown.
 
 ## Security and trust
 
 - **Approve every client.** Each new client asks for your approval first. Disconnect one in **Clients** and it must be approved again.
 - **Tab isolation.** Claude sees only the tabs it opened and the popups they open.
 - **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from Claude's page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
-- **Secure local connection.** The Safari extension, the app and Claude talk only on your Mac, and every connection needs a secret token that changes each launch.
-- **Activity log.** **Activity** lists every action. Typed text shows by length, never in clear.
+- **Secure local connection.** The Safari extension, the app and Claude talk locally, and every connection needs a secret token that changes each launch.
 
 ## Requirements
 
@@ -39,7 +38,6 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**.
 2. In SafariPilot's **General** pane, grant **Accessibility**.
 3. In the **Clients** pane, choose **Claude Desktop** to add SafariPilot to its config, or **Claude Code** to copy a `claude mcp add` command.
-4. Turn on **Launch at Login** to skip the second or two Claude waits when it has to start SafariPilot itself.
 
 ### Build from source
 
