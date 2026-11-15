@@ -9,7 +9,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 concurrency:
   group: release-${{ github.ref }}
@@ -25,6 +25,10 @@ env:
 jobs:
   release:
     runs-on: xcode-27
+    permissions:
+      contents: write
+      id-token: write
+      attestations: write
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -141,6 +145,12 @@ jobs:
           spctl --assess --type open --context context:primary-signature "$DMG"
           spctl --assess --type execute "$OUT/export/SafariPilot.app"
           (cd "$OUT" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
+
+      # Attests the stapled DMG, so `gh attestation verify` ties a download to this workflow run and commit.
+      - uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        if: env.DRY_RUN != '1'
+        with:
+          subject-path: ${{ env.DMG }}
 
       # The feed URL reads appcast.xml from the latest release, so it lists only this version; its .md twin becomes the embedded notes.
       - name: Generate appcast
