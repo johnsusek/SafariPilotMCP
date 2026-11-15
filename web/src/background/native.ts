@@ -6,7 +6,8 @@ export type Instance = { id: string; startedAt: number; build: string };
 
 export type NativeCommand = Command & { id: string };
 
-export type PollResult = { id: string; response: CommandResponse };
+// ms is how long the command ran here, so the app can tell it from the native messaging around it.
+export type PollResult = { id: string; response: CommandResponse; ms: number };
 
 export type ToNative =
   | { kind: "poll"; instance: Instance; result?: PollResult }

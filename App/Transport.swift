@@ -38,7 +38,13 @@ final class Transport {
   private(set) var listenError: String?
   private var openPolls: [UUID: OpenPoll] = [:]
   private var queue: [JSONValue] = []
-  private var pending: [String: CheckedContinuation<JSONValue, any Error>] = [:]
+  private var pending: [String: CheckedContinuation<Delivery, any Error>] = [:]
+
+  /// A command's response and how long the background spent running it, the rest of its round trip being the native messaging there and back.
+  struct Delivery {
+    let response: JSONValue
+    let ranMs: Double?
+  }
 
   var openPollCount: Int { openPolls.count }
   var oldestOpenPoll: Date? { openPolls.values.map(\.openedAt).min() }
@@ -58,7 +64,7 @@ final class Transport {
     case "poll":
       // The previous command's result rides on the next poll.
       if let result = message["result"], let id = result["id"]?.string {
-        pending.removeValue(forKey: id)?.resume(returning: result["response"] ?? .null)
+        pending.removeValue(forKey: id)?.resume(returning: Delivery(response: result["response"] ?? .null, ranMs: result["ms"]?.number))
       }
 
       if let refusal {
@@ -79,7 +85,7 @@ final class Transport {
   }
 
   /// Sends a command to the background and waits for its response.
-  func send(_ command: [String: JSONValue], timeout: Duration) async throws -> JSONValue {
+  func send(_ command: [String: JSONValue], timeout: Duration) async throws -> Delivery {
     let id = UUID().uuidString
     var command = command
     command["id"] = .string(id)

@@ -41,7 +41,9 @@ let pollLoop = async () => {
 
       if (!command) continue;
 
-      result = { id: command.id, response: await runCommand(command) };
+      let started = performance.now();
+      let response = await runCommand(command);
+      result = { id: command.id, response, ms: performance.now() - started };
     }
   } catch (error) {
     lifecycle(`poll failed: ${error}`);

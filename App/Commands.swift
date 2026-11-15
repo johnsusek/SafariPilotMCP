@@ -49,16 +49,19 @@ struct Commands {
   }
 
   /// Safari's extension stops while any page shows a dialog, so nothing is sent while one is open, and the wait ends as soon as one opens.
+  /// Timing names the round trip after its content op or command type, with the native messaging around it as transport.
   func call(_ command: BackgroundCommand) async throws -> JSONValue {
-    let tabId = command.json["tabId"]?.number.map { Int($0) }
+    let json = command.json
+    let tabId = json["tabId"]?.number.map { Int($0) }
 
-    if let blocked = try await dialogBlock(tabId) { throw Failure(.dialogOpen, blocked) }
+    if let blocked = try await Timing.measure("dialog check", { try await dialogBlock(tabId) }) { throw Failure(.dialogOpen, blocked) }
 
     let remaining = deadline - .now
 
     guard remaining > .zero else { throw Failure(.timedOut, "timed out before sending \(command.type)") }
 
-    let sending = Task { try await model.transport.send(command.json, timeout: remaining) }
+    let sent = ContinuousClock.now
+    let sending = Task { try await model.transport.send(json, timeout: remaining) }
     let watching = Task { () -> (any Error)? in
       while !Task.isCancelled {
         try? await Task.sleep(for: .milliseconds(250))
@@ -77,9 +80,15 @@ struct Commands {
       return nil
     }
     defer { watching.cancel() }
-    let response: JSONValue
+    let delivery: Transport.Delivery
 
-    do { response = try await sending.value } catch is CancellationError { throw await watching.value ?? Failure(.failed, "\(command.type) was cancelled") }
+    do { delivery = try await sending.value } catch is CancellationError { throw await watching.value ?? Failure(.failed, "\(command.type) was cancelled") }
+
+    let response = delivery.response
+    let trip = ContinuousClock.now - sent
+    let ran = Duration.microseconds(Int((delivery.ranMs ?? 0) * 1000))
+    Timing.current?.add(json["request"]?["op"]?.string ?? command.type, ran)
+    Timing.current?.add("transport", trip - ran)
 
     if response["ok"]?.bool != true {
       guard let failure = try? response.decode(PageFailure.self) else { throw Failure(.failed, "extension (\(command.type)): malformed response \(response)") }
@@ -437,13 +446,13 @@ struct Commands {
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
     let watch = await watchChanges(tab.id, ref)
-    let pressed = try AXEngine.press(match)
+    let pressed = try await Timing.measure("press") { try AXEngine.press(match) }
     let acted = ContinuousClock.now
-    try await Task.sleep(for: .milliseconds(150))
+    try await Timing.sleep(for: .milliseconds(150))
     let after = try? await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
     var lines = ["pressed \(pressed.summary) via AXPress (\(pressed.depth) up from match) in tab \(tab.id)"]
 
-    if after == nil, let open = try AXEngine.dialog(for: tab) {
+    if after == nil, let open = try await Timing.measure("dialog check", { try AXEngine.dialog(for: tab) }) {
       lines[0] += ", which opened \(open.dialog.line); handle_dialog accepts or dismisses it"
       return try CLIReply(ok: true, text: (lines + matched).joined(separator: "\n"), data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
     }

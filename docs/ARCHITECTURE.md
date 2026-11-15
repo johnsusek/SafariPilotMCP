@@ -65,6 +65,18 @@ Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 - page_fetch sends only GET and HEAD unless the owner turns on Allow page_fetch Writes in General; the app reads that setting and puts it in the command it sends the extension, so a client cannot lift it. Requests go only to the tab's own origin and origins already in its network log.
 - The activity log shows typed text by size, never in clear, and page_fetch by method, redacted URL, header names and body sizes.
 
+## Timing
+
+- Every command records how long each phase took: its wait in the queue, each extension round trip (named after its content op or command type, with the native messaging around it summed as `transport`), the dialog check before each round trip, AX window and element resolution, the press or keys, fixed sleeps, the settle step and the diff. Code: `Shared/Timing.swift`, a task local the app's command code records into.
+- The background reports how long it ran each command, which splits a round trip into the op and its transport.
+- The activity log shows each command's total and phases; the Debug CLI prints them with `--timing` and returns them in `--json`.
+
+```bash
+scripts/bench.sh [RUNS] [click form_input key read_page find wait_look wait ...]
+```
+
+Medians of each command's time in the app, CLI wall time and each phase over RUNS runs (default 15) against `testpage/`, served by `npm --prefix web run testpage`. Needs the Debug app.
+
 ## Errors
 
 Every failure ends with `error code=CODE retryable=BOOL next=STEP`, drawn from 18 codes and 8 next steps fixed in `web/src/shared/errorCodes.json` and checked on both sides by tests.

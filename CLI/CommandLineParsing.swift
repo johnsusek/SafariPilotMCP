@@ -4,11 +4,13 @@ import Foundation
 struct Invocation: Equatable {
   let command: AppCommand
   var outputPath: String?
+  /// Set for wait, whose waitCheck command is repeated as the MCP server repeats it, until this many seconds pass.
+  var waitTimeout: Double?
 }
 
 enum CommandLineParsing {
   static let usage = """
-  usage: safaripilot [--json] [--timeout SECONDS] [--tab ID] COMMAND [ARGS]
+  usage: safaripilot [--json] [--timing] [--timeout SECONDS] [--tab ID] COMMAND [ARGS]
 
     status                          app, extension and background state
     ping                            title and URL of the tab
@@ -29,6 +31,7 @@ enum CommandLineParsing {
     find [NAME] [--role ROLE]       visible elements whose name contains NAME and role is ROLE
     text [--markdown] [--ref REF] [--max-chars N]  readable page text
     wait-check --text TEXT | --selector SELECTOR  one look in every frame for shown text or a shown element (MCP wait repeats it)
+    wait [--within S] --text TEXT | --selector SELECTOR  look until it shows, as MCP wait does (needs --tab; default 10 s)
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
     scroll-to TARGET                center TARGET in the view
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
@@ -178,12 +181,22 @@ enum CommandLineParsing {
 
       // NAME is free text, so it skips the stray option check below.
       return Invocation(command: .find(tabId: tabId, name: name, role: role))
-    case "wait-check":
-      guard let kind = rest.first, ["--text", "--selector"].contains(kind) else { throw Failure(.invalidArgument, "wait-check needs --text TEXT or --selector SELECTOR") }
+    case "wait-check", "wait":
+      let timeout = try option("--within", &rest).map { text in
+        guard let seconds = Double(text) else { throw Failure(.invalidArgument, "--within must be a number of seconds, not \(text)") }
+        return seconds
+      }
+
+      guard let kind = rest.first, ["--text", "--selector"].contains(kind) else { throw Failure(.invalidArgument, "\(name) needs --text TEXT or --selector SELECTOR") }
 
       // The value is every word after its option, verbatim, so it skips the stray option check below.
       let value = rest.dropFirst().joined(separator: " ")
-      return try Invocation(command: .waitCheck(tabId: tabId, condition: WaitCondition(text: kind == "--text" ? value : nil, selector: kind == "--selector" ? value : nil)))
+      let command = try AppCommand.waitCheck(tabId: tabId, condition: WaitCondition(text: kind == "--text" ? value : nil, selector: kind == "--selector" ? value : nil))
+
+      guard name == "wait" else { return Invocation(command: command) }
+      guard tabId != nil else { throw Failure(.invalidArgument, "wait needs --tab") }
+
+      return Invocation(command: command, waitTimeout: timeout ?? 10)
     case "navigate":
       guard let target = rest.first else { throw Failure(.invalidArgument, "navigate needs a URL, back or forward") }
 

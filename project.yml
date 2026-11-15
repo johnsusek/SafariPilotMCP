@@ -115,6 +115,7 @@ targets:
       - Shared/Redaction.swift
       - Shared/PageFetch.swift
       - Shared/ViewportMapping.swift
+      - Shared/Timing.swift
     dependencies:
       - package: MCP
         product: MCP

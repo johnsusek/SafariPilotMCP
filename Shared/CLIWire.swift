@@ -47,6 +47,8 @@ struct CLIReply: Codable, Sendable {
   let text: String
   let data: JSONValue
   var code: ErrorCode?
+  /// How long the app spent on the command and on each phase; the MCP server leaves it out of what it answers.
+  var timing: CommandTiming?
 }
 
 extension CLIReply {

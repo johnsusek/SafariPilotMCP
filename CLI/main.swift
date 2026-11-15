@@ -2,7 +2,8 @@ import Foundation
 
 var arguments = Array(CommandLine.arguments.dropFirst())
 let json = arguments.contains("--json")
-arguments.removeAll { $0 == "--json" }
+let showTiming = arguments.contains("--timing")
+arguments.removeAll { $0 == "--json" || $0 == "--timing" }
 var timeout = CLIRequest.defaultTimeout
 
 if let index = arguments.firstIndex(of: "--timeout") {
@@ -45,7 +46,15 @@ if arguments == ["mcp"] {
 
 do {
   let invocation = try CommandLineParsing.parse(arguments)
-  var reply = try AppClient.send(invocation.command, timeout: timeout)
+  var reply: CLIReply
+
+  if let waitTimeout = invocation.waitTimeout, case let .waitCheck(tabId?, condition) = invocation.command {
+    let started = ContinuousClock.now
+    let text = try await Wait.poll(condition, tabId: tabId, timeout: waitTimeout) { try AppClient.send($0, timeout: timeout) }
+    reply = CLIReply(ok: true, text: text, data: .null, timing: CommandTiming(totalMs: Double((.now - started) / .microseconds(1)) / 1000, phases: []))
+  } else {
+    reply = try AppClient.send(invocation.command, timeout: timeout)
+  }
 
   if case .screenshot = invocation.command, reply.ok, let base64 = reply.data["png"]?.string, let png = Data(base64Encoded: base64) {
     let path = invocation.outputPath ?? "safaripilot-\(Int(Date.now.timeIntervalSince1970)).png"
@@ -61,6 +70,8 @@ do {
   } else {
     print(reply.ok ? reply.text : "error: \(reply.text)")
   }
+
+  if showTiming, !json, let timing = reply.timing { print("timing \(timing.line)") }
 
   exit(reply.ok ? 0 : 1)
 } catch {

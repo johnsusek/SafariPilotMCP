@@ -40,7 +40,7 @@ extension Commands {
     var control = try await inspect(tabId, ref)
 
     for _ in 0 ..< 5 where !done(control) {
-      try await Task.sleep(for: .milliseconds(100))
+      try await Timing.sleep(for: .milliseconds(100))
       control = try await inspect(tabId, ref)
     }
 
@@ -57,11 +57,11 @@ extension Commands {
 
     // Safari refuses focus() in a cross-origin frame until it has had a real click, and a field without focus drops AXValue.
     if !focus.taken {
-      pressed = try AXEngine.press(match)
+      pressed = try await Timing.measure("press") { try AXEngine.press(match) }
       focus = try await content(tab.id, .focus(ref: ref)).decode(FocusResult.self)
     }
 
-    let (valueNode, valueResult) = try AXEngine.setValue(text, in: match)
+    let (valueNode, valueResult) = try await Timing.measure("ax value") { try AXEngine.setValue(text, in: match) }
     let acted = ContinuousClock.now
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
     let after = try await settled(tab.id, ref) { $0.value == expected }
@@ -103,7 +103,7 @@ extension Commands {
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
     let watch = await watchChanges(tab.id, ref)
-    let pressed = try AXEngine.press(match)
+    let pressed = try await Timing.measure("press") { try AXEngine.press(match) }
     let acted = ContinuousClock.now
     let after = try await settled(tab.id, ref) { $0.checked == wanted }
     data["pressedRole"] = .string(pressed.role)

@@ -12,6 +12,11 @@ struct ActivityView: View {
       TableColumn("Result") { entry in
         Text(entry.summary).foregroundStyle(entry.ok ? Color.primary : Color.red).textSelection(.enabled)
       }
+      TableColumn("Timing") { entry in
+        let line = entry.timing?.line ?? ""
+        Text(line).foregroundStyle(.secondary).textSelection(.enabled).help(line)
+      }
+      .width(min: 120, ideal: 320)
     }
   }
 }

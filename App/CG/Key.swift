@@ -21,7 +21,7 @@ extension Commands {
       focusNode = target.webArea
     }
 
-    try await requireKeyboardFocus(in: target, refocus: focusNode)
+    try await Timing.measure("ax focus") { try await requireKeyboardFocus(in: target, refocus: focusNode) }
     var pid: pid_t = 0
     AXUIElementGetPid(target.app.element, &pid)
     let before = try await content(tab.id, .events(clear: true, arm: false, watch: ref)).decode(EventsResult.self)
@@ -32,13 +32,15 @@ extension Commands {
     var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
 
-    for (index, chord) in presses.enumerated() {
-      if index > 0 {
-        try await Task.sleep(for: .milliseconds(10))
-        try await requireFocusKept(in: target, posted: index, of: chords.count * times)
-      }
+    try await Timing.measure("keys") {
+      for (index, chord) in presses.enumerated() {
+        if index > 0 {
+          try await Task.sleep(for: .milliseconds(10))
+          try await requireFocusKept(in: target, posted: index, of: chords.count * times)
+        }
 
-      try await poster.key(chord)
+        try await poster.key(chord)
+      }
     }
 
     let pressed = KeyChord.summary(chords) + (times > 1 ? " x\(times)" : "")
@@ -60,10 +62,10 @@ extension Commands {
     let acted = ContinuousClock.now
     // WebKit hands the page each key only after it handled the last one, so a page busy rendering (an autocomplete) is still receiving keys well after they were posted.
     let deadline = ContinuousClock.now + .milliseconds(1500)
-    try await Task.sleep(for: .milliseconds(150))
+    try await Timing.sleep(for: .milliseconds(150))
 
     // A dialog stops Safari's extension until it closes, so the page's log cannot be read; the dialog shows the keys arrived.
-    if let open = try AXEngine.dialog(for: tab) {
+    if let open = try await Timing.measure("dialog check", { try AXEngine.dialog(for: tab) }) {
       data["dialog"] = try JSONValue(encoding: open.dialog)
       return CLIReply(ok: true, text: "pressed \(pressed) in tab \(tab.id), which opened \(open.dialog.line); handle_dialog accepts or dismisses it", data: .object(data))
     }
@@ -89,7 +91,7 @@ extension Commands {
 
       if keydowns.count >= expected || ContinuousClock.now >= deadline { break }
 
-      try await Task.sleep(for: .milliseconds(100))
+      try await Timing.sleep(for: .milliseconds(100))
     }
 
     let landed = await landing(tab, since: acted, replaced: navigatedWhat == "the page")

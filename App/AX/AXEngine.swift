@@ -54,6 +54,8 @@ enum AXEngine {
 
   /// Finds the window showing the tab among all of Safari's AX windows; the tab must already be active in its window.
   static func target(for tab: TabInfo) async throws -> Target {
+    let start = ContinuousClock.now
+    defer { Timing.current?.add("ax window", .now - start) }
     let app = try safari()
 
     // WebKit builds a page's AX tree lazily and a just-selected tab takes a moment to appear, so a miss is retried for 1 s.
@@ -137,7 +139,7 @@ enum AXEngine {
 
       if (best?.score ?? 0) >= FrameMatching.minimum || ContinuousClock.now >= patience { break }
 
-      try await Task.sleep(for: .milliseconds(150))
+      try await Timing.sleep(for: .milliseconds(150))
     }
 
     guard let best, best.score >= FrameMatching.minimum else {
@@ -149,7 +151,9 @@ enum AXEngine {
   }
 
   private static func bestMatch(under webArea: AXNode, for screenRect: CGRect, prune: Bool) throws -> (best: FrameMatching.Found<AXNode>?, visited: Int) {
-    try FrameMatching.best(under: webArea.children, for: screenRect, prune: prune, limit: prune ? 5000 : 20000, children: \.children, frame: \.frame, role: \.role)
+    let start = ContinuousClock.now
+    defer { Timing.current?.add(prune ? "ax match" : "ax match unpruned", .now - start) }
+    return try FrameMatching.best(under: webArea.children, for: screenRect, prune: prune, limit: prune ? 5000 : 20000, children: \.children, frame: \.frame, role: \.role)
   }
 
   /// What was pressed, read before pressing since a press that navigates leaves the element unreadable.

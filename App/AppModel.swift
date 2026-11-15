@@ -13,6 +13,7 @@ final class AppModel {
     let command: String
     let ok: Bool
     let summary: String
+    var timing: CommandTiming?
   }
 
   let transport = Transport()
@@ -185,18 +186,30 @@ final class AppModel {
       if let entry = inFlight.removeValue(forKey: id) { lastEnded = (entry.label, entry.start, .now) }
     }
 
+    let timing = Timing()
+    let queued = ContinuousClock.now
+
     do {
       // status only reads app state, and handle_dialog only presses a dialog's button, which must not wait behind a command the dialog holds up.
-      let reply = switch request.command {
-      case .status, .dialog: try await commands.run(request.command)
-      default: try await queue.run { try await commands.run(request.command) }
+      var reply = try await Timing.$current.withValue(timing) {
+        switch request.command {
+        case .status, .dialog: try await commands.run(request.command)
+        default:
+          try await queue.run {
+            timing.add("queue", .now - queued)
+            return try await commands.run(request.command)
+          }
+        }
       }
+      reply.timing = timing.finished
       let summary = reply.text.components(separatedBy: "\n").first ?? ""
-      record(label, ok: reply.ok, summary: reply.code.map { "\($0.rawValue): \(summary)" } ?? summary)
+      record(label, ok: reply.ok, summary: reply.code.map { "\($0.rawValue): \(summary)" } ?? summary, timing: reply.timing)
       return reply.forClient
     } catch {
-      record(label, ok: false, summary: "\(ErrorCode(of: error).rawValue): \(error)")
-      return CLIReply(failed: error).forClient
+      var reply = CLIReply(failed: error)
+      reply.timing = timing.finished
+      record(label, ok: false, summary: "\(ErrorCode(of: error).rawValue): \(error)", timing: reply.timing)
+      return reply.forClient
     }
   }
 
@@ -240,8 +253,8 @@ final class AppModel {
     record("Safari came forward", ok: false, summary: "\(seconds(ended.end)) s after \(ended.label) ended (\(seconds(ended.start)) s after it started)")
   }
 
-  func record(_ command: String, ok: Bool, summary: String) {
-    log.append(LogEntry(at: .now, command: command, ok: ok, summary: summary))
+  func record(_ command: String, ok: Bool, summary: String, timing: CommandTiming? = nil) {
+    log.append(LogEntry(at: .now, command: command, ok: ok, summary: summary, timing: timing))
     log = Array(log.suffix(500))
   }
 
