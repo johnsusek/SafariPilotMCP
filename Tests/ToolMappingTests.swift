@@ -114,7 +114,7 @@ struct ToolMappingTests {
     #expect(try map("click", ["ref": "12"]) == .click(tabId: 20, target: .ref(12)))
     #expect(try map("click", ["ref": "5:12"]) == .click(tabId: 20, target: .ref(PageRef(frames: [5], local: 12))))
     #expect(try map("scroll_to", ["ref": "5:3:12"]) == .scrollTo(tabId: 20, target: .ref(PageRef(frames: [5, 3], local: 12))))
-    #expect(try map("read_page", ["ref_id": "5:2"]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: PageRef(frames: [5], local: 2), depth: nil))
+    #expect(try map("read_page", ["ref_id": "5:2"]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: PageRef(frames: [5], local: 2), depth: nil, viewport: false))
     #expect(throws: Failure.self) { try map("click", ["ref": .number(5.12)]) }
     #expect(throws: Failure.self) { try map("click", ["ref": "5.12"]) }
     #expect(throws: Failure.self) { try map("click", ["ref": "1:2:3:4:5"]) }
@@ -157,14 +157,14 @@ struct ToolMappingTests {
 
   @Test func omittedTabIdUsesTheSessionTab() throws {
     #expect(try map("click", ["ref": .number(4)]) == .click(tabId: 20, target: .ref(4)))
-    #expect(try map("get_page_text") == .pageText(tabId: 20, maxChars: AppCommand.defaultMaxChars))
+    #expect(try map("get_page_text") == .pageText(tabId: 20, maxChars: AppCommand.defaultMaxChars, format: .text, ref: nil))
     #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20, region: nil, scale: 1))
   }
 
   @Test func tierOneToolsMap() throws {
     #expect(try map("scroll_to", ["ref": .number(9)]) == .scrollTo(tabId: 20, target: .ref(9)))
     #expect(try map("resize_window", ["width": .number(1200), "height": .number(800)]) == .resizeWindow(tabId: 20, width: 1200, height: 800))
-    #expect(try map("read_page", ["ref_id": .number(5), "depth": .number(2)]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: 5, depth: 2))
+    #expect(try map("read_page", ["ref_id": .number(5), "depth": .number(2)]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: 5, depth: 2, viewport: false))
     #expect(try map("screenshot", ["region": .array([.number(10), .number(20), .number(110.4), .number(220)]), "scale": .number(0.5)]) == .screenshot(tabId: 20, region: PixelRect(x0: 10, y0: 20, x1: 110, y1: 220), scale: 0.5))
   }
 
@@ -385,9 +385,16 @@ struct ToolMappingTests {
     #expect(try map("navigate", ["url": "https://example.com"]) == .navigate(tabId: 20, url: "https://example.com"))
   }
 
+  @Test func leanerReadsMap() throws {
+    #expect(try map("read_page", ["viewport": .bool(true), "filter": "interactive"]) == .readPage(tabId: 20, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil, viewport: true))
+    #expect(try map("get_page_text", ["format": "markdown", "ref_id": "5:12", "max_chars": .number(800)]) == .pageText(tabId: 20, maxChars: 800, format: .markdown, ref: PageRef(frames: [5], local: 12)))
+    #expect(throws: Failure.self) { try map("get_page_text", ["format": "html"]) }
+    #expect(throws: Failure.self) { try map("read_page", ["viewport": "yes"]) }
+  }
+
   @Test func readPageDefaultsToAll() throws {
-    #expect(try map("read_page") == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil))
-    #expect(try map("read_page", ["filter": "interactive", "max_chars": .number(900)]) == .readPage(tabId: 20, filter: .interactive, maxChars: 900, ref: nil, depth: nil))
+    #expect(try map("read_page") == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil, viewport: false))
+    #expect(try map("read_page", ["filter": "interactive", "max_chars": .number(900)]) == .readPage(tabId: 20, filter: .interactive, maxChars: 900, ref: nil, depth: nil, viewport: false))
   }
 
   @Test func scrollConvertsStepsToPixels() throws {
@@ -490,15 +497,18 @@ struct CommandLineParsingTests {
   }
 
   @Test func optionsAndDefaults() throws {
-    #expect(try parse("read-page --all --max-chars 10").command == .readPage(tabId: nil, filter: .all, maxChars: 10, ref: nil, depth: nil))
-    #expect(try parse("read-page --ref 4 --depth 2").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: 4, depth: 2))
+    #expect(try parse("read-page --all --max-chars 10").command == .readPage(tabId: nil, filter: .all, maxChars: 10, ref: nil, depth: nil, viewport: false))
+    #expect(try parse("read-page --ref 4 --depth 2").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: 4, depth: 2, viewport: false))
     #expect(try parse("scroll-to 6").command == .scrollTo(tabId: nil, target: .ref(6)))
     #expect(try parse("resize 1000 700").command == .resizeWindow(tabId: nil, width: 1000, height: 700))
     #expect(try parse("screenshot a.png --region 0,0,50,40 --scale 0.5") == Invocation(command: .screenshot(tabId: nil, region: PixelRect(x0: 0, y0: 0, x1: 50, y1: 40), scale: 0.5), outputPath: "a.png"))
-    #expect(try parse("read-page").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil))
+    #expect(try parse("read-page").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil, viewport: false))
     #expect(try parse("scroll down 2 --ref 8").command == .scroll(tabId: nil, target: .ref(8), left: 0, top: 200))
     #expect(try parse("navigate back").command == .history(tabId: nil, direction: .back))
     #expect(try parse("screenshot shot.png") == Invocation(command: .screenshot(tabId: nil, region: nil, scale: 1), outputPath: "shot.png"))
+    #expect(try parse("read-page --viewport").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil, viewport: true))
+    #expect(try parse("text --markdown --ref 5:3").command == .pageText(tabId: nil, maxChars: AppCommand.defaultMaxChars, format: .markdown, ref: PageRef(frames: [5], local: 3)))
+    #expect(try parse("text").command == .pageText(tabId: nil, maxChars: AppCommand.defaultMaxChars, format: .text, ref: nil))
   }
 
   @Test func debugCGParses() throws {

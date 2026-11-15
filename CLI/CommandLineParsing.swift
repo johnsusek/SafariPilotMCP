@@ -25,9 +25,9 @@ enum CommandLineParsing {
     tab-select ID                   make a tab active in its window
     tab-close ID                    close a tab
     navigate URL|back|forward       load a URL or walk history
-    read-page [--all] [--max-chars N] [--ref REF] [--depth N]  element tree with refs
+    read-page [--all] [--viewport] [--max-chars N] [--ref REF] [--depth N]  element tree with refs
     find [NAME] [--role ROLE]       visible elements whose name contains NAME and role is ROLE
-    text [--max-chars N]            readable page text
+    text [--markdown] [--ref REF] [--max-chars N]  readable page text
     wait-check --text TEXT | --selector SELECTOR  one look in every frame for shown text or a shown element (MCP wait repeats it)
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
     scroll-to TARGET                center TARGET in the view
@@ -84,13 +84,15 @@ enum CommandLineParsing {
     case "read-page":
       let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let depth = try option("--depth", &rest).map { try integer($0, "--depth") }
-      invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth))
+      invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth, viewport: flag("--viewport", &rest)))
     case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, target: leadingTarget(&rest)))
     case "resize":
       guard rest.count == 2 else { throw Failure(.invalidArgument, "resize needs WIDTH and HEIGHT") }
 
       invocation = try Invocation(command: .resize(tabId: tabId, width: integer(rest[0], "WIDTH"), height: integer(rest[1], "HEIGHT")))
-    case "text": invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars))
+    case "text":
+      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
+      invocation = Invocation(command: .pageText(tabId: tabId, maxChars: maxChars, format: flag("--markdown", &rest) ? .markdown : .text, ref: ref))
     case "console":
       let pattern = try option("--pattern", &rest)
       let limit = try option("--limit", &rest).map { try integer($0, "--limit") }

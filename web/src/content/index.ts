@@ -46,12 +46,15 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
         request.ref,
         request.depth,
         request.prefix,
+        request.viewport,
+        request.clip,
       );
     if (request.op === "find") return find(request.name, request.role);
     if (request.op === "target") return target(request.name, request.role);
     if (request.op === "waitFor")
       return waitFor(request.text, request.selector);
-    if (request.op === "pageText") return pageText(request.maxChars);
+    if (request.op === "pageText")
+      return pageText(request.maxChars, request.format, request.ref);
     if (request.op === "scroll")
       return scroll(request.ref, request.left, request.top);
     if (request.op === "scrollIntoView") return scrollIntoView(request.ref);

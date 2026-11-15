@@ -382,9 +382,16 @@ describe("site access", () => {
     silent();
     fake.scripting.executeScript.mockRejectedValue(refusal);
     let requests = [
-      { op: "readPage", filter: "all", maxChars: 100, ref: null, depth: null },
+      {
+        op: "readPage",
+        filter: "all",
+        maxChars: 100,
+        ref: null,
+        depth: null,
+        viewport: false,
+      },
       { op: "find", name: "Go", role: "" },
-      { op: "pageText", maxChars: 100 },
+      { op: "pageText", maxChars: 100, format: "text", ref: null },
       { op: "locate", ref: "12" },
       { op: "locate", ref: "5:12" },
       { op: "inspect", ref: "12" },

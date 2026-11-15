@@ -167,6 +167,10 @@ export async function walkPath(
 
 let noArea: Rect = { left: 0, top: 0, width: 0, height: 0 };
 
+// The part of the walked frame the page shows, in that frame's coordinates; no area when it is out of view.
+export let localClip = (walk: Walk) =>
+  walk.view.clip ? toLocal(walk.view.clip, walk.view) : noArea;
+
 // Locates an element in its own frame, then confirms each ancestor shows its iframe at the chosen point; the result is in top-frame CSS px.
 export async function locatePath(
   send: Send,
@@ -219,7 +223,7 @@ export async function locatePath(
   let located = await send(walk.frameId, {
     op: "locate",
     ref: path.local,
-    clip: walk.view.clip ? toLocal(walk.view.clip, walk.view) : noArea,
+    clip: localClip(walk),
     scroll: false,
   });
 

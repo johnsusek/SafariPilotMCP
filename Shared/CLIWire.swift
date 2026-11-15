@@ -82,10 +82,11 @@ enum AppCommand: Codable, Sendable, Equatable {
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
-  /// ref limits the tree to that element's subtree and depth to that many levels.
-  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
+  /// ref limits the tree to that element's subtree, depth to that many levels and viewport to what shows in the view.
+  case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?, viewport: Bool)
   case find(tabId: Int?, name: String, role: String)
-  case pageText(tabId: Int?, maxChars: Int)
+  /// ref limits the text to that element and the frames inside it.
+  case pageText(tabId: Int?, maxChars: Int, format: TextFormat, ref: PageRef?)
   /// Scrolls the container around target, or the page when nil.
   case scroll(tabId: Int?, target: ElementTarget?, left: Double, top: Double)
   case scrollTo(tabId: Int?, target: ElementTarget)
@@ -145,10 +146,10 @@ enum AppCommand: Codable, Sendable, Equatable {
     return .resizeWindow(tabId: tabId, width: width, height: height)
   }
 
-  static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: PageRef?, depth: Int?) throws -> AppCommand {
+  static func readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, root: PageRef?, depth: Int?, viewport: Bool) throws -> AppCommand {
     if let depth, depth < 1 { throw Failure(.invalidArgument, "depth must be at least 1, not \(depth)") }
 
-    return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth)
+    return .readPage(tabId: tabId, filter: filter, maxChars: maxChars, ref: root, depth: depth, viewport: viewport)
   }
 
   static func javascript(tabId: Int?, text: String, frame: PageRef?) throws -> AppCommand {
@@ -183,7 +184,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     case .status, .tabs, .tabCreate: nil
     case let .pageFetch(tabId, _): tabId
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _, _, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 

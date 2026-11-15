@@ -43,6 +43,10 @@ export let isInvisible = (element: Element) =>
 export let isShown = (element: Element) =>
   !isPruned(element) && !isInvisible(element);
 
+// Whether element lays out as a block box, which separates the words around it; display:contents has no box of its own.
+export let isBlock = (element: Element) =>
+  !/^(inline|contents|$)/.test(getComputedStyle(element).display);
+
 export function* flatElements(root: Node): Generator<Element> {
   for (let child of flatChildren(root)) {
     if (!(child instanceof Element) || isPruned(child)) continue;

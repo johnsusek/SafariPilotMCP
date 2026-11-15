@@ -29,6 +29,7 @@ import type {
   InspectResult,
   PageTextResult,
   ReadPageResult,
+  Rect,
   TargetResult,
   UploadResult,
   WaitForResult,
@@ -37,6 +38,7 @@ import {
   failureFrom,
   frameTimeoutMs,
   inFrame,
+  localClip,
   locatePath,
   maxFrameDepth,
   maxFrames,
@@ -185,30 +187,61 @@ async function waitFor(send: Send, request: PageRequest & { op: "waitFor" }) {
   };
 }
 
-async function pageText(send: Send, maxChars: number) {
-  let answers = await fanOut(send, { op: "pageText", maxChars });
+// The top frame's text, then each big enough frame's in document order; with ref, the text of ref's element, then the frames inside it and the frames nested in those.
+async function pageText(send: Send, request: PageRequest & { op: "pageText" }) {
+  let { maxChars, format } = request;
+  let target = request.ref === null ? null : await owner(send, request.ref);
+  let own = {
+    op: "pageText" as const,
+    maxChars,
+    format,
+    ref: target?.path.local ?? null,
+  };
+  let [reply, reached] = await Promise.all([
+    target && target.frameId !== 0
+      ? timed(send, target.frameId, own)
+      : send(0, own),
+    target ? null : reachFrames(send),
+  ]);
 
-  if (!Array.isArray(answers)) return answers;
+  if (!reply.ok) return target ? inFrame(reply, target.path) : reply;
 
-  let top = answers[0].reply;
+  let { frames: inside, ...page } = reply as PageTextResult;
+  let roots = inside.map((ref) => [...target!.path.frames, ref].join(":"));
 
-  if (!top.ok) return top;
+  if (target && !roots.length) return page;
 
-  let sections = answers.slice(1).flatMap(({ frame, reply }) => {
+  reached ??= await reachFrames(send);
+
+  if (!Array.isArray(reached)) return reached;
+
+  let frames = reached
+    .slice(1)
+    .filter(
+      (frame) =>
+        !target ||
+        roots.some(
+          (root) => frame.path === root || frame.path.startsWith(`${root}:`),
+        ),
+    );
+  let answers = await ask(send, frames, () => ({ ...own, ref: null }));
+  // A frame asked for by its ref is read whatever its size.
+  let sections = answers.flatMap(({ frame, reply }) => {
     let big =
-      frame.box &&
-      frame.box.width >= minTextFrame &&
-      frame.box.height >= minTextFrame;
+      frame.path === request.ref ||
+      (frame.box &&
+        frame.box.width >= minTextFrame &&
+        frame.box.height >= minTextFrame);
     let text = reply.ok ? (reply as PageTextResult).text : "";
     return big && text ? [`[frame ${frame.path} ${frame.label}]\n${text}`] : [];
   });
-  let page = top as PageTextResult;
   let whole = clip(
     [page.text, ...sections].filter(Boolean).join("\n\n"),
     maxChars,
   );
   let truncated =
     whole.truncated ||
+    page.truncated ||
     answers.some(
       ({ reply }) => reply.ok && (reply as PageTextResult).truncated,
     );
@@ -458,12 +491,22 @@ async function diff(send: Send, request: PageRequest & { op: "diff" }) {
 
 type ReadRequest = PageRequest & { op: "readPage" };
 
+// What a viewport read left out of a frame, for its iframe line; nothing when none was.
+let leftOut = (read: ReadPageResult) =>
+  read.above || read.below
+    ? ` (viewport only; ${read.above} px above and ${read.below} px below left out)`
+    : "";
+
 // Reads one frame's tree, then each frame under its iframe lines with what is left of maxChars at that line, indented one level below it.
+// A viewport read reads only the frames in view, each within the part of it shown.
 async function readFrame(
   send: Send,
   frameId: number,
   prefix: string,
-  request: Omit<ReadRequest, "op" | "ref"> & { ref: number | null },
+  request: Omit<ReadRequest, "op" | "ref"> & {
+    ref: number | null;
+    clip: Rect | null;
+  },
   frameDepth: number,
   budget: { frames: number },
 ): Promise<ReadPageResult | Failure> {
@@ -487,6 +530,8 @@ async function readFrame(
     if (placeholder.width < minFrameSize || placeholder.height < minFrameSize)
       return { placeholder, note: "" };
 
+    if (request.viewport && !placeholder.clip) return { placeholder, note: "" };
+
     if (frameDepth >= maxFrameDepth)
       return {
         placeholder,
@@ -508,13 +553,13 @@ async function readFrame(
       send,
       placeholder.frameId,
       `${prefix}${placeholder.ref}:`,
-      { ...request, maxChars: room, ref: null, depth },
+      { ...request, maxChars: room, ref: null, depth, clip: placeholder.clip },
       frameDepth + 1,
       budget,
     );
     return {
       placeholder,
-      note: child.ok ? "" : " (frame did not answer)",
+      note: child.ok ? leftOut(child) : " (frame did not answer)",
       child,
     };
   });
@@ -544,17 +589,17 @@ async function readFrame(
   };
 }
 
+// A ref inside a frame is read within the part of its frame the page shows, which is nowhere when the frame is out of view.
 async function readPage(send: Send, request: ReadRequest) {
   let path = request.ref === null ? null : parsePath(request.ref);
   let frames = path?.frames ?? [];
-  let frameId = frames.length
-    ? (await walkPath(send, frames, false)).frameId
-    : 0;
+  let walk = frames.length ? await walkPath(send, frames, false) : null;
+  let clip = walk && request.viewport ? localClip(walk) : null;
   let read = await readFrame(
     send,
-    frameId,
+    walk?.frameId ?? 0,
     frames.map((ref) => `${ref}:`).join(""),
-    { ...request, ref: path?.local ?? null },
+    { ...request, ref: path?.local ?? null, clip },
     frames.length,
     { frames: maxFrames },
   );
@@ -599,7 +644,7 @@ async function dispatch(
 
   if (request.op === "waitFor") return await waitFor(send, request);
 
-  if (request.op === "pageText") return await pageText(send, request.maxChars);
+  if (request.op === "pageText") return await pageText(send, request);
 
   if (request.op === "diffStart") return await diffStart(send, request);
 

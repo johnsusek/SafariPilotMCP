@@ -121,7 +121,24 @@ struct InspectResult: Codable, Sendable {
   let min: Double?
   let max: Double?
 }
-struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
+/// above and below, for a viewport read, are how far left-out content reaches past the top and bottom of the view, CSS px.
+struct ReadPageResult: Codable, Sendable {
+  let url: String
+  let title: String
+  let viewport: Viewport
+  let text: String
+  let truncated: Bool
+  let above: Int?
+  let below: Int?
+
+  /// What a viewport read left out, so the caller knows whether and which way to scroll; nil for a whole-page read.
+  var leftOut: String? {
+    guard let above, let below else { return nil }
+    guard above > 0 || below > 0 else { return "(viewport only; nothing above or below)" }
+
+    return "(viewport only; \(above) px above and \(below) px below left out)"
+  }
+}
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
 /// The only exact name match over the frames find reads, else the only match, else nil; matched counts every match, exact the exact ones, and candidates are the first 20 when match is nil, exact ones first.
 struct TargetResult: Codable, Sendable {
@@ -237,6 +254,7 @@ struct NetworkRequestResult: Codable, Sendable {
 struct JavascriptResult: Codable, Sendable { let json: String? }
 
 enum ReadFilter: String, Codable, Sendable { case interactive, all }
+enum TextFormat: String, Codable, Sendable, CaseIterable { case text, markdown }
 enum HistoryDirection: String, Codable, Sendable { case back, forward }
 
 enum ContentRequest: Equatable, Sendable {
@@ -256,12 +274,14 @@ enum ContentRequest: Equatable, Sendable {
   case drag(ref: PageRef, to: PageRef)
   /// Gives a file input (ref, a label for one, or the only one inside ref) the files and fires untrusted input and change, or drops them on any other element.
   case upload(ref: PageRef, files: [UploadFile])
-  case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
+  /// viewport keeps only what shows in the view, in every frame read.
+  case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?, viewport: Bool)
   case find(name: String, role: String)
   /// Every frame's matches for an action that names its target instead of giving a ref, and the one the background picks.
   case target(name: String, role: String)
   case waitFor(WaitCondition)
-  case pageText(maxChars: Int)
+  /// ref limits the text to that element and the frames inside it.
+  case pageText(maxChars: Int, format: TextFormat, ref: PageRef?)
   case scroll(ref: PageRef?, left: Double, top: Double)
   case scrollIntoView(ref: PageRef)
   /// The newest limit console messages, of errors and exceptions only when onlyErrors, whose text matches pattern (a case-insensitive JavaScript regular expression); clear empties every read frame's buffer afterwards.
@@ -283,12 +303,12 @@ enum ContentRequest: Equatable, Sendable {
     case let .syntheticClick(ref, action, modifiers): ["op": "syntheticClick", "ref": .string(ref.description), "action": .string(action.rawValue), "modifiers": .array(modifiers.map { .string($0.rawValue) })]
     case let .drag(ref, to): ["op": "drag", "ref": .string(ref.description), "to": .string(to.description)]
     case let .upload(ref, files): ["op": "upload", "ref": .string(ref.description), "files": .array(files.map { .object(["name": .string($0.name), "mimeType": .string($0.mimeType), "lastModified": .number($0.lastModified), "data": .string($0.data)]) })]
-    case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
+    case let .readPage(filter, maxChars, ref, depth, viewport): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null, "viewport": .bool(viewport)]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
     case let .target(name, role): ["op": "target", "name": .string(name), "role": .string(role)]
     case let .waitFor(.text(text)): ["op": "waitFor", "text": .string(text), "selector": .null]
     case let .waitFor(.selector(selector)): ["op": "waitFor", "text": .null, "selector": .string(selector)]
-    case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]
+    case let .pageText(maxChars, format, ref): ["op": "pageText", "maxChars": .number(Double(maxChars)), "format": .string(format.rawValue), "ref": ref.map { .string($0.description) } ?? .null]
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .string($0.description) } ?? .null, "left": .number(left), "top": .number(top)]
     case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .string(ref.description)]
     case let .console(onlyErrors, pattern, limit, clear): ["op": "console", "onlyErrors": .bool(onlyErrors), "pattern": pattern.map { .string($0) } ?? .null, "limit": .number(Double(limit)), "clear": .bool(clear)]

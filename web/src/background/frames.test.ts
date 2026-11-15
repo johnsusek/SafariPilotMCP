@@ -4,6 +4,7 @@ import type {
   ContentResponse,
   DiffResult,
   FrameEntry,
+  ReadPageResult,
   Rect,
   Viewport,
 } from "../shared/protocol";
@@ -415,6 +416,7 @@ describe("runPage reads", () => {
       maxChars: 1000,
       ref: null,
       depth: null,
+      viewport: false,
     });
     expect(result).toMatchObject({
       ok: true,
@@ -436,6 +438,7 @@ describe("runPage reads", () => {
       maxChars: 60,
       ref: null,
       depth: null,
+      viewport: false,
     });
     expect(cut).toMatchObject({
       truncated: true,
@@ -457,6 +460,7 @@ describe("runPage reads", () => {
       maxChars: 1000,
       ref: null,
       depth: 2,
+      viewport: false,
     });
     expect(shallow).toMatchObject({
       text: 'main\n  iframe "A" [ref=5]\nfooter',
@@ -483,6 +487,7 @@ describe("runPage reads", () => {
         maxChars: 1000,
         ref: "5:2",
         depth: null,
+        viewport: false,
       }),
     ).toMatchObject({ text: "button [ref=5:2]" });
   });
@@ -805,6 +810,7 @@ describe("runPage reads", () => {
         maxChars: 1000,
         ref: null,
         depth: null,
+        viewport: false,
       }),
     ).toMatchObject({
       text: 'iframe [ref=4]\niframe "A" [ref=5]\n  link [ref=5:9]',
@@ -819,7 +825,14 @@ describe("runPage reads", () => {
   test("page text appends a labeled section per sizable frame", async () => {
     documents[0].answer = (request) =>
       request.op === "pageText"
-        ? { ok: true, url: "u", title: "t", text: "Top text", truncated: false }
+        ? {
+            ok: true,
+            url: "u",
+            title: "t",
+            text: "Top text",
+            truncated: false,
+            frames: [],
+          }
         : undefined;
     documents[100].answer = (request) =>
       request.op === "pageText"
@@ -829,14 +842,27 @@ describe("runPage reads", () => {
             title: "t",
             text: "Frame text",
             truncated: false,
+            frames: [],
           }
         : undefined;
     documents[200].answer = (request) =>
       request.op === "pageText"
-        ? { ok: true, url: "u", title: "t", text: "", truncated: false }
+        ? {
+            ok: true,
+            url: "u",
+            title: "t",
+            text: "",
+            truncated: false,
+            frames: [],
+          }
         : undefined;
     expect(
-      await runPage(send, { op: "pageText", maxChars: 1000 }),
+      await runPage(send, {
+        op: "pageText",
+        maxChars: 1000,
+        format: "text",
+        ref: null,
+      }),
     ).toMatchObject({
       url: "u",
       text: "Top text\n\n[frame 5 f100.test]\nFrame text",
@@ -1197,6 +1223,179 @@ describe("runPage diff", () => {
       ok: false,
       error: "it broke (in the frame of iframe 5)",
       code: "failed",
+    });
+  });
+});
+
+describe("leaner reads", () => {
+  let tree = (
+    text: string,
+    frames: ReadPageResult["frames"] = [],
+    above: number | null = null,
+    below: number | null = null,
+  ): ReadPageResult => ({
+    ok: true,
+    url: "u",
+    title: "t",
+    viewport: viewport(),
+    text,
+    truncated: false,
+    frames,
+    above,
+    below,
+  });
+  let placeholder = (clip: Rect | null) => ({
+    ref: 5,
+    frameId: 100,
+    line: 0,
+    depth: 0,
+    width: 400,
+    height: 300,
+    clip,
+  });
+  let readRequests = (frameId: number) =>
+    calls
+      .filter(([id, request]) => id === frameId && request.op === "readPage")
+      .map(([, request]) => request);
+
+  test("a viewport read gives each frame in view the part of it shown and notes what its frame left out", async () => {
+    documents[0].answer = (request) =>
+      request.op === "readPage"
+        ? tree(
+            'iframe "A" [ref=5]',
+            [placeholder(rect(0, 100, 400, 200))],
+            0,
+            900,
+          )
+        : undefined;
+    documents[100].answer = (request) =>
+      request.op === "readPage"
+        ? tree(`button "Go" [ref=${request.prefix}2]`, [], 100, 0)
+        : undefined;
+    let result = await runPage(send, {
+      op: "readPage",
+      filter: "all",
+      maxChars: 1000,
+      ref: null,
+      depth: null,
+      viewport: true,
+    });
+    expect(result).toMatchObject({
+      text: 'iframe "A" [ref=5] (viewport only; 100 px above and 0 px below left out)\n  button "Go" [ref=5:2]',
+      above: 0,
+      below: 900,
+    });
+    expect(readRequests(0)[0]).toMatchObject({ viewport: true, clip: null });
+    expect(readRequests(100)[0]).toMatchObject({
+      viewport: true,
+      clip: rect(0, 100, 400, 200),
+    });
+  });
+
+  test("a viewport read skips a frame with nothing in view", async () => {
+    documents[0].answer = (request) =>
+      request.op === "readPage"
+        ? tree('iframe "A" [ref=5]', [placeholder(null)], 0, 0)
+        : undefined;
+    let result = await runPage(send, {
+      op: "readPage",
+      filter: "all",
+      maxChars: 1000,
+      ref: null,
+      depth: null,
+      viewport: true,
+    });
+    expect(result).toMatchObject({ text: 'iframe "A" [ref=5]' });
+    expect(readRequests(100)).toEqual([]);
+  });
+
+  test("a viewport read from a ref inside a frame is clipped to what the page shows of it", async () => {
+    documents[0].frames[0] = entry(5, 100, rect(10, 700, 400, 300), {
+      clip: rect(10, 700, 400, 100),
+    });
+    documents[100].answer = (request) =>
+      request.op === "readPage" ? tree("button [ref=5:2]") : undefined;
+    await runPage(send, {
+      op: "readPage",
+      filter: "all",
+      maxChars: 1000,
+      ref: "5:2",
+      depth: null,
+      viewport: true,
+    });
+    expect(readRequests(100)[0]).toMatchObject({
+      ref: 2,
+      clip: rect(0, 0, 400, 100),
+    });
+  });
+
+  let text = (body: string, frames: number[] = []) => ({
+    ok: true as const,
+    url: "u",
+    title: "t",
+    text: body,
+    truncated: false,
+    frames,
+  });
+
+  test("page text of a ref reads only its frame, and no other", async () => {
+    documents[100].answer = (request) =>
+      request.op === "pageText" ? text(`| a |\nref ${request.ref}`) : undefined;
+    let result = await runPage(send, {
+      op: "pageText",
+      maxChars: 1000,
+      format: "markdown",
+      ref: "5:7",
+    });
+    let { frames: _, ...expected } = text("| a |\nref 7");
+    expect(result).toEqual(expected);
+    expect(calls.filter(([, request]) => request.op === "pageText")).toEqual([
+      [100, { op: "pageText", maxChars: 1000, format: "markdown", ref: 7 }],
+    ]);
+  });
+
+  test("page text of a ref adds the frames inside it and those nested in them", async () => {
+    documents[0].frames.push(entry(6, 300, rect(10, 500, 400, 300)));
+    documents[300] = { frames: [], viewport: viewport(), origin: 4 };
+    documents[0].answer = (request) =>
+      request.op === "pageText" ? text("Section", [5]) : undefined;
+
+    for (let [frameId, body] of [
+      [100, "Inner"],
+      [200, "Nested"],
+      [300, "Outside"],
+    ] as const)
+      documents[frameId].answer = (request) =>
+        request.op === "pageText" ? text(body) : undefined;
+
+    expect(
+      await runPage(send, {
+        op: "pageText",
+        maxChars: 1000,
+        format: "text",
+        ref: "4",
+      }),
+    ).toMatchObject({
+      text: "Section\n\n[frame 5 f100.test]\nInner\n\n[frame 5:3 f200.test]\nNested",
+    });
+  });
+
+  test("page text names the frame a ref failed in", async () => {
+    documents[100].answer = (request) =>
+      request.op === "pageText"
+        ? { ok: false, error: "ref 7 is unknown", code: "stale_ref" }
+        : undefined;
+    expect(
+      await runPage(send, {
+        op: "pageText",
+        maxChars: 1000,
+        format: "text",
+        ref: "5:7",
+      }),
+    ).toEqual({
+      ok: false,
+      error: "ref 7 is unknown (in the frame of iframe 5)",
+      code: "stale_ref",
     });
   });
 });

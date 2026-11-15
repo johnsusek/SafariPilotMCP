@@ -2,6 +2,7 @@ import type {
   Failure,
   FramePlaceholder,
   ReadPageResult,
+  Rect,
 } from "../shared/protocol";
 import {
   authorRoles,
@@ -12,8 +13,8 @@ import {
   roleOf,
 } from "./describe";
 import { flatChildren, isInvisible, isPruned, isShown } from "./flat";
-import { blocksScripts, frameIdOf, sourceOf } from "./frames";
-import { readViewport } from "./geometry";
+import { blocksScripts, contentBox, frameIdOf, sourceOf } from "./frames";
+import { intersect, readViewport, toRect, visibleArea } from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
 import { hidden, redactUrl } from "../shared/redact";
 import { isSensitive } from "./sensitive";
@@ -23,9 +24,23 @@ export type Item =
   | { text: string }
   | { element: Element; role: string; name: string; children: Item[] };
 
+// A viewport read: clip is the part of this frame the user can see, in its client coordinates, narrowed inside each overflow-clipping container;
+// above and below are how far left-out content reaches past its top and bottom edges, CSS px; frames holds each kept iframe's visible part in its own frame's coordinates.
+type View = {
+  clip: Rect;
+  above: number;
+  below: number;
+  frames: Map<Element, Rect | null>;
+};
+
 // left is a lower bound on output characters still wanted; building stops once it runs out, since a large page would otherwise be walked whole for a short answer.
 // nodes is how many more elements may be looked at, which bounds the walk's time on a huge page.
-type Walk = { interactiveOnly: boolean; left: number; nodes: number };
+type Walk = {
+  interactiveOnly: boolean;
+  left: number;
+  nodes: number;
+  view?: View;
+};
 
 type Output = {
   lines: string[];
@@ -34,6 +49,7 @@ type Output = {
   maxDepth: number;
   prefix: string;
   frames: FramePlaceholder[];
+  view?: View;
 };
 
 let leafTags = new Set([
@@ -68,8 +84,34 @@ let textInputTypes = new Set([
   "color",
 ]);
 let textMax = 300;
+let range = document.createRange();
 let valueMax = 40;
 let hrefMax = 60;
+
+// Whether box shows in a viewport read; one that does not counts toward what was left out above or below.
+function inView(view: View, box: DOMRect) {
+  let { clip } = view;
+
+  if (intersect(toRect(box), clip)) return true;
+
+  if (box.width <= 0 || box.height <= 0) return false;
+
+  let bottom = clip.top + clip.height;
+  view.above = Math.max(view.above, clip.top - box.top);
+  view.below = Math.max(view.below, box.bottom - bottom);
+  return false;
+}
+
+let clipping = /^(hidden|clip|auto|scroll)$/;
+
+// body's and the root's overflow can belong to the viewport, so only containers below them clip.
+function clips(element: Element) {
+  if (element === document.body || element === document.documentElement)
+    return false;
+
+  let style = getComputedStyle(element);
+  return clipping.test(style.overflowX) || clipping.test(style.overflowY);
+}
 
 function pushText(items: Item[], text: string) {
   let last = items.at(-1);
@@ -91,6 +133,12 @@ function add(items: Item[], child: Node, walk: Walk) {
 
     if (!text) return;
 
+    if (walk.view) {
+      range.selectNodeContents(child);
+
+      if (!inView(walk.view, range.getBoundingClientRect())) return;
+    }
+
     pushText(items, text);
     walk.left -= text.length + 2;
     return;
@@ -111,14 +159,43 @@ function add(items: Item[], child: Node, walk: Walk) {
     return;
   }
 
+  let view = walk.view;
+  let box = view ? child.getBoundingClientRect() : null;
+  // Out of view, an element shows only as the ancestor of something in view, without its own text.
+  let outside = view ? !inView(view, box!) : false;
+  let clip = view?.clip;
+
+  if (view && !outside && clips(child))
+    view.clip = intersect(view.clip, toRect(box!))!;
+
+  let children =
+    leafTags.has(child.localName) || isEditableRoot(child)
+      ? []
+      : build(child, walk, outside);
+
+  if (view) view.clip = clip!;
+
+  if (outside && !children.some((item) => "element" in item)) return;
+
   let role = roleOf(child);
   let interactive = isInteractive(child);
   // An iframe whose frame can be read stays as the line its document hangs under.
   let hostsFrame = child instanceof HTMLIFrameElement && frameIdOf(child) >= 0;
-  let children =
-    leafTags.has(child.localName) || isEditableRoot(child)
-      ? []
-      : build(child, walk);
+
+  // Its frame is read within the part of it in view, in the frame's own coordinates.
+  if (hostsFrame && view) {
+    let content = contentBox(child as HTMLIFrameElement, box!);
+    let visible = intersect(content, view.clip);
+    view.frames.set(
+      child,
+      visible && {
+        ...visible,
+        left: visible.left - content.left,
+        top: visible.top - content.top,
+      },
+    );
+  }
+
   // Containers show their text as children, so only widgets take a name from content, and not a focusable or clickable generic or group wrapping other elements.
   let elements = children.filter((item) => "element" in item).length;
   let wraps = !contentRoles.has(role) && elements > 0;
@@ -192,7 +269,8 @@ function add(items: Item[], child: Node, walk: Walk) {
   walk.left -= role.length + name.length + 8;
 }
 
-export function build(node: Node, walk: Walk): Item[] {
+// outside says node is out of a viewport read's view, so its own text is left out.
+export function build(node: Node, walk: Walk, outside = false): Item[] {
   let items: Item[] = [];
   // Text takes its parent's visibility.
   let hidden: boolean | undefined;
@@ -201,7 +279,7 @@ export function build(node: Node, walk: Walk): Item[] {
     if (walk.left <= 0 || walk.nodes <= 0) break;
 
     if (child.nodeType === Node.TEXT_NODE) {
-      hidden ??= node instanceof Element && isInvisible(node);
+      hidden ??= outside || (node instanceof Element && isInvisible(node));
 
       if (hidden) continue;
     }
@@ -370,6 +448,7 @@ function render(items: Item[], depth: number, output: Output): boolean {
         depth,
         width: element.clientWidth,
         height: element.clientHeight,
+        clip: output.view?.frames.get(element) ?? null,
       });
 
     if (depth + 1 >= output.maxDepth) continue;
@@ -411,7 +490,7 @@ function textOf(
   maxDepth: number,
   prefix: string,
 ) {
-  let output = newOutput(maxChars, maxDepth, prefix);
+  let output = { ...newOutput(maxChars, maxDepth, prefix), view: walk.view };
   let complete = render(items, 0, output);
   return {
     text: output.lines.join("\n"),
@@ -432,16 +511,27 @@ export function treeText(
 }
 
 // ref limits the tree to that element and what is inside it; depth limits how many levels are shown.
+// viewport keeps what shows in clip, or in this frame's visible area when clip is null.
 export function readPage(
   filter: "interactive" | "all",
   maxChars: number,
   ref: number | null,
   depth: number | null,
   prefix: string,
+  viewport: boolean,
+  clip: Rect | null,
 ): ReadPageResult | Failure {
   pruneRefs();
   let walk = newWalk(filter, maxChars, depth ?? Infinity);
   let items: Item[] = [];
+
+  if (viewport)
+    walk.view = {
+      clip: clip ?? visibleArea(readViewport()),
+      above: 0,
+      below: 0,
+      frames: new Map(),
+    };
 
   if (ref === null)
     items = build(document.body ?? document.documentElement, walk);
@@ -460,5 +550,7 @@ export function readPage(
     title: document.title,
     viewport: readViewport(),
     ...textOf(items, walk, maxChars, depth ?? Infinity, prefix),
+    above: walk.view ? Math.round(walk.view.above) : null,
+    below: walk.view ? Math.round(walk.view.below) : null,
   };
 }

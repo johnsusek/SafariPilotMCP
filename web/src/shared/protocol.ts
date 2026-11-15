@@ -86,6 +86,7 @@ export type ContentRequest =
   // on any other element dispatches untrusted dragenter, dragover and drop carrying them.
   | { op: "upload"; ref: number; files: UploadFile[] }
   // prefix goes in front of every ref in the text, such as "5:" inside the frame of iframe 5.
+  // viewport keeps only what shows in clip, the part of this frame its ancestors leave visible, or in this frame's visible area when clip is null.
   | {
       op: "readPage";
       filter: "interactive" | "all";
@@ -93,13 +94,21 @@ export type ContentRequest =
       ref: number | null;
       depth: number | null;
       prefix: string;
+      viewport: boolean;
+      clip: Rect | null;
     }
   | { op: "find"; name: string; role: string }
   // Every match for an action that names its target by name and role instead of a ref, by find's rules.
   | { op: "target"; name: string; role: string }
   // The first shown element holding text (case and whitespace ignored) or matching selector; exactly one of them is set.
   | { op: "waitFor"; text: string | null; selector: string | null }
-  | { op: "pageText"; maxChars: number }
+  // ref limits the text to that element and what is inside it.
+  | {
+      op: "pageText";
+      maxChars: number;
+      format: TextFormat;
+      ref: number | null;
+    }
   | { op: "scroll"; ref: number | null; left: number; top: number }
   | { op: "scrollIntoView"; ref: number }
   | { op: "frames" }
@@ -272,7 +281,8 @@ export type InspectResult = {
 // readPage: an indented element tree as text, one node per line, with refs from the same
 // ref space as snapshot and locate. filter "interactive" keeps only actionable elements;
 // ref limits it to that element's subtree and depth to that many levels.
-// frames are the iframe lines whose frame has a content script to read: line is the index into the text's lines, depth that line's indent level, width and height the iframe's client size.
+// frames are the iframe lines whose frame has a content script to read: line is the index into the text's lines, depth that line's indent level, width and height the iframe's client size,
+// and clip, in a viewport read, the part of the frame in view, in the frame's own coordinates (null when none or not a viewport read).
 export type FramePlaceholder = {
   ref: number;
   frameId: number;
@@ -280,7 +290,9 @@ export type FramePlaceholder = {
   depth: number;
   width: number;
   height: number;
+  clip: Rect | null;
 };
+// above and below, in a viewport read, are how far left-out content reaches past the top and bottom of the view, CSS px; null otherwise.
 export type ReadPageResult = {
   ok: true;
   url: string;
@@ -289,6 +301,8 @@ export type ReadPageResult = {
   text: string;
   truncated: boolean;
   frames: FramePlaceholder[];
+  above: number | null;
+  below: number | null;
 };
 
 // find: up to 20 visible elements whose name contains name and whose role equals role, case-insensitively; an empty field matches all.
@@ -314,13 +328,16 @@ export type WaitForResult = {
   match: WaitMatch | null;
 };
 
-// pageText: readable text of the page, main or article content first, else the body.
+// pageText: readable text of the page, main or article content first, else the body, or of ref's element; text is innerText, markdown read_page's walk as markdown.
+// frames are the refs of the iframes inside ref's element, itself included, whose documents follow its text; empty without ref.
+export type TextFormat = "text" | "markdown";
 export type PageTextResult = {
   ok: true;
   url: string;
   title: string;
   text: string;
   truncated: boolean;
+  frames: number[];
 };
 
 // scroll: scrolls by (left, top) CSS px the nearest scrollable ancestor of ref, or the document

@@ -1,20 +1,19 @@
 import type { Failure, WaitForResult } from "../shared/protocol";
-import { collapse, isEditableRoot } from "./describe";
-import { flatChildren, flatElements, isInvisible, isPruned } from "./flat";
+import { collapse, isField } from "./describe";
+import {
+  flatChildren,
+  flatElements,
+  isBlock,
+  isInvisible,
+  isPruned,
+} from "./flat";
 import { readViewport, visibleArea } from "./geometry";
-import { isSensitive } from "./sensitive";
 import { elementInfo, hasBox } from "./snapshot";
-
-let formTags = new Set(["input", "select", "textarea"]);
 
 type Span = { element: Element; start: number; end: number };
 
 // The text a person sees under root, whitespace collapsed, and where each shown element's text sits in it, children before their parents.
 // It walks the flat tree find and read_page use; block boxes and br separate words, and form field values (a textarea's default text too) and secret editors are left out.
-let isField = (node: Node) =>
-  node instanceof Element &&
-  (formTags.has(node.localName) || (isEditableRoot(node) && isSensitive(node)));
-
 export function shownText(root: Node) {
   let text = "";
   let spans: Span[] = [];
@@ -44,9 +43,7 @@ export function shownText(root: Node) {
       if (isPruned(child) || isField(child)) continue;
 
       let hidden = isInvisible(child);
-      let gap = /^(inline|contents|$)/.test(getComputedStyle(child).display)
-        ? ""
-        : " ";
+      let gap = isBlock(child) ? " " : "";
       add(gap);
       let start = text.length;
       walk(child, hidden);

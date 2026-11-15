@@ -14,6 +14,7 @@ Just like Claude in Chrome, SafariPilot opens its own tabs and works there in th
 - **Its own tabs only.** Claude sees only the tabs it opened and the popups they open. 
 - **Replies show what changed.** Clicks, typing, form edits, drags and uploads end with what they added, changed or removed on the page, so Claude rarely reads it again.
 - **Acts by name.** Claude can click "Sign in" or fill "Email" without reading the page first, and fails rather than guess when more than one element matches.
+- **Lean reads.** Claude can read just what is on screen, or one table or list of links as markdown, instead of the whole page.
 - **The whole page.** Iframes, cross-origin ones included, are read and acted in. Claude can answer an alert that is already open, upload files without the file picker, drag, and read console and network logs with request bodies.
 - **Site APIs at API speed.** Once the network log shows a site's JSON calls, Claude can send them again from inside the page with `page_fetch`, SafariPilot filling in the auth and CSRF headers Claude never sees. Only GET and HEAD, unless you turn on **Allow page_fetch Writes** in the **General** pane.
 - **You approve every client.** Nothing connects without your say, since each new client asks for your approval first.

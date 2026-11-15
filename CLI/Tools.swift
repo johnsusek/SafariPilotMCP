@@ -40,9 +40,9 @@ enum Tools {
     ToolDefinition(name: "tab_select", description: "Makes a tab the active tab of its window.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "tab_close", description: "Closes a tab.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "navigate", description: "Loads a URL in a tab, or goes back or forward in its history when url is \"back\" or \"forward\", and waits for the page to load.", properties: ["tabId": tabId, "url": property("string", "URL to load, or \"back\" or \"forward\".")], required: ["url"]),
-    ToolDefinition(name: "read_page", description: "Returns the page, or the element ref_id and what is inside it, as an indented element tree whose refs work with the other page tools, limited to actionable elements when filter is \"interactive\".", properties: ["tabId": tabId, "filter": property("string", "\"all\" (default) or \"interactive\".", oneOf: ["all", "interactive"]), "ref_id": ref("Element ref whose subtree to return instead of the whole page; an iframe ref returns its frame's document."), "depth": property("integer", "Levels of the tree to return; deeper elements are left out."), "max_chars": maxChars]),
+    ToolDefinition(name: "read_page", description: "Returns the page, or the element ref_id and what is inside it, as an indented element tree whose refs work with the other page tools, limited to actionable elements when filter is \"interactive\" and to what is in view when viewport is true.", properties: ["tabId": tabId, "filter": property("string", "\"all\" (default) or \"interactive\".", oneOf: ["all", "interactive"]), "ref_id": ref("Element ref whose subtree to return instead of the whole page; an iframe ref returns its frame's document."), "depth": property("integer", "Levels of the tree to return; deeper elements are left out."), "viewport": property("boolean", "Return only elements in view, in every frame, and how many CSS px of the page were left out above and below; defaults to false."), "max_chars": maxChars]),
     ToolDefinition(name: "find", description: "Finds up to 20 rendered elements whose accessible name contains name and whose role equals role, case-insensitively, on-screen ones first, and returns them with refs.", properties: ["tabId": tabId, "name": property("string", "Text the element's accessible name must contain."), "role": property("string", "Exact ARIA role, such as button, link, textbox, searchbox or combobox.")]),
-    ToolDefinition(name: "get_page_text", description: "Returns the readable text of the page, preferring its main or article content.", properties: ["tabId": tabId, "max_chars": maxChars]),
+    ToolDefinition(name: "get_page_text", description: "Returns the readable text of the page, preferring its main or article content, or of the element ref_id, as plain text or as markdown that keeps headings, lists, link URLs, tables and code.", properties: ["tabId": tabId, "format": property("string", "\"text\" (default) or \"markdown\".", oneOf: TextFormat.allCases.map(\.rawValue)), "ref_id": ref("Element ref whose text to return instead of the page's, such as a table or a list of links; an iframe ref returns its frame's document."), "max_chars": maxChars]),
     ToolDefinition(name: "click", description: "Clicks an element by ref or by name and role, a plain left click through the macOS Accessibility press action (trusted mousedown, mouseup and click, no pointer events) and double, triple or right clicks or clicks with modifiers as untrusted pointer and mouse events dispatched by the page script, which move focus but skip browser defaults such as text selection and the native context menu, then waits for a page the click starts loading or else ends with what it changed on the page.", properties: target().merging([
       "tabId": tabId,
       "action": property("string", "Kind of click; defaults to left_click.", oneOf: ClickAction.allCases.map(\.rawValue)),
@@ -111,6 +111,7 @@ enum Tools {
   click and form_input use Accessibility and form_input replaces a text field's whole value; double, triple, right and modifier clicks and drag are untrusted synthetic events; key sends real key presses (no cmd shortcuts) to type text at the cursor or press Enter or Tab; hover is unsupported.
   Iframe content appears under its iframe line, with refs like 5:12 that work in every page tool.
   click, form_input, key, scroll, scroll_to and file_upload take name and role instead of a ref, matched as find matches them in every frame, which saves the find: an exact name wins over longer ones, anything but one match fails listing candidates with refs, and the reply names the element and its ref.
+  Read only what you need: read_page with viewport true returns what is on screen, and get_page_text with format markdown and a table's or list's ref_id returns just its rows or links with their URLs.
   Use javascript to read page state; clicks and edits made from it are untrusted events that many pages ignore, so act with click, form_input and key.
   Once read_network_requests shows the JSON calls a page makes, read more with page_fetch instead of driving the page again, replaying a requestId so SafariPilot fills in its hidden auth and CSRF headers; it sends only GET and HEAD unless the user allows writes.
   Upload files with file_upload, never by clicking a file input or its button, since Safari's file picker cannot be driven.
@@ -180,7 +181,12 @@ enum Tools {
     case "tab_close": return try .tabClose(tabId: arguments.require(tabId, "tabId"))
     case "navigate": return try .navigation(tabId: page(), target: arguments.require(arguments.string("url"), "url"))
     case "find": return try .find(tabId: page(), name: arguments.string("name") ?? "", role: arguments.string("role") ?? "")
-    case "get_page_text": return try .pageText(tabId: page(), maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars)
+    case "get_page_text":
+      let format = try arguments.string("format") ?? "text"
+
+      guard let parsed = TextFormat(rawValue: format) else { throw Failure(.invalidArgument, "format must be \"text\" or \"markdown\", not \(format)") }
+
+      return try .pageText(tabId: page(), maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars, format: parsed, ref: arguments.ref("ref_id"))
     case "click": return try .click(tabId: page(), target: arguments.requiredTarget(), actionName: arguments.string("action"), modifierNames: arguments.string("modifiers"))
     case "form_input": return try .formInput(tabId: page(), target: arguments.requiredTarget(), value: arguments.require(arguments.formValue("value"), "value"))
     case "screenshot": return try .screenshot(tabId: page(), corners: arguments.numbers("region"), scale: arguments.number("scale"))
@@ -201,7 +207,7 @@ enum Tools {
 
       guard let parsed = ReadFilter(rawValue: filter) else { throw Failure(.invalidArgument, "filter must be \"all\" or \"interactive\", not \(filter)") }
 
-      return try .readPage(tabId: page(), filter: parsed, maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars, root: arguments.ref("ref_id"), depth: arguments.integer("depth"))
+      return try .readPage(tabId: page(), filter: parsed, maxChars: arguments.integer("max_chars") ?? AppCommand.defaultMaxChars, root: arguments.ref("ref_id"), depth: arguments.integer("depth"), viewport: arguments.bool("viewport") ?? false)
     case "scroll":
       return try .scroll(tabId: page(), target: arguments.target(), direction: arguments.require(arguments.string("direction"), "direction"), amount: arguments.number("amount") ?? 3)
     default:

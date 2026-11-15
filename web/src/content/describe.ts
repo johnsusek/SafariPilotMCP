@@ -1,4 +1,11 @@
-import { flatChildren, flatParent, isInvisible, isPruned } from "./flat";
+import {
+  flatChildren,
+  flatParent,
+  isBlock,
+  isInvisible,
+  isPruned,
+} from "./flat";
+import { isSensitive } from "./sensitive";
 
 let inputRoles: Record<string, string> = {
   button: "button",
@@ -153,8 +160,7 @@ function contentText(node: Node, parts: string[], budget: { left: number }) {
     }
 
     // Block boxes and line breaks separate words, as browsers do when they name from content.
-    let display = getComputedStyle(child).display;
-    let gap = /^(inline|contents|$)/.test(display) ? "" : " ";
+    let gap = isBlock(child) ? " " : "";
     let start = parts.length;
     parts.push(gap);
     contentText(child, parts, budget);
@@ -184,6 +190,11 @@ export function collapse(text: string | null | undefined, max = nameMax) {
 export let isEditableRoot = (element: Element) =>
   (element as HTMLElement).isContentEditable &&
   !(flatParent(element) as HTMLElement | null)?.isContentEditable;
+
+// A form control, whose value is state rather than page text, or a secret editor, whose text never leaves the page.
+export let isField = (node: Node) =>
+  node instanceof Element &&
+  (formTags.has(node.localName) || (isEditableRoot(node) && isSensitive(node)));
 
 export function roleOf(element: Element) {
   let explicit = element.getAttribute("role")?.trim().split(/\s+/)[0];

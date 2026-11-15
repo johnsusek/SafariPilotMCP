@@ -1,5 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test } from "vitest";
+import type { PageTextResult } from "../shared/protocol";
 import { clip, pageText, textRoot } from "./pageText";
 
 beforeEach(() => {
@@ -41,7 +42,7 @@ describe("clip", () => {
 describe("pageText", () => {
   test("reads the main content", () => {
     document.body.innerHTML = "<nav>Menu</nav><main><p>Hello</p></main>";
-    let result = pageText(1000);
+    let result = pageText(1000, "text", null) as PageTextResult;
     expect(result.text).toContain("Hello");
     expect(result.text).not.toContain("Menu");
     expect(result.truncated).toBe(false);

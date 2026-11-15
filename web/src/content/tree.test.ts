@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import { resolveRef } from "./refs";
+import type { Rect } from "../shared/protocol";
 import { readPage, treeText } from "./tree";
 
 let render = (html: string, filter: "all" | "interactive" = "all") => {
@@ -355,7 +356,7 @@ describe("readPage", () => {
 
   test("depth limits the levels shown", () => {
     document.body.innerHTML = html;
-    let result = readPage("all", 10000, null, 2, "");
+    let result = readPage("all", 10000, null, 2, "", false, null);
     expect(result.ok && withoutRefs(result.text)).toBe(
       ["navigation", "  list", 'heading "Title" level=2'].join("\n"),
     );
@@ -366,7 +367,7 @@ describe("readPage", () => {
     let ref = Number(
       treeText(document.body, "all", 10000).text.match(/\[ref=(\d+)\]/)![1],
     );
-    let result = readPage("all", 10000, ref, null, "");
+    let result = readPage("all", 10000, ref, null, "", false, null);
     expect(result.ok && withoutRefs(result.text)).toBe(
       [
         "navigation",
@@ -378,7 +379,7 @@ describe("readPage", () => {
   });
 
   test("unknown ref fails", () => {
-    expect(readPage("all", 10000, 99999, null, "")).toEqual({
+    expect(readPage("all", 10000, 99999, null, "", false, null)).toEqual({
       ok: false,
       error: "ref 99999 is unknown",
       code: "stale_ref",
@@ -410,7 +411,7 @@ describe("iframes", () => {
     let ref = Number(lines[0].match(/ref=5:(\d+)/)![1]);
     expect(resolveRef(ref)).toBe(document.getElementById("live"));
     expect(frames).toEqual([
-      { ref, frameId: 42, line: 0, depth: 0, width: 0, height: 0 },
+      { ref, frameId: 42, line: 0, depth: 0, width: 0, height: 0, clip: null },
     ]);
   });
 
@@ -436,5 +437,131 @@ describe("iframes", () => {
       ].join("\n"),
     );
     expect(frames).toMatchObject([{ frameId: 7, line: 2, depth: 1 }]);
+  });
+});
+
+describe("viewport", () => {
+  // Boxes come from data-box="left top width height" on the element or its nearest ancestor with one, else the 1000 x 800 view; text from textBoxes, else its parent's box.
+  let textBoxes = new Map<string, DOMRect>();
+  let boxOf = (element: Element | null) => {
+    for (let node = element; node; node = node.parentElement) {
+      let box = node.getAttribute("data-box");
+
+      if (box) return new DOMRect(...box.split(" ").map(Number));
+    }
+
+    return new DOMRect(0, 0, 1000, 800);
+  };
+
+  beforeEach(() => {
+    textBoxes.clear();
+    Object.defineProperty(window, "visualViewport", {
+      configurable: true,
+      value: {
+        scale: 1,
+        offsetLeft: 0,
+        offsetTop: 0,
+        width: 1000,
+        height: 800,
+      },
+    });
+    vi.spyOn(Element.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Element) {
+        return boxOf(this);
+      },
+    );
+    vi.spyOn(Range.prototype, "getBoundingClientRect").mockImplementation(
+      function (this: Range) {
+        let node = this.startContainer;
+        return (
+          textBoxes.get(node.textContent ?? "") ?? boxOf(node.parentElement)
+        );
+      },
+    );
+  });
+
+  let read = (html: string, clip: Rect | null = null) => {
+    document.body.innerHTML = html;
+    let result = readPage("all", 10000, null, null, "", true, clip);
+
+    if (!result.ok) throw new Error(result.error);
+
+    return { ...result, text: withoutRefs(result.text) };
+  };
+
+  test("keeps what meets the view and measures what is left out above and below", () => {
+    let result = read(
+      '<h2 data-box="0 -900 1000 40">Gone above</h2><p data-box="0 -60 1000 100">Straddles the top</p><button data-box="10 300 80 30">Go</button><p data-box="0 1200 1000 400">Far below</p>',
+    );
+    expect(result.text).toBe(
+      ['paragraph "Straddles the top"', 'button "Go"'].join("\n"),
+    );
+    expect(result).toMatchObject({ above: 900, below: 800 });
+  });
+
+  test("an offscreen ancestor of something in view stays as structure, without its own text", () => {
+    let result = read(
+      '<footer data-box="0 3000 1000 200">Footer text<button data-box="900 700 50 50">Top</button></footer>',
+    );
+    expect(result.text).toBe(["contentinfo", '  button "Top"'].join("\n"));
+  });
+
+  test("a scrolling container narrows the view to its own box", () => {
+    let result = read(
+      '<div style="overflow-y: auto" data-box="0 100 1000 200"><p data-box="0 0 1000 50">Under the header</p><p data-box="0 150 1000 50">Shown</p><p data-box="0 400 1000 50">Scrolled below</p></div><p data-box="0 20 1000 50">Header</p>',
+    );
+    expect(result.text).toBe(
+      ['paragraph "Shown"', 'paragraph "Header"'].join("\n"),
+    );
+    expect(result).toMatchObject({ above: 100, below: 150 });
+  });
+
+  test("a tall paragraph keeps only the text runs in view", () => {
+    textBoxes.set("Line one", new DOMRect(0, -500, 1000, 20));
+    textBoxes.set("Line two", new DOMRect(0, 10, 1000, 20));
+    let result = read(
+      '<div data-box="0 -500 1000 2000">Line one<br>Line two</div>',
+    );
+    expect(result.text).toBe('"Line two"');
+    expect(result).toMatchObject({ above: 500, below: 0 });
+  });
+
+  test("clip stands for the part of a frame its ancestors show", () => {
+    let result = read(
+      '<p data-box="0 0 1000 50">Top</p><p data-box="0 500 1000 50">Lower</p>',
+      { left: 0, top: 400, width: 1000, height: 200 },
+    );
+    expect(result.text).toBe('paragraph "Lower"');
+  });
+
+  test("an iframe in view gives its frame the part of it shown, in the frame's coordinates", () => {
+    vi.stubGlobal("browser", {
+      runtime: { getFrameId: (target: Element) => (target.id ? 42 : -1) },
+    });
+    document.body.innerHTML =
+      '<iframe id="live" title="Live" data-box="100 600 400 400"></iframe><iframe id="off" title="Off" data-box="100 900 400 400"></iframe>';
+
+    for (let iframe of document.querySelectorAll("iframe")) {
+      Object.defineProperty(iframe, "clientWidth", { value: 400 });
+      Object.defineProperty(iframe, "clientHeight", { value: 400 });
+    }
+
+    let result = readPage("all", 10000, null, null, "", true, null);
+    expect(result.ok && result.frames).toEqual([
+      expect.objectContaining({
+        frameId: 42,
+        clip: { left: 0, top: 0, width: 400, height: 200 },
+      }),
+    ]);
+  });
+
+  test("a whole-page read reports nothing left out", () => {
+    document.body.innerHTML = '<p data-box="0 5000 10 10">Far</p>';
+    let result = readPage("all", 10000, null, null, "", false, null);
+    expect(result).toMatchObject({
+      text: expect.stringContaining("Far"),
+      above: null,
+      below: null,
+    });
   });
 });

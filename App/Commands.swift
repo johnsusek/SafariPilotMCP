@@ -23,9 +23,9 @@ struct Commands {
     case let .tabClose(tabId): try await tabClose(tabId)
     case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))
     case let .history(tabId, direction): try await tabReply("went \(direction.rawValue) to", call(.history(tabId: tabId, direction: direction)))
-    case let .readPage(tabId, filter, maxChars, ref, depth): try await readPage(tabId, filter, maxChars, ref, depth)
+    case let .readPage(tabId, filter, maxChars, ref, depth, viewport): try await readPage(tabId, filter, maxChars, ref, depth, viewport)
     case let .find(tabId, name, role): try await find(tabId, name, role)
-    case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
+    case let .pageText(tabId, maxChars, format, ref): try await pageText(tabId, maxChars, format, ref)
     case let .waitCheck(tabId, condition): try await waitCheck(tabId, condition)
     case let .scroll(tabId, target?, left, top): try await resolving(tabId, target) { try await scroll(tabId, $0, left, top) }
     case let .scroll(tabId, nil, left, top): try await scroll(tabId, nil, left, top)
@@ -267,17 +267,18 @@ struct Commands {
     return try CLIReply(ok: true, text: "closed tab \(response.decode(ClosedResult.self).closed)", data: response)
   }
 
-  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int, _ ref: PageRef?, _ depth: Int?) async throws -> CLIReply {
-    let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars, ref: ref, depth: depth))
+  private func readPage(_ tabId: Int?, _ filter: ReadFilter, _ maxChars: Int, _ ref: PageRef?, _ depth: Int?, _ viewport: Bool) async throws -> CLIReply {
+    let response = try await content(tabId, .readPage(filter: filter, maxChars: maxChars, ref: ref, depth: depth, viewport: viewport))
     let result = try response.decode(ReadPageResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
+    let leftOut = result.leftOut.map { "\n\($0)" } ?? ""
 
     if result.text.isEmpty {
       let shown = filter == .interactive ? "no visible actionable elements" : "no visible elements"
-      return CLIReply(ok: true, text: "\(shown) on \(result.title) | \(Redaction.url(result.url))", data: response)
+      return CLIReply(ok: true, text: "\(shown)\(viewport ? " in view" : "") on \(result.title) | \(Redaction.url(result.url))\(leftOut)", data: response)
     }
 
-    return CLIReply(ok: true, text: result.text + truncated, data: response)
+    return CLIReply(ok: true, text: result.text + truncated + leftOut, data: response)
   }
 
   private func find(_ tabId: Int?, _ name: String, _ role: String) async throws -> CLIReply {
@@ -299,8 +300,8 @@ struct Commands {
     return CLIReply(ok: true, text: "found \(condition.label) at [\(match.ref)] \(match.role) <\(match.tag)> \"\(match.text)\"\(offscreen)", data: response)
   }
 
-  private func pageText(_ tabId: Int?, _ maxChars: Int) async throws -> CLIReply {
-    let response = try await content(tabId, .pageText(maxChars: maxChars))
+  private func pageText(_ tabId: Int?, _ maxChars: Int, _ format: TextFormat, _ ref: PageRef?) async throws -> CLIReply {
+    let response = try await content(tabId, .pageText(maxChars: maxChars, format: format, ref: ref))
     let result = try response.decode(PageTextResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
     return CLIReply(ok: true, text: "\(result.title) | \(Redaction.url(result.url))\n\(result.text)\(truncated)", data: response)
