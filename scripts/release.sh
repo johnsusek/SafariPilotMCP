@@ -1,6 +1,6 @@
 #!/bin/zsh
 # Usage: scripts/release.sh X.Y.Z [--no-publish]
-# Builds a Developer ID signed, notarized and stapled DMG at that version and a Sparkle appcast for it, then commits the version bump, tags vX.Y.Z, pushes and publishes a GitHub release with docs/releases/X.Y.Z.md as its notes.
+# Builds a Developer ID signed, notarized and stapled DMG at that version and a Sparkle appcast for it, then commits the version bump, tags vX.Y.Z, pushes, publishes a GitHub release with docs/releases/X.Y.Z.md as its notes and bumps the johnsusek/tap cask.
 # The appcast is signed with the EdDSA key that Sparkle's generate_keys keeps in the login keychain; project.yml's SUPublicEDKey must be its public half.
 # --no-publish stops after the DMG and puts the version files back. Notary credentials come from `xcrun notarytool store-credentials SafariPilot` (or $NOTARY_PROFILE).
 set -euo pipefail
@@ -18,6 +18,8 @@ dmg="$out/SafariPilot-$version.dmg"
 notes="docs/releases/$version.md"
 sparkle="$derived/SourcePackages/artifacts/sparkle/Sparkle/bin"
 repo=https://github.com/johnsusek/SafariPilotMCP
+tap=$(brew --repository johnsusek/tap)
+cask="$tap/Casks/safaripilot.rb"
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 fail() { echo "$1" >&2; exit 1; }
@@ -28,6 +30,7 @@ cd "$root"
 git diff --quiet HEAD || fail "commit or stash tracked changes first"
 git rev-parse -q --verify "refs/tags/v$version" >/dev/null && fail "tag v$version already exists"
 git cat-file -e "HEAD:$notes" 2>/dev/null || fail "commit release notes at $notes first"
+(( ! publish )) || git -C "$tap" remote get-url origin >/dev/null 2>&1 || fail "no pushable tap at $tap: create johnsusek/homebrew-tap and brew tap it"
 xcrun notarytool history --keychain-profile "$profile" >/dev/null 2>&1 || fail "no notary credentials: run xcrun notarytool store-credentials $profile"
 
 # Put the version files back unless the release commit took them.
@@ -104,3 +107,7 @@ git commit -q -m "Release $version" -- project.yml extension/manifest.json
 git tag -a "v$version" -m "SafariPilot $version"
 git push -q origin main "v$version"
 gh release create "v$version" "$dmg" "$out/feed/appcast.xml" --title "SafariPilot $version" --notes-file "$notes" --verify-tag
+
+sed -i '' -E "s/^(  version ).*/\1\"$version\"/; s/^(  sha256 ).*/\1\"$(shasum -a 256 "$dmg" | cut -d' ' -f1)\"/" "$cask"
+git -C "$tap" commit -q -m "safaripilot $version" -- Casks/safaripilot.rb
+git -C "$tap" push -q
