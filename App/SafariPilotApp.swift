@@ -28,6 +28,10 @@ struct SafariPilotApp: App {
     .defaultSize(width: 780, height: 580)
     .defaultLaunchBehavior(.suppressed)
     .commands {
+      CommandGroup(after: .appInfo) {
+        Button("Check for Updates…") { delegate.model.updates.check() }
+          .disabled(!delegate.model.updates.canCheck)
+      }
       CommandMenu("Bridge") {
         Button("Request Accessibility Access") { delegate.model.requestAccessibility() }
           .disabled(delegate.model.axTrusted)
@@ -77,6 +81,8 @@ private struct MenuBarMenu: View {
     Button("Configure Claude Desktop…") { model.configureClaudeDesktop() }
     Button("Copy Server Command to Clipboard") { model.copyClaudeCodeCommand() }
     Divider()
+    Button("Check for Updates…") { model.updates.check() }
+      .disabled(!model.updates.canCheck)
     Button("Settings…") {
       openWindow(id: "main")
       NSApp.activate()

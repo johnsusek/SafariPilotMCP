@@ -26,6 +26,8 @@ struct GeneralView: View {
           Text("Show in Menu Bar")
           Text("If the icon is hidden, open SafariPilot again to return here.")
         }
+
+        Toggle("Check for Updates Automatically", isOn: Bindable(model.updates).automatic)
       }
 
       Section("Status") {

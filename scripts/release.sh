@@ -1,6 +1,7 @@
 #!/bin/zsh
 # Usage: scripts/release.sh X.Y.Z [--no-publish]
-# Builds a Developer ID signed, notarized and stapled DMG at that version, then commits the version bump, tags vX.Y.Z, pushes and publishes a GitHub release with docs/releases/X.Y.Z.md as its notes.
+# Builds a Developer ID signed, notarized and stapled DMG at that version and a Sparkle appcast for it, then commits the version bump, tags vX.Y.Z, pushes and publishes a GitHub release with docs/releases/X.Y.Z.md as its notes.
+# The appcast is signed with the EdDSA key that Sparkle's generate_keys keeps in the login keychain; project.yml's SUPublicEDKey must be its public half.
 # --no-publish stops after the DMG and puts the version files back. Notary credentials come from `xcrun notarytool store-credentials SafariPilot` (or $NOTARY_PROFILE).
 set -euo pipefail
 
@@ -15,6 +16,8 @@ archive="$out/SafariPilot.xcarchive"
 app="$out/export/SafariPilot.app"
 dmg="$out/SafariPilot-$version.dmg"
 notes="docs/releases/$version.md"
+sparkle="$derived/SourcePackages/artifacts/sparkle/Sparkle/bin"
+repo=https://github.com/johnsusek/SafariPilotMCP
 lsregister=/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister
 
 fail() { echo "$1" >&2; exit 1; }
@@ -39,6 +42,7 @@ npm --prefix web ci --silent && npm --prefix web run --silent build
 xcodegen generate --quiet
 xcodebuild archive -project SafariPilot.xcodeproj -scheme SafariPilot -configuration Release -destination 'generic/platform=macOS' -archivePath "$archive" -derivedDataPath "$derived" -allowProvisioningUpdates | grep -E " error:|^\*\* ARCHIVE" || true
 [[ -d $archive ]] || fail "archive failed"
+[[ $("$sparkle/generate_keys" -p 2>/dev/null) == $(sed -nE 's/^ +SUPublicEDKey: (.*)/\1/p' project.yml) ]] || fail "SUPublicEDKey in project.yml does not match the keychain's Sparkle key: run $sparkle/generate_keys"
 
 cat > "$out/ExportOptions.plist" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
@@ -85,6 +89,12 @@ xcrun stapler staple -q "$dmg"
 spctl --assess --type open --context context:primary-signature "$dmg"
 spctl --assess --type execute "$app"
 
+# The feed URL reads appcast.xml from the latest release, so it lists only this version; its .md twin becomes the embedded notes.
+mkdir "$out/feed"
+cp "$dmg" "$out/feed/"
+cp "$notes" "$out/feed/SafariPilot-$version.md"
+"$sparkle/generate_appcast" --embed-release-notes --maximum-deltas 0 --download-url-prefix "$repo/releases/download/v$version/" --link "$repo" "$out/feed"
+
 if (( ! publish )); then
   echo "built $dmg (not published)"
   exit 0
@@ -93,4 +103,4 @@ fi
 git commit -q -m "Release $version" -- project.yml extension/manifest.json
 git tag -a "v$version" -m "SafariPilot $version"
 git push -q origin main "v$version"
-gh release create "v$version" "$dmg" --title "SafariPilot $version" --notes-file "$notes" --verify-tag
+gh release create "v$version" "$dmg" "$out/feed/appcast.xml" --title "SafariPilot $version" --notes-file "$notes" --verify-tag

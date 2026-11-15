@@ -21,6 +21,7 @@ final class AppModel {
   /// What the last background message said about the extension Safari runs; nil until one arrives.
   private(set) var extensionBuild: ExtensionBuild?
   let gate = ClientGate()
+  let updates = Updates()
   private let queue = CommandQueue()
   private(set) var axTrusted = AXIsProcessTrusted()
   private(set) var extensionEnabled: Bool?

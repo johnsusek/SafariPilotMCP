@@ -8,6 +8,9 @@ packages:
   MCP:
     url: https://github.com/modelcontextprotocol/swift-sdk.git
     from: 0.12.1
+  Sparkle:
+    url: https://github.com/sparkle-project/Sparkle
+    from: 2.10.1
 settings:
   base:
     DEVELOPMENT_TEAM: WX2UGCD2SK
@@ -33,6 +36,8 @@ targets:
         embed: true
         copy:
           destination: sharedSupport
+      - package: Sparkle
+        product: Sparkle
     info:
       path: App/Info.plist
       properties:
@@ -43,6 +48,9 @@ targets:
         LSUIElement: true
         NSHumanReadableCopyright: © 2026 John Susek
         NSSupportsSuddenTermination: false
+        SUFeedURL: https://github.com/johnsusek/SafariPilotMCP/releases/latest/download/appcast.xml
+        SUPublicEDKey: MISSING-RUN-generate_keys
+        SUEnableAutomaticChecks: true
     entitlements:
       path: App/SafariPilot.entitlements
       properties:
