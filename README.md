@@ -13,6 +13,7 @@ Just like Claude in Chrome, SafariPilot opens its own tabs and works there in th
 - **Out of your way.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. 
 - **Its own tabs only.** Claude sees only the tabs it opened and the popups they open. 
 - **Replies show what changed.** Clicks, typing, form edits, drags and uploads end with what they added, changed or removed on the page, so Claude rarely reads it again.
+- **Lean reads.** Claude can read just what is on screen, or one table or list of links as markdown, instead of the whole page.
 - **The whole page.** Iframes, cross-origin ones included, are read and acted in. Claude can answer an alert that is already open, upload files without the file picker, drag, and read console and network logs with request bodies.
 - **You approve every client.** Nothing connects without your say, since each new client asks for your approval first.
 - **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from everything Claude reads in pages, URLs and network logs.

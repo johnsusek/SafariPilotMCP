@@ -45,6 +45,8 @@ Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 
 - Refs come from the content script on first sight per frame, stored in a WeakMap, and numbered from a random base per document so a stale ref fails instead of hitting another element.
 - Iframes, same- and cross-origin, are read inline and actionable. Refs inside frames are paths such as `5:12`. See [iframes.md](iframes.md).
+- read_page with viewport keeps elements whose box meets the visible part of their frame, narrowed inside each overflow-clipping container, plus their ancestors, and reads only the frames in view, each within the part shown. It still walks offscreen subtrees, since fixed and absolute descendants can sit in view, and reports how many CSS px of content lie above and below. Code: `inView` in `web/src/content/tree.ts`, `readFrame` in `web/src/background/page.ts`.
+- get_page_text markdown walks the same flat tree as read_page (shadow roots, slots, hidden pruning) in `web/src/content/markdown.ts`, never innerText, and leaves out every form field value. ref_id reads one element in its own frame, then only the frames inside it.
 - Alert, confirm and prompt dialogs stop the whole extension, so the app finds them through Accessibility and answers them with `AXPress`.
 - Console capture and fetch/XHR body capture run in the page's main world. Request metadata comes from `webRequest`, logged for pilot tabs only.
 
