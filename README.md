@@ -4,9 +4,9 @@
 
 # SafariPilot
 
-**SafariPilot lets AI agents work in your Safari, while you keep using your Mac.**
+**SafariPilot is an MCP server for Safari on macOS. Allows agents to work in your Safari, while you keep using your Mac.**
 
-Just like Claude in Chrome: Open Safari tabs and work on them in the background, without taking over your cursor.
+Open Safari tabs and work on them in the background, without taking over your cursor.
 
 ## Features
 
