@@ -1,6 +1,6 @@
 <p align="center"><img src="docs/logo/logo-color.svg" height="160" alt="SafariPilot"></p>
 
-<p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a></p>
+<p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a></p>
 
 # SafariPilot
 
@@ -33,7 +33,11 @@ Just like Claude in Chrome: Open Safari tabs and work on them in the background,
 brew install --cask johnsusek/tap/safaripilot
 ```
 
-Or download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest) and drag SafariPilot to Applications.
+Or download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest) and drag SafariPilot to Applications. Releases are built, signed and notarized in GitHub Actions; to check that a DMG came from this repo's workflow:
+
+```bash
+gh attestation verify SafariPilot-*.dmg --repo johnsusek/SafariPilotMCP
+```
 
 Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see its window. Then:
 
