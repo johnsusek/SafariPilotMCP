@@ -12,7 +12,7 @@ struct ToolMappingTests {
 
     // key needs keys or text but neither is required by itself; browser_batch and wait run in MCPServer, not through command.
     for tool in Tools.definitions where !["browser_batch", "wait"].contains(tool.name) {
-      let arguments = samples.filter { tool.required.contains($0.key) }.merging(tool.name == "key" ? ["keys": "Enter"] : [:]) { $1 }
+      let arguments = samples.filter { tool.required.contains($0.key) || ($0.key == "ref" && tool.properties["role"] != nil) }.merging(tool.name == "key" ? ["keys": "Enter"] : [:]) { $1 }
       #expect(throws: Never.self) { try map(tool.name, arguments) }
     }
   }
@@ -35,31 +35,100 @@ struct ToolMappingTests {
   @Test func schemaListsRequiredKeys() {
     let schema = Tools.definitions.first { $0.name == "form_input" }!.inputSchema
     #expect(schema["type"] == "object")
-    #expect(schema["required"] == .array(["ref", "value"]))
+    #expect(schema["required"] == .array(["value"]))
+  }
+
+  @Test func actionToolsTakeNameAndRoleInPlaceOfRef() throws {
+    let enter = try KeyChord.parse("Enter")
+    #expect(try map("click", ["name": "Sign in", "role": "button"]) == .click(tabId: 20, target: .named(name: "Sign in", role: "button")))
+    #expect(try map("click", ["name": "  Sign in\n", "action": "double_click"]) == .click(tabId: 20, target: .named(name: "Sign in", role: ""), action: .double))
+    #expect(try map("form_input", ["role": "searchbox", "value": "cats"]) == .formInput(tabId: 20, target: .named(name: "", role: "searchbox"), value: .text("cats")))
+    #expect(try map("scroll_to", ["name": "Footer links"]) == .scrollTo(tabId: 20, target: .named(name: "Footer links", role: "")))
+    #expect(try map("key", ["keys": "Enter", "name": "Search", "role": "searchbox"]) == .key(tabId: 20, chords: [enter], target: .named(name: "Search", role: "searchbox"), times: 1))
+    #expect(try map("scroll", ["direction": "down", "role": "listbox"]) == .scroll(tabId: 20, target: .named(name: "", role: "listbox"), left: 0, top: 300))
+    // Blank text counts as not given, so it neither targets nor clashes with a ref.
+    #expect(try map("key", ["keys": "Enter", "name": " ", "role": ""]) == .key(tabId: 20, chords: [enter], target: nil, times: 1))
+    #expect(try map("click", ["ref": .number(4), "name": "", "role": " "]) == .click(tabId: 20, target: .ref(4)))
+  }
+
+  @Test func targetsNeedRefOrNameAndRoleButNotBoth() {
+    let bad: [(String, [String: JSONValue])] = [
+      ("click", [:]),
+      ("click", ["name": "  ", "role": ""]),
+      ("click", ["ref": .number(4), "name": "Sign in"]),
+      ("click", ["ref": .number(4), "role": "button"]),
+      ("form_input", ["value": "x"]),
+      ("form_input", ["ref": .number(4), "role": "textbox", "value": "x"]),
+      ("scroll_to", [:]),
+      ("key", ["keys": "Enter", "ref": .number(4), "name": "Search"]),
+      ("scroll", ["direction": "down", "ref": .number(4), "role": "listbox"]),
+      ("click", ["name": .number(3)]),
+      ("drag", ["name": "Card", "to": .number(3)]),
+    ]
+
+    for (name, arguments) in bad { #expect(throws: Failure.self, "\(name) \(arguments)") { try map(name, arguments) } }
+
+    #expect { try map("click", ["ref": .number(4), "name": "Sign in"]) } throws: { error in (error as? Failure)?.description == "pass ref or name and role, not both" }
+    #expect { try map("click") } throws: { error in (error as? Failure)?.description == "missing required argument ref, name or role" }
+  }
+
+  @Test func nameAndRoleAreOfferedOnlyWhereTheyTarget() {
+    let targeting: Set = ["click", "form_input", "key", "scroll", "scroll_to", "file_upload"]
+
+    for tool in Tools.definitions where tool.properties["ref"] != nil || tool.properties["ref_id"] != nil || tool.properties["frame"] != nil {
+      let offered = tool.properties["name"] != nil && tool.properties["role"] != nil
+      #expect(offered == targeting.contains(tool.name), "\(tool.name)")
+      #expect(!tool.required.contains("ref") || !offered, "\(tool.name)")
+    }
+  }
+
+  @Test func nameTargetedStepsRunInABatch() async throws {
+    let actions = try Tools.batchActions(["actions": .array([
+      .object(["name": "navigate", "input": .object(["url": "https://example.com/login"])]),
+      .object(["name": "form_input", "input": .object(["name": "Email", "role": "textbox", "value": "a@example.com"])]),
+      .object(["name": "click", "input": .object(["name": "Sign in", "role": "button"])]),
+    ])])
+    var commands: [AppCommand] = []
+    let result = await ToolResult.batch(actions) { name, input in
+      do {
+        commands.append(try map(name, input))
+        return .text("ran \(name)")
+      } catch {
+        return .failed(error)
+      }
+    }
+
+    #expect(result.ok)
+    #expect(commands == [
+      .navigate(tabId: 20, url: "https://example.com/login"),
+      .formInput(tabId: 20, target: .named(name: "Email", role: "textbox"), value: .text("a@example.com")),
+      .click(tabId: 20, target: .named(name: "Sign in", role: "button")),
+    ])
+    #expect(result.message == "1/3 navigate:\nran navigate\n2/3 form_input:\nran form_input\n3/3 click:\nran click")
   }
 
   @Test func refsAreTopFrameNumbersOrFramePaths() throws {
-    #expect(try map("click", ["ref": .number(12)]) == .click(tabId: 20, ref: 12))
-    #expect(try map("click", ["ref": "12"]) == .click(tabId: 20, ref: 12))
-    #expect(try map("click", ["ref": "5:12"]) == .click(tabId: 20, ref: PageRef(frames: [5], local: 12)))
-    #expect(try map("scroll_to", ["ref": "5:3:12"]) == .scrollTo(tabId: 20, ref: PageRef(frames: [5, 3], local: 12)))
+    #expect(try map("click", ["ref": .number(12)]) == .click(tabId: 20, target: .ref(12)))
+    #expect(try map("click", ["ref": "12"]) == .click(tabId: 20, target: .ref(12)))
+    #expect(try map("click", ["ref": "5:12"]) == .click(tabId: 20, target: .ref(PageRef(frames: [5], local: 12))))
+    #expect(try map("scroll_to", ["ref": "5:3:12"]) == .scrollTo(tabId: 20, target: .ref(PageRef(frames: [5, 3], local: 12))))
     #expect(try map("read_page", ["ref_id": "5:2"]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: PageRef(frames: [5], local: 2), depth: nil))
     #expect(throws: Failure.self) { try map("click", ["ref": .number(5.12)]) }
     #expect(throws: Failure.self) { try map("click", ["ref": "5.12"]) }
     #expect(throws: Failure.self) { try map("click", ["ref": "1:2:3:4:5"]) }
     #expect(throws: Failure.self) { try map("click", ["ref": "5:"]) }
-    #expect(try CommandLineParsing.parse(["click", "5:3:12"]).command == .click(tabId: nil, ref: PageRef(frames: [5, 3], local: 12)))
+    #expect(try CommandLineParsing.parse(["click", "5:3:12"]).command == .click(tabId: nil, target: .ref(PageRef(frames: [5, 3], local: 12))))
     #expect(throws: Failure.self) { try CommandLineParsing.parse(["click", "5.12"]) }
   }
 
   @Test func clickTakesActionAndModifiers() throws {
-    #expect(try map("click", ["ref": .number(4), "action": "left_click", "modifiers": ""]) == .click(tabId: 20, ref: 4))
-    #expect(try map("click", ["ref": .number(4), "action": "double_click"]) == .click(tabId: 20, ref: 4, action: .double))
-    #expect(try map("click", ["ref": .number(4), "action": "triple_click"]) == .click(tabId: 20, ref: 4, action: .triple))
-    #expect(try map("click", ["ref": "5:12", "action": "right_click", "modifiers": "ctrl+shift"]) == .click(tabId: 20, ref: PageRef(frames: [5], local: 12), action: .right, modifiers: [.shift, .ctrl]))
+    #expect(try map("click", ["ref": .number(4), "action": "left_click", "modifiers": ""]) == .click(tabId: 20, target: .ref(4)))
+    #expect(try map("click", ["ref": .number(4), "action": "double_click"]) == .click(tabId: 20, target: .ref(4), action: .double))
+    #expect(try map("click", ["ref": .number(4), "action": "triple_click"]) == .click(tabId: 20, target: .ref(4), action: .triple))
+    #expect(try map("click", ["ref": "5:12", "action": "right_click", "modifiers": "ctrl+shift"]) == .click(tabId: 20, target: .ref(PageRef(frames: [5], local: 12)), action: .right, modifiers: [.shift, .ctrl]))
     #expect(try map("drag", ["ref": "5:12", "to": "5:3"]) == .drag(tabId: 20, ref: PageRef(frames: [5], local: 12), to: PageRef(frames: [5], local: 3)))
     #expect(throws: Failure.self) { try map("drag", ["ref": .number(4)]) }
-    #expect(try map("click", ["ref": .number(4), "modifiers": "alt+Meta"]) == .click(tabId: 20, ref: 4, action: .left, modifiers: [.cmd, .alt]))
+    #expect(try map("click", ["ref": .number(4), "modifiers": "alt+Meta"]) == .click(tabId: 20, target: .ref(4), action: .left, modifiers: [.cmd, .alt]))
     let click = Tools.definitions.first { $0.name == "click" }!
     #expect(click.properties["action"]?["enum"] == .array(["left_click", "double_click", "triple_click", "right_click"]))
     #expect(click.properties["modifiers"]?["type"] == "string")
@@ -74,7 +143,7 @@ struct ToolMappingTests {
   }
 
   @Test func clickActionAndModifiersCrossTheWire() throws {
-    let command = AppCommand.click(tabId: 3, ref: PageRef(frames: [5], local: 2), action: .right, modifiers: [.cmd, .alt])
+    let command = AppCommand.click(tabId: 3, target: .ref(PageRef(frames: [5], local: 2)), action: .right, modifiers: [.cmd, .alt])
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(command)) == command)
     #expect(command.targetTab == 3)
   }
@@ -85,13 +154,13 @@ struct ToolMappingTests {
   }
 
   @Test func omittedTabIdUsesTheSessionTab() throws {
-    #expect(try map("click", ["ref": .number(4)]) == .click(tabId: 20, ref: 4))
+    #expect(try map("click", ["ref": .number(4)]) == .click(tabId: 20, target: .ref(4)))
     #expect(try map("get_page_text") == .pageText(tabId: 20, maxChars: AppCommand.defaultMaxChars))
     #expect(try map("screenshot", ["tabId": .null]) == .screenshot(tabId: 20, region: nil, scale: 1))
   }
 
   @Test func tierOneToolsMap() throws {
-    #expect(try map("scroll_to", ["ref": .number(9)]) == .scrollTo(tabId: 20, ref: 9))
+    #expect(try map("scroll_to", ["ref": .number(9)]) == .scrollTo(tabId: 20, target: .ref(9)))
     #expect(try map("resize_window", ["width": .number(1200), "height": .number(800)]) == .resizeWindow(tabId: 20, width: 1200, height: 800))
     #expect(try map("read_page", ["ref_id": .number(5), "depth": .number(2)]) == .readPage(tabId: 20, filter: .all, maxChars: AppCommand.defaultMaxChars, ref: 5, depth: 2))
     #expect(try map("screenshot", ["region": .array([.number(10), .number(20), .number(110.4), .number(220)]), "scale": .number(0.5)]) == .screenshot(tabId: 20, region: PixelRect(x0: 10, y0: 20, x1: 110, y1: 220), scale: 0.5))
@@ -160,8 +229,8 @@ struct ToolMappingTests {
   }
 
   @Test func explicitTabIdWins() throws {
-    #expect(try map("click", ["ref": .number(4), "tabId": .number(3)]) == .click(tabId: 3, ref: 4))
-    #expect(try map("click", ["ref": .number(4), "tabId": .number(3)], session: nil) == .click(tabId: 3, ref: 4))
+    #expect(try map("click", ["ref": .number(4), "tabId": .number(3)]) == .click(tabId: 3, target: .ref(4)))
+    #expect(try map("click", ["ref": .number(4), "tabId": .number(3)], session: nil) == .click(tabId: 3, target: .ref(4)))
   }
 
   @Test func pageToolsWithoutAnyTabFail() throws {
@@ -186,7 +255,7 @@ struct ToolMappingTests {
     #expect(session == TabSession(owned: [8], current: 8))
     session.record(.tabCreate(url: nil), reply: created)
     #expect(session == TabSession(owned: [8, 31], current: 31))
-    session.record(.click(tabId: 8, ref: 1), reply: created)
+    session.record(.click(tabId: 8, target: .ref(1)), reply: created)
     #expect(session == TabSession(owned: [8, 31], current: 31))
     session.record(.tabClose(tabId: 8), reply: closed)
     #expect(session == TabSession(owned: [31], current: 31))
@@ -211,14 +280,14 @@ struct ToolMappingTests {
   }
 
   @Test func commandsNameTheirTargetTab() {
-    #expect(AppCommand.click(tabId: 4, ref: 1).targetTab == 4)
+    #expect(AppCommand.click(tabId: 4, target: .ref(1)).targetTab == 4)
     #expect(AppCommand.tabClose(tabId: 6).targetTab == 6)
     #expect(AppCommand.tabs.targetTab == nil)
     #expect(AppCommand.tabCreate(url: nil).targetTab == nil)
   }
 
   @Test func integersAcceptDigitStrings() throws {
-    #expect(try map("form_input", ["tabId": "12", "ref": .number(5), "value": "abc"]) == .formInput(tabId: 12, ref: 5, value: .text("abc")))
+    #expect(try map("form_input", ["tabId": "12", "ref": .number(5), "value": "abc"]) == .formInput(tabId: 12, target: .ref(5), value: .text("abc")))
   }
 
   @Test func wrongTypesFailLoudly() {
@@ -230,10 +299,10 @@ struct ToolMappingTests {
   }
 
   @Test func formInputValueTypes() throws {
-    #expect(try map("form_input", ["ref": .number(5), "value": .bool(true)]) == .formInput(tabId: 20, ref: 5, value: .checked(true)))
-    #expect(try map("form_input", ["ref": .number(5), "value": .number(42)]) == .formInput(tabId: 20, ref: 5, value: .text("42")))
-    #expect(try map("form_input", ["ref": .number(5), "value": .number(1.5)]) == .formInput(tabId: 20, ref: 5, value: .text("1.5")))
-    #expect(try map("form_input", ["ref": .number(5), "value": ""]) == .formInput(tabId: 20, ref: 5, value: .text("")))
+    #expect(try map("form_input", ["ref": .number(5), "value": .bool(true)]) == .formInput(tabId: 20, target: .ref(5), value: .checked(true)))
+    #expect(try map("form_input", ["ref": .number(5), "value": .number(42)]) == .formInput(tabId: 20, target: .ref(5), value: .text("42")))
+    #expect(try map("form_input", ["ref": .number(5), "value": .number(1.5)]) == .formInput(tabId: 20, target: .ref(5), value: .text("1.5")))
+    #expect(try map("form_input", ["ref": .number(5), "value": ""]) == .formInput(tabId: 20, target: .ref(5), value: .text("")))
     #expect(throws: Failure.self) { try map("form_input", ["ref": .number(5)]) }
     #expect(throws: Failure.self) { try map("form_input", ["ref": .number(5), "value": .array([])]) }
   }
@@ -320,23 +389,23 @@ struct ToolMappingTests {
   }
 
   @Test func scrollConvertsStepsToPixels() throws {
-    #expect(try map("scroll", ["direction": "down"]) == .scroll(tabId: 20, ref: nil, left: 0, top: 300))
-    #expect(try map("scroll", ["direction": "up", "amount": .number(2), "ref": .number(9)]) == .scroll(tabId: 20, ref: 9, left: 0, top: -200))
-    #expect(try map("scroll", ["direction": "left", "amount": .number(1)]) == .scroll(tabId: 20, ref: nil, left: -100, top: 0))
+    #expect(try map("scroll", ["direction": "down"]) == .scroll(tabId: 20, target: nil, left: 0, top: 300))
+    #expect(try map("scroll", ["direction": "up", "amount": .number(2), "ref": .number(9)]) == .scroll(tabId: 20, target: .ref(9), left: 0, top: -200))
+    #expect(try map("scroll", ["direction": "left", "amount": .number(1)]) == .scroll(tabId: 20, target: nil, left: -100, top: 0))
     #expect(throws: Failure.self) { try map("scroll", ["direction": "sideways"]) }
   }
 
   @Test func keyMapsChordsRefAndRepeat() throws {
     let chords = try ["Backspace", "shift+Tab", "a"].map(KeyChord.parse)
-    #expect(try map("key", ["keys": "Backspace  shift+Tab a"]) == .key(tabId: 20, chords: chords, ref: nil, times: 1))
-    #expect(try map("key", ["keys": "Enter", "ref": .number(6), "repeat": "3", "tabId": .number(2)]) == .key(tabId: 2, chords: [KeyChord.parse("Enter")], ref: 6, times: 3))
-    #expect(try map("key", ["keys": "Tab", "repeat": .number(100)]) == .key(tabId: 20, chords: [KeyChord.parse("Tab")], ref: nil, times: 100))
+    #expect(try map("key", ["keys": "Backspace  shift+Tab a"]) == .key(tabId: 20, chords: chords, target: nil, times: 1))
+    #expect(try map("key", ["keys": "Enter", "ref": .number(6), "repeat": "3", "tabId": .number(2)]) == .key(tabId: 2, chords: [KeyChord.parse("Enter")], target: .ref(6), times: 3))
+    #expect(try map("key", ["keys": "Tab", "repeat": .number(100)]) == .key(tabId: 20, chords: [KeyChord.parse("Tab")], target: nil, times: 100))
   }
 
   @Test func keyTypesText() throws {
     let chords = try ["H", "i", " ", "!", "Enter", "Tab"].map(KeyChord.parse)
-    #expect(try map("key", ["text": "Hi !\n\t", "ref": .number(4)]) == .key(tabId: 20, chords: chords, ref: 4, times: 1))
-    #expect(try map("key", ["text": .string(String(repeating: "a", count: 100))]) == .key(tabId: 20, chords: Array(repeating: KeyChord.parse("a"), count: 100), ref: nil, times: 1))
+    #expect(try map("key", ["text": "Hi !\n\t", "ref": .number(4)]) == .key(tabId: 20, chords: chords, target: .ref(4), times: 1))
+    #expect(try map("key", ["text": .string(String(repeating: "a", count: 100))]) == .key(tabId: 20, chords: Array(repeating: KeyChord.parse("a"), count: 100), target: nil, times: 1))
 
     for arguments: [String: JSONValue] in [["text": ""], ["text": "caf\u{E9}"], ["text": .string(String(repeating: "a", count: 101))], ["text": "a", "keys": "Enter"], [:]] {
       #expect(throws: Failure.self, "\(arguments)") { try map("key", arguments) }
@@ -356,8 +425,8 @@ struct ToolMappingTests {
   }
 
   @Test func logLabelsLeaveOutTypedText() throws {
-    #expect(try map("key", ["text": "hunter2\n"]).logLabel == "key(tabId: Optional(20), keys: 7 characters Enter, ref: nil, times: 1)")
-    #expect(try map("form_input", ["ref": .number(4), "value": "hunter2"]).logLabel == "formInput(tabId: Optional(20), ref: 4, value: text of 7 characters)")
+    #expect(try map("key", ["text": "hunter2\n"]).logLabel == "key(tabId: Optional(20), keys: 7 characters Enter, target: nil, times: 1)")
+    #expect(try map("form_input", ["ref": .number(4), "value": "hunter2"]).logLabel == "formInput(tabId: Optional(20), target: ref 4, value: text of 7 characters)")
     #expect(try map("handle_dialog", ["action": "accept", "prompt_text": "hunter2"]).logLabel == "dialog(tabId: Optional(20), accept: true, promptText: 7 characters)")
     #expect(try map("form_input", ["ref": .number(4), "value": .bool(true)]).logLabel.contains("checked(true)"))
     #expect(try map("navigate", ["url": "https://a.test/"]).logLabel.contains("https://a.test/"))
@@ -383,22 +452,36 @@ struct CommandLineParsingTests {
   func parse(_ line: String) throws -> Invocation { try CommandLineParsing.parse(line.split(separator: " ").map(String.init)) }
 
   @Test func tabFlagWorksAnywhere() throws {
-    #expect(try parse("--tab 4 click 12").command == .click(tabId: 4, ref: 12))
-    #expect(try parse("click 12 --tab 4").command == .click(tabId: 4, ref: 12))
+    #expect(try parse("--tab 4 click 12").command == .click(tabId: 4, target: .ref(12)))
+    #expect(try parse("click 12 --tab 4").command == .click(tabId: 4, target: .ref(12)))
     #expect(try parse("ping").command == .ping(tabId: nil))
   }
 
   @Test func clickTakesActionAndModifiers() throws {
     #expect(try parse("drag 4 5:9").command == .drag(tabId: nil, ref: 4, to: PageRef(frames: [5], local: 9)))
     #expect(throws: Failure.self) { try parse("drag 4") }
-    #expect(try parse("click 5:12 --action double_click --modifiers shift+cmd").command == .click(tabId: nil, ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]))
-    #expect(try parse("--tab 3 click 12 --modifiers ctrl").command == .click(tabId: 3, ref: 12, action: .left, modifiers: [.ctrl]))
+    #expect(try parse("click 5:12 --action double_click --modifiers shift+cmd").command == .click(tabId: nil, target: .ref(PageRef(frames: [5], local: 12)), action: .double, modifiers: [.cmd, .shift]))
+    #expect(try parse("--tab 3 click 12 --modifiers ctrl").command == .click(tabId: 3, target: .ref(12), action: .left, modifiers: [.ctrl]))
     #expect(throws: Failure.self) { try parse("click 12 --action double") }
     #expect(throws: Failure.self) { try parse("click 12 --modifiers") }
   }
 
+  @Test func targetsTakeNameAndRole() throws {
+    #expect(try CommandLineParsing.parse(["click", "--name", "Sign in", "--role", "button"]).command == .click(tabId: nil, target: .named(name: "Sign in", role: "button")))
+    #expect(try CommandLineParsing.parse(["click", "--action", "right_click", "--role", "link", "--name", "Docs"]).command == .click(tabId: nil, target: .named(name: "Docs", role: "link"), action: .right))
+    #expect(try CommandLineParsing.parse(["form-input", "--name", "Email", "a@example.com", "--role", "x"]).command == .formInput(tabId: nil, target: .named(name: "Email", role: ""), value: .text("a@example.com --role x")))
+    #expect(try parse("scroll-to --role contentinfo").command == .scrollTo(tabId: nil, target: .named(name: "", role: "contentinfo")))
+    #expect(try CommandLineParsing.parse(["key", "Enter", "--name", "Search", "--role", "searchbox"]).command == .key(tabId: nil, chords: [KeyChord.parse("Enter")], target: .named(name: "Search", role: "searchbox"), times: 1))
+    #expect(try parse("key --name Search --text hi").command == .key(tabId: nil, chords: "hi".map(KeyChord.typing), target: .named(name: "Search", role: ""), times: 1))
+    #expect(try parse("scroll down --role listbox").command == .scroll(tabId: nil, target: .named(name: "", role: "listbox"), left: 0, top: 300))
+
+    for line in ["click --name", "click --name a --name b", "click 12 --name a", "key Enter --ref 3 --name a", "scroll down --ref 3 --role listbox", "form-input --name Email", "scroll-to"] {
+      #expect(throws: Failure.self, "\(line)") { try parse(line) }
+    }
+  }
+
   @Test func freeTextIsJoined() throws {
-    #expect(try parse("form-input 3 hello world").command == .formInput(tabId: nil, ref: 3, value: .text("hello world")))
+    #expect(try parse("form-input 3 hello world").command == .formInput(tabId: nil, target: .ref(3), value: .text("hello world")))
     #expect(try parse("find Sign in").command == .find(tabId: nil, name: "Sign in", role: ""))
     #expect(try parse("find Sign in --role button").command == .find(tabId: nil, name: "Sign in", role: "button"))
     #expect(try parse("find --role searchbox").command == .find(tabId: nil, name: "", role: "searchbox"))
@@ -407,11 +490,11 @@ struct CommandLineParsingTests {
   @Test func optionsAndDefaults() throws {
     #expect(try parse("read-page --all --max-chars 10").command == .readPage(tabId: nil, filter: .all, maxChars: 10, ref: nil, depth: nil))
     #expect(try parse("read-page --ref 4 --depth 2").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: 4, depth: 2))
-    #expect(try parse("scroll-to 6").command == .scrollTo(tabId: nil, ref: 6))
+    #expect(try parse("scroll-to 6").command == .scrollTo(tabId: nil, target: .ref(6)))
     #expect(try parse("resize 1000 700").command == .resizeWindow(tabId: nil, width: 1000, height: 700))
     #expect(try parse("screenshot a.png --region 0,0,50,40 --scale 0.5") == Invocation(command: .screenshot(tabId: nil, region: PixelRect(x0: 0, y0: 0, x1: 50, y1: 40), scale: 0.5), outputPath: "a.png"))
     #expect(try parse("read-page").command == .readPage(tabId: nil, filter: .interactive, maxChars: AppCommand.defaultMaxChars, ref: nil, depth: nil))
-    #expect(try parse("scroll down 2 --ref 8").command == .scroll(tabId: nil, ref: 8, left: 0, top: 200))
+    #expect(try parse("scroll down 2 --ref 8").command == .scroll(tabId: nil, target: .ref(8), left: 0, top: 200))
     #expect(try parse("navigate back").command == .history(tabId: nil, direction: .back))
     #expect(try parse("screenshot shot.png") == Invocation(command: .screenshot(tabId: nil, region: nil, scale: 1), outputPath: "shot.png"))
   }
@@ -424,15 +507,15 @@ struct CommandLineParsingTests {
   }
 
   @Test func keyJoinsQuotedAndUnquotedWords() throws {
-    let expected = try AppCommand.key(tabId: nil, chords: ["Backspace", "Backspace", "Enter"].map(KeyChord.parse), ref: nil, times: 1)
+    let expected = try AppCommand.key(tabId: nil, chords: ["Backspace", "Backspace", "Enter"].map(KeyChord.parse), target: nil, times: 1)
     #expect(try parse("key Backspace Backspace Enter").command == expected)
     #expect(try CommandLineParsing.parse(["key", "Backspace Backspace Enter"]).command == expected)
-    #expect(try parse("--tab 4 key shift+Tab --ref 9 --repeat 2").command == .key(tabId: 4, chords: [KeyChord.parse("shift+Tab")], ref: 9, times: 2))
+    #expect(try parse("--tab 4 key shift+Tab --ref 9 --repeat 2").command == .key(tabId: 4, chords: [KeyChord.parse("shift+Tab")], target: .ref(9), times: 2))
   }
 
   @Test func keyTextIsVerbatim() throws {
     let chords = try "a --ref b".map(KeyChord.typing)
-    #expect(try parse("key --ref 9 --text a --ref b").command == .key(tabId: nil, chords: chords, ref: 9, times: 1))
+    #expect(try parse("key --ref 9 --text a --ref b").command == .key(tabId: nil, chords: chords, target: .ref(9), times: 1))
     #expect(throws: Failure.self) { try parse("key Enter --text a") }
     #expect(throws: Failure.self) { try parse("key --text") }
   }
@@ -442,7 +525,7 @@ struct CommandLineParsingTests {
       #expect(throws: Failure.self, "\(line)") { try parse(line) }
     }
 
-    #expect(try parse("key a b c d --repeat 25").command == .key(tabId: nil, chords: ["a", "b", "c", "d"].map(KeyChord.parse), ref: nil, times: 25))
+    #expect(try parse("key a b c d --repeat 25").command == .key(tabId: nil, chords: ["a", "b", "c", "d"].map(KeyChord.parse), target: nil, times: 25))
     #expect(try parse("debug-cg key cmd+t").command == .debugCG(tabId: nil, probe: .key(KeyChord.parse("cmd+t"), ref: nil), windowFields: true))
   }
 

@@ -3,7 +3,7 @@ import { startDiff, takeDiff } from "./changes";
 import { installReader, takeConsole } from "./console";
 import { installLogger, takeEvents } from "./events";
 import { drag } from "./drag";
-import { find } from "./find";
+import { find, target } from "./find";
 import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
 import { inspect, setColor } from "./inspect";
@@ -46,6 +46,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
         request.prefix,
       );
     if (request.op === "find") return find(request.name, request.role);
+    if (request.op === "target") return target(request.name, request.role);
     if (request.op === "waitFor")
       return waitFor(request.text, request.selector);
     if (request.op === "pageText") return pageText(request.maxChars);

@@ -13,9 +13,9 @@ struct Commands {
     case .status: await status()
     case let .ping(tabId): try await ping(tabId)
     case let .snapshot(tabId): try await snapshot(tabId)
-    case .click(let tabId, let ref, .left, []): try await click(tabId, ref)
-    case let .click(tabId, ref, action, modifiers): try await syntheticClick(tabId, ref, action, modifiers)
-    case let .formInput(tabId, ref, value): try await formInput(tabId, ref, value)
+    case .click(let tabId, let target, .left, []): try await resolving(tabId, target) { try await click(tabId, $0) }
+    case let .click(tabId, target, action, modifiers): try await resolving(tabId, target) { try await syntheticClick(tabId, $0, action, modifiers) }
+    case let .formInput(tabId, target, value): try await resolving(tabId, target) { try await formInput(tabId, $0, value) }
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
     case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url)))
@@ -27,17 +27,19 @@ struct Commands {
     case let .find(tabId, name, role): try await find(tabId, name, role)
     case let .pageText(tabId, maxChars): try await pageText(tabId, maxChars)
     case let .waitCheck(tabId, condition): try await waitCheck(tabId, condition)
-    case let .scroll(tabId, ref, left, top): try await scroll(tabId, ref, left, top)
-    case let .scrollTo(tabId, ref): try await scrollTo(tabId, ref)
+    case let .scroll(tabId, target?, left, top): try await resolving(tabId, target) { try await scroll(tabId, $0, left, top) }
+    case let .scroll(tabId, nil, left, top): try await scroll(tabId, nil, left, top)
+    case let .scrollTo(tabId, target): try await resolving(tabId, target) { try await scrollTo(tabId, $0) }
     case let .resizeWindow(tabId, width, height): try await resizeWindow(tabId, width, height)
     case let .javascript(tabId, code, frame): try await javascript(tabId, code, frame)
     case let .drag(tabId, ref, to): try await drag(tabId, ref, to)
-    case let .fileUpload(tabId, ref, files): try await fileUpload(tabId, ref, files)
+    case let .fileUpload(tabId, target, files): try await resolving(tabId, target) { try await fileUpload(tabId, $0, files) }
     case let .consoleMessages(tabId, onlyErrors, pattern, limit, clear): try await consoleMessages(tabId, onlyErrors, pattern, limit, clear)
     case let .networkRequests(tabId, urlPattern, limit, clear): try await networkRequests(tabId, urlPattern, limit, clear)
     case let .networkRequest(tabId, requestId): try await networkRequest(tabId, requestId)
     case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
-    case let .key(tabId, chords, ref, times): try await key(tabId, chords, ref, times)
+    case let .key(tabId, chords, target?, times): try await resolving(tabId, target) { try await key(tabId, chords, $0, times) }
+    case let .key(tabId, chords, nil, times): try await key(tabId, chords, nil, times)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
     case let .debugFrames(tabId): try await debugFrames(tabId)
@@ -94,6 +96,26 @@ struct Commands {
 
   func content(_ tabId: Int?, _ request: ContentRequest) async throws -> JSONValue {
     try await call(.content(tabId: tabId, request: request))
+  }
+
+  /// Acts on a ref as given, or on the one element a name and role pick, which the reply or failure then names first so later calls can use its ref.
+  func resolving(_ tabId: Int?, _ target: ElementTarget, _ act: (PageRef) async throws -> CLIReply) async throws -> CLIReply {
+    switch target {
+    case let .ref(ref): return try await act(ref)
+    case let .named(name, role):
+      let result = try await content(tabId, .target(name: name, role: role)).decode(TargetResult.self)
+
+      guard let match = result.match else { throw result.failure(for: target) }
+
+      let line = "resolved to \(match.line)"
+
+      do {
+        let reply = try await act(match.ref)
+        return CLIReply(ok: reply.ok, text: "\(line)\n\(reply.text)", data: reply.data, code: reply.code)
+      } catch let failure as Failure {
+        throw Failure(failure.code, "\(line)\n\(failure)")
+      }
+    }
   }
 
   /// Resolves the tab and makes it the active tab of its window, since AX and captureVisibleTab only see a window's visible tab.
@@ -163,13 +185,6 @@ struct Commands {
     return "\(event.type) \(event.isTrusted ? "trusted" : "UNTRUSTED") \(event.ref.map { "[\($0)]" } ?? "")\(event.target) \(event.detail)\(count)"
   }
 
-  private func describe(_ element: ElementInfo) -> String {
-    let offscreen = element.inViewport ? "" : " (offscreen)"
-    let disabled = element.disabled == true ? " (disabled)" : ""
-    let name = element.name.isEmpty ? "" : " \"\(element.name)\""
-    return "[\(element.ref)] \(element.role)\(name) <\(element.tag)>\(offscreen)\(disabled)"
-  }
-
   @MainActor
   private func status() -> CLIReply {
     let transport = model.transport
@@ -222,7 +237,7 @@ struct Commands {
   private func snapshot(_ tabId: Int?) async throws -> CLIReply {
     let response = try await content(tabId, .snapshot)
     let result = try response.decode(SnapshotResult.self)
-    let lines = ["\(result.title) | \(Redaction.url(result.url))"] + result.elements.map(describe)
+    let lines = ["\(result.title) | \(Redaction.url(result.url))"] + result.elements.map(\.line)
     return CLIReply(ok: true, text: lines.joined(separator: "\n"), data: response)
   }
 
@@ -266,9 +281,8 @@ struct Commands {
 
   private func find(_ tabId: Int?, _ name: String, _ role: String) async throws -> CLIReply {
     let response = try await content(tabId, .find(name: name, role: role))
-    let lines = try response.decode(FindResult.self).matches.map(describe)
-    let wanted = [role, name.isEmpty ? "" : "\"\(name)\""].filter { !$0.isEmpty }.joined(separator: " ")
-    return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \(wanted)" : lines.joined(separator: "\n"), data: response)
+    let lines = try response.decode(FindResult.self).matches.map(\.line)
+    return CLIReply(ok: true, text: lines.isEmpty ? "no matches for \(ElementTarget.named(name: name, role: role))" : lines.joined(separator: "\n"), data: response)
   }
 
   /// A page not readable yet answers ok with pending rather than failing, so the MCP server's wait polls on through a navigation.

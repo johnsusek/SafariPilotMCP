@@ -1,3 +1,4 @@
+import { exactFirst, findLimit, onScreenFirst } from "../content/find";
 import { clip } from "../content/pageText";
 import { intersect } from "../content/geometry";
 import type {
@@ -8,6 +9,8 @@ import type {
   PageElement,
   PageEvent,
   PageRequest,
+  PageTargetElement,
+  PageTargetResult,
   PageWaitResult,
 } from "../shared/commands";
 import { toTop } from "../shared/frameGeometry";
@@ -26,6 +29,7 @@ import type {
   InspectResult,
   PageTextResult,
   ReadPageResult,
+  TargetResult,
   UploadResult,
   WaitForResult,
 } from "../shared/protocol";
@@ -47,7 +51,6 @@ import {
   withTimeout,
 } from "./frames";
 
-let findLimit = 20;
 // Frames smaller than this hold widgets, not text worth reading.
 let minTextFrame = 50;
 
@@ -103,11 +106,46 @@ async function find(send: Send, request: PageRequest & { op: "find" }) {
       : [],
   );
   // As in each frame, on-screen matches come before offscreen ones in the cap.
-  let ordered = [
-    ...matches.filter((match) => match.inViewport),
-    ...matches.filter((match) => !match.inViewport),
-  ];
-  return { ok: true as const, matches: ordered.slice(0, findLimit) };
+  return {
+    ok: true as const,
+    matches: onScreenFirst(matches).slice(0, findLimit),
+  };
+}
+
+// Over the frames find reads, the only exact match wins, else the only match; anything else picks nothing, so the caller retries with a candidate's ref.
+async function target(send: Send, request: PageRequest & { op: "target" }) {
+  let answers = await fanOut(send, request);
+
+  if (!Array.isArray(answers)) return answers;
+
+  if (!answers[0].reply.ok) return answers[0].reply;
+
+  let read = answers.filter(({ reply }) => reply.ok) as {
+    frame: Reached;
+    reply: TargetResult;
+  }[];
+  let matches: PageTargetElement[] = read.flatMap(({ frame, reply }) =>
+    reply.matches.map((info) => ({
+      ...element(info, frame),
+      exact: info.exact,
+    })),
+  );
+  let matched = read.reduce((sum, { reply }) => sum + reply.matched, 0);
+  let exact = read.reduce((sum, { reply }) => sum + reply.exact, 0);
+  let match: PageTargetElement | null = null;
+
+  // Each frame lists its exact matches first, so the only one is never cut.
+  if (exact === 1) match = matches.find((each) => each.exact)!;
+  else if (matched === 1) match = matches[0];
+
+  let candidates = match ? [] : exactFirst(matches).slice(0, findLimit);
+  return {
+    ok: true,
+    match,
+    matched,
+    exact,
+    candidates,
+  } satisfies PageTargetResult;
 }
 
 // A page whose top frame has no content script yet or is mid-navigation is pending, not failed, so a wait polls on through a navigation; any other failure is the caller's.
@@ -556,6 +594,8 @@ async function dispatch(
   if (request.op === "readPage") return await readPage(send, request);
 
   if (request.op === "find") return await find(send, request);
+
+  if (request.op === "target") return await target(send, request);
 
   if (request.op === "waitFor") return await waitFor(send, request);
 

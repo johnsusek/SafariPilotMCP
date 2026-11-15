@@ -95,6 +95,8 @@ export type ContentRequest =
       prefix: string;
     }
   | { op: "find"; name: string; role: string }
+  // Every match for an action that names its target by name and role instead of a ref, by find's rules.
+  | { op: "target"; name: string; role: string }
   // The first shown element holding text (case and whitespace ignored) or matching selector; exactly one of them is set.
   | { op: "waitFor"; text: string | null; selector: string | null }
   | { op: "pageText"; maxChars: number }
@@ -282,6 +284,16 @@ export type ReadPageResult = {
 // Matches get refs even when they are not interactive.
 export type FindResult = { ok: true; matches: ElementInfo[] };
 
+// target: matched counts every rendered match, offscreen ones included, and exact those whose name equals name (case and surrounding whitespace ignored);
+// matches keeps the first 20, exact ones first, each group on-screen first.
+export type TargetMatch = ElementInfo & { exact: boolean };
+export type TargetResult = {
+  ok: true;
+  matches: TargetMatch[];
+  matched: number;
+  exact: number;
+};
+
 // waitFor: the matched element with the text it shows, collapsed to 80 characters, or null when nothing matches yet.
 export type WaitMatch = ElementInfo & { text: string };
 export type WaitForResult = {
@@ -378,6 +390,7 @@ export type ContentResponse =
   | UploadResult
   | ReadPageResult
   | FindResult
+  | TargetResult
   | WaitForResult
   | PageTextResult
   | ScrollResult

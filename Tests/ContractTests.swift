@@ -152,6 +152,45 @@ struct ContractTests {
     #expect(select.options == [SelectOption(value: "1", label: "One", disabled: false)])
   }
 
+  @Test func targetEncodesDecodesAndExplainsWhatItCouldNotPick() throws {
+    #expect(ContentRequest.target(name: "Sign in", role: "button").json == ["op": "target", "name": "Sign in", "role": "button"])
+    let element = { (ref: String, name: String, inViewport: Bool) in #"{"ref":"\#(ref)","tag":"button","role":"button","name":"\#(name)","rect":{"left":0,"top":0,"width":1,"height":1},"inViewport":\#(inViewport),"exact":true}"# }
+    let picked = try decode(TargetResult.self, #"{"ok":true,"match":\#(element("5:12", "Sign in", false)),"matched":3,"exact":1,"candidates":[]}"#)
+    #expect(picked.match?.ref == PageRef(frames: [5], local: 12))
+    #expect(picked.match?.line == #"[5:12] button "Sign in" <button> (offscreen)"#)
+
+    let target = ElementTarget.named(name: "Sign in", role: "button")
+    let none = try decode(TargetResult.self, #"{"ok":true,"match":null,"matched":0,"exact":0,"candidates":[]}"#).failure(for: target)
+    #expect(none.code == .notActionable)
+    #expect(none.description == #"nothing on the page matches button "Sign in", so nothing was done"#)
+
+    let several = try decode(TargetResult.self, #"{"ok":true,"match":null,"matched":23,"exact":2,"candidates":[\#(element("4", "Sign in", true)),\#(element("5:2", "Sign in", false))]}"#).failure(for: target)
+    #expect(several.code == .invalidArgument)
+    #expect(several.description == """
+    button "Sign in" matches 23 elements, 2 of them by exact name, so nothing was done; pass one's ref, or a name and role only one matches:
+    [4] button "Sign in" <button>
+    [5:2] button "Sign in" <button> (offscreen)
+    and 21 more
+    """)
+
+    let partial = TargetResult(match: nil, matched: 2, exact: 0, candidates: []).failure(for: .named(name: "", role: "link"))
+    #expect(partial.description == "link matches 2 elements, so nothing was done; pass one's ref, or a name and role only one matches:\nand 2 more")
+  }
+
+  @Test func targetsNameThemselvesAsFindDoes() throws {
+    #expect(ElementTarget.named(name: "Sign in", role: "button").description == #"button "Sign in""#)
+    #expect(ElementTarget.named(name: "Sign in", role: "").description == #""Sign in""#)
+    #expect(ElementTarget.named(name: "", role: "searchbox").description == "searchbox")
+    #expect(ElementTarget.ref(PageRef(frames: [5], local: 12)).description == "ref 5:12")
+    #expect(try ElementTarget.from(ref: nil, name: nil, role: nil) == nil)
+    #expect(try ElementTarget.from(ref: nil, name: " Go ", role: nil) == .named(name: "Go", role: ""))
+    #expect(throws: Failure.self) { try ElementTarget.from(ref: 3, name: nil, role: "link") }
+    let click = AppCommand.click(tabId: 2, target: .named(name: "Sign in", role: "button"))
+    #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(click)) == click)
+    #expect(click.logLabel.contains(#"button "Sign in""#))
+    #expect(AppCommand.formInput(tabId: 2, target: .named(name: "Email", role: ""), value: .text("secret")).logLabel == #"formInput(tabId: Optional(2), target: "Email", value: text of 6 characters)"#)
+  }
+
   @Test func waitForEncodesAndDecodes() throws {
     #expect(ContentRequest.waitFor(.text("Ready")).json == ["op": "waitFor", "text": "Ready", "selector": .null])
     #expect(ContentRequest.waitFor(.selector("#a li")).json == ["op": "waitFor", "text": .null, "selector": "#a li"])
@@ -191,15 +230,15 @@ struct ContractTests {
   }
 
   @Test func appCommandRoundTripsThroughCLIRequest() throws {
-    let request = CLIRequest(command: .scroll(tabId: nil, ref: 3, left: 0, top: -200), timeoutSeconds: 45)
+    let request = CLIRequest(command: .scroll(tabId: nil, target: .ref(3), left: 0, top: -200), timeoutSeconds: 45)
     let decoded = try JSONDecoder().decode(CLIRequest.self, from: JSONEncoder().encode(request))
     #expect(decoded.command == request.command)
     #expect(decoded.kind == "cli")
     let probe = AppCommand.debugCG(tabId: 2, probe: .key(try KeyChord.parse("cmd+a"), ref: 4), windowFields: true)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(probe)) == probe)
-    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", text: nil, ref: 7, times: 3)
+    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", text: nil, target: .ref(7), times: 3)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
-    let form = AppCommand.formInput(tabId: nil, ref: 2, value: .checked(false))
+    let form = AppCommand.formInput(tabId: nil, target: .ref(2), value: .checked(false))
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(form)) == form)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
   }

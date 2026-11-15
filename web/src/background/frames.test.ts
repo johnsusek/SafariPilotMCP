@@ -14,6 +14,7 @@ import {
   type Send,
   walkPath,
 } from "./frames";
+import type { PageTargetResult } from "../shared/commands";
 import { runPage } from "./page";
 
 let viewport = (width = 1000, height = 800): Viewport => ({
@@ -537,6 +538,82 @@ describe("runPage reads", () => {
     ]);
     // 5:4 is below the frame's clip, so the 26 on-screen matches leave it out.
     expect(matches.map((each) => each.ref)).not.toContain("5:4");
+  });
+
+  test("target picks the only exact match over every frame, else the only match, else none with candidates", async () => {
+    let match = (ref: number, name: string, exact: boolean, top = 0) => ({
+      ref,
+      tag: "button",
+      role: "button",
+      name,
+      rect: rect(0, top, 10, 10),
+      inViewport: top < 500,
+      exact,
+    });
+    let answer =
+      (matches: ReturnType<typeof match>[], matched = matches.length) =>
+      (request: ContentRequest): ContentResponse | undefined =>
+        request.op === "target"
+          ? {
+              ok: true,
+              matches,
+              matched,
+              exact: matches.filter((each) => each.exact).length,
+            }
+          : undefined;
+    let pick = async () =>
+      (await runPage(send, {
+        op: "target",
+        name: "sign in",
+        role: "",
+      })) as PageTargetResult;
+
+    // An exact name in a nested frame wins over longer names in the top frame.
+    documents[0].answer = answer([match(4, "Sign in with Google", false)]);
+    documents[100].answer = answer([]);
+    documents[200].answer = answer([match(7, "Sign in", true)]);
+    let exact = await pick();
+    expect([exact.match?.ref, exact.match?.rect.top]).toEqual(["5:3:7", 130]);
+    expect([exact.matched, exact.exact, exact.candidates]).toEqual([2, 1, []]);
+
+    // With no exact name, a single match anywhere is taken.
+    documents[200].answer = answer([]);
+    expect((await pick()).match?.ref).toBe("4");
+
+    // An exact name in each of two frames is ambiguous; exact ones lead the candidates, on-screen first.
+    documents[0].answer = answer(
+      [match(9, "Sign in", true, 900), match(4, "Sign in with Google", false)],
+      30,
+    );
+    documents[100].answer = answer([match(2, "Sign in", true)]);
+    let several = await pick();
+    expect(several.match).toBeNull();
+    expect([several.matched, several.exact]).toEqual([31, 2]);
+    expect(several.candidates.map((each) => each.ref)).toEqual([
+      "5:2",
+      "9",
+      "4",
+    ]);
+
+    // A frame that does not answer is skipped, as find skips it; nothing matching anywhere picks nothing.
+    documents[0].answer = answer([]);
+    delete documents[100];
+    let none = await pick();
+    expect([none.match, none.matched, none.candidates]).toEqual([null, 0, []]);
+  });
+
+  test("target fails when the top frame does", async () => {
+    documents[0].answer = (request) =>
+      request.op === "target"
+        ? {
+            ok: false,
+            error: "target needs a name or a role",
+            code: "invalid_argument",
+          }
+        : undefined;
+    expect(
+      await runPage(send, { op: "target", name: "", role: "" }),
+    ).toMatchObject({ ok: false, code: "invalid_argument" });
   });
 
   test("events carry the frame they came from and every frame's origin", async () => {

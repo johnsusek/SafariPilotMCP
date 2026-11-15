@@ -90,7 +90,7 @@ struct FileUploadTests {
     guard case let .fileUpload(tabId, ref, files) = command else { throw Failure(.failed, "mapped to \(command)") }
 
     #expect(tabId == 20)
-    #expect(ref == PageRef(frames: [5], local: 12))
+    #expect(ref == .ref(PageRef(frames: [5], local: 12)))
     #expect(files.map(\.name) == ["a.txt"])
     #expect(command.targetTab == 20)
     #expect(!String(describing: command).contains(files[0].data))
@@ -98,11 +98,17 @@ struct FileUploadTests {
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(command)) == command)
   }
 
+  @Test func toolTakesNameAndRole() throws {
+    let path = try write("d.txt", Data("d".utf8))
+    #expect(try map(["name": "Attach", "role": "button", "paths": .array([.string(path)])]) == .fileUpload(tabId: 20, target: .named(name: "Attach", role: "button"), files: UploadFile.read([path])))
+    #expect(throws: Failure.self) { try map(["ref": .number(3), "name": "Attach", "paths": .array([.string(path)])]) }
+  }
+
   @Test func browserBatchCarriesAnUpload() throws {
     let path = try write("c.txt", Data("c".utf8))
     let actions = try Tools.batchActions(["actions": .array([.object(["name": "file_upload", "input": .object(["ref": "5:12", "paths": .array([.string(path)])])])])])
     #expect(actions.map(\.name) == ["file_upload"])
-    #expect(try map(actions[0].input) == .fileUpload(tabId: 20, ref: PageRef(frames: [5], local: 12), files: UploadFile.read([path])))
+    #expect(try map(actions[0].input) == .fileUpload(tabId: 20, target: .ref(PageRef(frames: [5], local: 12)), files: UploadFile.read([path])))
   }
 
   @Test func toolRefusesBadArguments() throws {
@@ -113,7 +119,7 @@ struct FileUploadTests {
     }
 
     let tool = Tools.definitions.first { $0.name == "file_upload" }!
-    #expect(tool.required == ["ref", "paths"])
+    #expect(tool.required == ["paths"])
     #expect(tool.properties["paths"]?["type"] == "array")
   }
 
@@ -131,9 +137,14 @@ struct FileUploadTests {
     guard case let .fileUpload(tabId, ref, files) = invocation.command else { throw Failure(.failed, "parsed to \(invocation.command)") }
 
     #expect(tabId == 3)
-    #expect(ref == PageRef(frames: [5], local: 2))
+    #expect(ref == .ref(PageRef(frames: [5], local: 2)))
     #expect(files.map(\.name) == ["b.txt"])
     #expect(throws: Failure.self) { try CommandLineParsing.parse(["file-upload", "5"]) }
+    #expect(throws: Failure.self) { try CommandLineParsing.parse(["file-upload", "--name", "Upload"]) }
+
+    guard case let .fileUpload(_, named, _) = try CommandLineParsing.parse(["file-upload", "--role", "button", "--name", "Upload", path]).command else { throw Failure(.failed, "file-upload by name did not parse") }
+
+    #expect(named == .named(name: "Upload", role: "button"))
 
     do {
       _ = try CommandLineParsing.parse(["file-upload", "4", "missing-\(UUID().uuidString).txt"])

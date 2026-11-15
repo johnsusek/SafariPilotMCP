@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test, vi } from "vitest";
-import { find } from "./find";
+import { find, target } from "./find";
 import { resolveRef } from "./refs";
 
 beforeEach(() => {
@@ -121,4 +121,75 @@ test("find never returns a field's value, secret or not", () => {
 
   for (let value of ["482913", "draft text", "hunter2"])
     expect(result).not.toContain(value);
+});
+
+describe("target", () => {
+  let picked = (name: string, role = "") => {
+    let result = target(name, role);
+
+    if (!result.ok) return result.error;
+
+    let { matched, exact } = result;
+    let matches = result.matches.map((match) =>
+      [match.name, match.exact, match.inViewport].join(" "),
+    );
+    return { matched, exact, matches };
+  };
+
+  test("counts every rendered match, offscreen ones too, with exact names first", () => {
+    document.body.innerHTML =
+      '<button>Sign in with Google</button><button data-top="5000">  SIGN IN </button><a href="#">Sign in help</a><button data-empty="1">Sign in</button>';
+    expect(picked("sign in")).toEqual({
+      matched: 3,
+      exact: 1,
+      matches: [
+        "SIGN IN true false",
+        "Sign in with Google false true",
+        "Sign in help false true",
+      ],
+    });
+  });
+
+  test("an exact name ignores case and surrounding whitespace but not inner text", () => {
+    document.body.innerHTML =
+      '<button aria-label=" Save ">x</button><button>Save draft</button>';
+    expect(picked("  SAVE ")).toMatchObject({ matched: 2, exact: 1 });
+    expect(picked("save dr")).toMatchObject({ matched: 1, exact: 0 });
+  });
+
+  test("a role alone has no exact matches, so an unnamed element never wins", () => {
+    document.body.innerHTML =
+      '<button aria-label=""></button><button>Go</button>';
+    expect(picked("", "button")).toMatchObject({ matched: 2, exact: 0 });
+    expect(picked("go", "button")).toMatchObject({ matched: 1, exact: 1 });
+    expect(picked("go", "link")).toMatchObject({ matched: 0, exact: 0 });
+  });
+
+  test("keeps 20 matches but counts them all, exact ones never cut", () => {
+    document.body.innerHTML =
+      "<button>Open item</button>".repeat(30) + "<button>Open</button>";
+    let result = picked("open", "button") as { matches: string[] };
+    expect(result).toMatchObject({ matched: 31, exact: 1 });
+    expect(result.matches).toHaveLength(20);
+    expect(result.matches[0]).toBe("Open true true");
+  });
+
+  test("a widget around one widget of the same name counts once", () => {
+    document.body.innerHTML =
+      '<div role="option"><a href="#a">Dune</a></div><div role="option" aria-label="Dune">x</div>';
+    expect(picked("dune")).toMatchObject({ matched: 2, exact: 2 });
+    expect(picked("dune", "link")).toMatchObject({ matched: 1, exact: 1 });
+  });
+
+  test("its matches get refs that resolve", () => {
+    document.body.innerHTML = "<p>x</p><button>Pay now</button>";
+    let result = target("pay now", "");
+    expect(result.ok && resolveRef(result.matches[0].ref)).toBe(
+      document.querySelector("button"),
+    );
+  });
+
+  test("needs a name or a role", () => {
+    expect(picked(" ", "")).toBe("target needs a name or a role");
+  });
 });

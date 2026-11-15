@@ -50,6 +50,8 @@ export type PageRequest =
       depth: number | null;
     }
   | { op: "find"; name: string; role: string }
+  // The one element an action names by name and role instead of a ref.
+  | { op: "target"; name: string; role: string }
   | { op: "waitFor"; text: string | null; selector: string | null }
   | { op: "pageText"; maxChars: number }
   | { op: "scroll"; ref: RefPath | null; left: number; top: number }
@@ -105,6 +107,16 @@ export type PageDragResult = Omit<DragResult, "ref" | "to"> & {
 export type PageUploadResult = Omit<UploadResult, "ref"> & { ref: RefPath };
 export type PageFocusResult = Omit<FocusResult, "ref"> & { ref: RefPath };
 export type PageFindResult = { ok: true; matches: PageElement[] };
+// The only exact match over every frame find reads, else the only match, else null. matched and exact count every frame's matches; candidates are the first 20,
+// exact ones first, each group on-screen first, when match is null and something matched.
+export type PageTargetElement = PageElement & { exact: boolean };
+export type PageTargetResult = {
+  ok: true;
+  match: PageTargetElement | null;
+  matched: number;
+  exact: number;
+  candidates: PageTargetElement[];
+};
 // The first match over the top frame, then each reached frame in document order; pending says why the page could not be read yet (no content script, mid-navigation), and url and title are then null.
 export type PageWaitResult = {
   ok: true;
@@ -282,6 +294,7 @@ export type CommandResponse =
   | PageUploadResult
   | PageFocusResult
   | PageFindResult
+  | PageTargetResult
   | PageWaitResult
   | PageSnapshotResult
   | PageDiffResult

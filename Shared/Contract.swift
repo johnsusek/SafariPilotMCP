@@ -31,6 +31,9 @@ struct ElementInfo: Codable, Sendable, Equatable {
   let rect: CSSRect
   let inViewport: Bool
   let disabled: Bool?
+
+  /// As find lists it, such as `[12] button "Sign in" <button> (offscreen)`.
+  var line: String { "[\(ref)] \(role)\(name.isEmpty ? "" : " \"\(name)\"") <\(tag)>\(inViewport ? "" : " (offscreen)")\(disabled == true ? " (disabled)" : "")" }
 }
 
 struct LoggedEvent: Codable, Sendable, Equatable {
@@ -120,6 +123,23 @@ struct InspectResult: Codable, Sendable {
 }
 struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }
+/// The only exact name match over the frames find reads, else the only match, else nil; matched counts every match, exact the exact ones, and candidates are the first 20 when match is nil, exact ones first.
+struct TargetResult: Codable, Sendable {
+  let match: ElementInfo?
+  let matched: Int
+  let exact: Int
+  let candidates: [ElementInfo]
+
+  /// Why nothing was picked; several matches are listed with their refs, so the call can be retried with one.
+  func failure(for target: ElementTarget) -> Failure {
+    guard matched > 0 else { return Failure(.notActionable, "nothing on the page matches \(target), so nothing was done") }
+
+    let exactly = exact > 1 ? ", \(exact) of them by exact name" : ""
+    let more = matched > candidates.count ? ["and \(matched - candidates.count) more"] : []
+    let lines = ["\(target) matches \(matched) elements\(exactly), so nothing was done; pass one's ref, or a name and role only one matches:"] + candidates.map(\.line) + more
+    return Failure(.invalidArgument, lines.joined(separator: "\n"))
+  }
+}
 /// One wait look: the first match, top frame first, with the text it shows; pending says why the page could not be read yet (no content script, mid-navigation), and url and title are then nil.
 struct WaitResult: Codable, Sendable {
   struct Match: Codable, Sendable, Equatable { let ref: PageRef; let tag: String; let role: String; let text: String; let inViewport: Bool }
@@ -238,6 +258,8 @@ enum ContentRequest: Equatable, Sendable {
   case upload(ref: PageRef, files: [UploadFile])
   case readPage(filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(name: String, role: String)
+  /// Every frame's matches for an action that names its target instead of giving a ref, and the one the background picks.
+  case target(name: String, role: String)
   case waitFor(WaitCondition)
   case pageText(maxChars: Int)
   case scroll(ref: PageRef?, left: Double, top: Double)
@@ -263,6 +285,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .upload(ref, files): ["op": "upload", "ref": .string(ref.description), "files": .array(files.map { .object(["name": .string($0.name), "mimeType": .string($0.mimeType), "lastModified": .number($0.lastModified), "data": .string($0.data)]) })]
     case let .readPage(filter, maxChars, ref, depth): ["op": "readPage", "filter": .string(filter.rawValue), "maxChars": .number(Double(maxChars)), "ref": ref.map { .string($0.description) } ?? .null, "depth": depth.map { .number(Double($0)) } ?? .null]
     case let .find(name, role): ["op": "find", "name": .string(name), "role": .string(role)]
+    case let .target(name, role): ["op": "target", "name": .string(name), "role": .string(role)]
     case let .waitFor(.text(text)): ["op": "waitFor", "text": .string(text), "selector": .null]
     case let .waitFor(.selector(selector)): ["op": "waitFor", "text": .null, "selector": .string(selector)]
     case let .pageText(maxChars): ["op": "pageText", "maxChars": .number(Double(maxChars))]

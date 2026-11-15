@@ -70,8 +70,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case ping(tabId: Int?)
   case snapshot(tabId: Int?)
   /// A plain left click is an AXPress; any other action or any modifier dispatches synthetic DOM events.
-  case click(tabId: Int?, ref: PageRef, action: ClickAction = .left, modifiers: [KeyChord.Modifier] = [])
-  case formInput(tabId: Int?, ref: PageRef, value: FormValue)
+  case click(tabId: Int?, target: ElementTarget, action: ClickAction = .left, modifiers: [KeyChord.Modifier] = [])
+  case formInput(tabId: Int?, target: ElementTarget, value: FormValue)
   /// Presses ref and drags to the center of to, both in one frame, as untrusted events the page script dispatches.
   case drag(tabId: Int?, ref: PageRef, to: PageRef)
   case events(tabId: Int?, clear: Bool)
@@ -86,17 +86,18 @@ enum AppCommand: Codable, Sendable, Equatable {
   case readPage(tabId: Int?, filter: ReadFilter, maxChars: Int, ref: PageRef?, depth: Int?)
   case find(tabId: Int?, name: String, role: String)
   case pageText(tabId: Int?, maxChars: Int)
-  case scroll(tabId: Int?, ref: PageRef?, left: Double, top: Double)
-  case scrollTo(tabId: Int?, ref: PageRef)
-  /// Presses chords in order, the whole sequence `times` times, after focusing ref when given.
-  case key(tabId: Int?, chords: [KeyChord], ref: PageRef?, times: Int)
+  /// Scrolls the container around target, or the page when nil.
+  case scroll(tabId: Int?, target: ElementTarget?, left: Double, top: Double)
+  case scrollTo(tabId: Int?, target: ElementTarget)
+  /// Presses chords in order, the whole sequence `times` times, after focusing target when given.
+  case key(tabId: Int?, chords: [KeyChord], target: ElementTarget?, times: Int)
   /// region is in the full screenshot's pixels; scale shrinks the result.
   case screenshot(tabId: Int?, region: PixelRect?, scale: Double)
   case resizeWindow(tabId: Int?, width: Int, height: Int)
   /// Runs code in the page's main world, in the frame of iframe ref frame when given; the last expression comes back as JSON.
   case javascript(tabId: Int?, code: String, frame: PageRef?)
   /// Gives the files to a file input, or drops them on any other element; the CLI or MCP process read them, so their bytes travel in the command.
-  case fileUpload(tabId: Int?, ref: PageRef, files: [UploadFile])
+  case fileUpload(tabId: Int?, target: ElementTarget, files: [UploadFile])
   /// The newest limit console messages from every frame, of errors and exceptions only when onlyErrors, whose text matches pattern; clear empties the buffers after reading.
   case consoleMessages(tabId: Int?, onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
   /// The newest limit requests the tab made whose URL contains urlPattern, ignoring case, from the log kept for tabs tab_create opened; clear empties it after reading.
@@ -156,8 +157,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// The command as the activity log shows it: what a client typed into a field, pressed as text or answered a prompt with is given by its size, since the log is on screen.
   var logLabel: String {
     switch self {
-    case let .formInput(tabId, ref, .text(text)): "formInput(tabId: \(String(describing: tabId)), ref: \(ref), value: text of \(text.count) characters)"
-    case let .key(tabId, chords, ref, times): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), ref: \(String(describing: ref)), times: \(times))"
+    case let .formInput(tabId, target, .text(text)): "formInput(tabId: \(String(describing: tabId)), target: \(target), value: text of \(text.count) characters)"
+    case let .key(tabId, chords, target, times): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), target: \(String(describing: target)), times: \(times))"
     case let .dialog(tabId, accept, promptText?): "dialog(tabId: \(String(describing: tabId)), accept: \(accept), promptText: \(promptText.count) characters)"
     case let .navigate(tabId, url): "navigate(tabId: \(String(describing: tabId)), url: \(Redaction.url(url)))"
     case let .tabCreate(url?): "tabCreate(url: \(Redaction.url(url)))"
@@ -183,7 +184,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   }
 
   /// actionName defaults to left_click; modifierNames are joined by +, like Claude in Chrome's "ctrl+shift", with meta meaning cmd.
-  static func click(tabId: Int?, ref: PageRef, actionName: String?, modifierNames: String?) throws -> AppCommand {
+  static func click(tabId: Int?, target: ElementTarget, actionName: String?, modifierNames: String?) throws -> AppCommand {
     let actionName = actionName ?? ClickAction.left.rawValue
 
     guard let action = ClickAction(rawValue: actionName) else { throw Failure(.invalidArgument, "action must be \(ClickAction.allCases.map(\.rawValue).joined(separator: ", ")), not \(actionName)") }
@@ -199,12 +200,12 @@ enum AppCommand: Codable, Sendable, Equatable {
       modifiers.append(modifier)
     }
 
-    return .click(tabId: tabId, ref: ref, action: action, modifiers: KeyChord.Modifier.allCases.filter(modifiers.contains))
+    return .click(tabId: tabId, target: target, action: action, modifiers: KeyChord.Modifier.allCases.filter(modifiers.contains))
   }
 
   /// Reads the files at paths, refusing them all when one is missing, not absolute, a directory, or together they pass maxUploadBytes.
-  static func fileUpload(tabId: Int?, ref: PageRef, paths: [String]) throws -> AppCommand {
-    .fileUpload(tabId: tabId, ref: ref, files: try UploadFile.read(paths))
+  static func fileUpload(tabId: Int?, target: ElementTarget, paths: [String]) throws -> AppCommand {
+    .fileUpload(tabId: tabId, target: target, files: try UploadFile.read(paths))
   }
 
   /// "accept" or "dismiss", as Playwright's dialog.accept() and dialog.dismiss().
@@ -246,20 +247,20 @@ enum AppCommand: Codable, Sendable, Equatable {
   }
 
   /// Scrolls `amount` steps of `scrollStep` CSS px.
-  static func scroll(tabId: Int?, ref: PageRef?, direction: String, amount: Double) throws -> AppCommand {
+  static func scroll(tabId: Int?, target: ElementTarget?, direction: String, amount: Double) throws -> AppCommand {
     let distance = amount * scrollStep
 
     switch direction {
-    case "up": return .scroll(tabId: tabId, ref: ref, left: 0, top: -distance)
-    case "down": return .scroll(tabId: tabId, ref: ref, left: 0, top: distance)
-    case "left": return .scroll(tabId: tabId, ref: ref, left: -distance, top: 0)
-    case "right": return .scroll(tabId: tabId, ref: ref, left: distance, top: 0)
+    case "up": return .scroll(tabId: tabId, target: target, left: 0, top: -distance)
+    case "down": return .scroll(tabId: tabId, target: target, left: 0, top: distance)
+    case "left": return .scroll(tabId: tabId, target: target, left: -distance, top: 0)
+    case "right": return .scroll(tabId: tabId, target: target, left: distance, top: 0)
     default: throw Failure(.invalidArgument, "scroll direction must be up, down, left or right, not \(direction)")
     }
   }
 
   /// Chords come from keys split on whitespace or from text one character each; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
-  static func key(tabId: Int?, keys: String?, text: String?, ref: PageRef?, times: Int) throws -> AppCommand {
+  static func key(tabId: Int?, keys: String?, text: String?, target: ElementTarget?, times: Int) throws -> AppCommand {
     let chords: [KeyChord]
 
     switch (keys, text) {
@@ -278,7 +279,33 @@ enum AppCommand: Codable, Sendable, Equatable {
     // Divided rather than multiplied, so a huge repeat cannot overflow.
     guard times <= maxKeyPresses / chords.count else { throw Failure(.invalidArgument, "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
 
-    return .key(tabId: tabId, chords: chords, ref: ref, times: times)
+    return .key(tabId: tabId, chords: chords, target: target, times: times)
+  }
+}
+
+/// What an action acts on: a ref from read_page or find, or the one rendered element, in the frames find reads, whose accessible name contains name and whose role is role, ignoring case.
+/// An exact name wins over longer ones; no match or several fail before anything acts.
+enum ElementTarget: Codable, Sendable, Equatable, CustomStringConvertible {
+  case ref(PageRef)
+  case named(name: String, role: String)
+
+  /// A ref, or a name and role, either of which may be left out; blank text counts as not given. Nil when nothing names a target.
+  static func from(ref: PageRef?, name: String?, role: String?) throws -> ElementTarget? {
+    let name = name?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let role = role?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+
+    guard let ref else { return name.isEmpty && role.isEmpty ? nil : .named(name: name, role: role) }
+    guard name.isEmpty, role.isEmpty else { throw Failure(.invalidArgument, "pass ref or name and role, not both") }
+
+    return .ref(ref)
+  }
+
+  /// As find names what it looks for, such as button "Sign in".
+  var description: String {
+    switch self {
+    case let .ref(ref): "ref \(ref)"
+    case let .named(name, role): [role, name.isEmpty ? "" : "\"\(name)\""].filter { !$0.isEmpty }.joined(separator: " ")
+    }
   }
 }
 

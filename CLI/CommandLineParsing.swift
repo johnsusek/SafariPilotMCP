@@ -13,10 +13,10 @@ enum CommandLineParsing {
     status                          app, extension and background state
     ping                            title and URL of the tab
     snapshot                        interactive elements with refs
-    click REF                       locate REF, then AXPress it; REF is 12, or 5:12 inside iframe 5's frame
+    click TARGET                    locate TARGET, then AXPress it
       [--action double_click|triple_click|right_click] [--modifiers ctrl+shift+alt+cmd]  synthetic DOM events instead
     drag REF TO                     drag from REF to TO in one frame as synthetic DOM events
-    form-input REF VALUE            set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
+    form-input TARGET VALUE         set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
     key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
     key [--ref REF] --text TEXT     type TEXT one key per character
     events [--clear]                events the page logged since its first events read
@@ -30,11 +30,11 @@ enum CommandLineParsing {
     text [--max-chars N]            readable page text
     wait-check --text TEXT | --selector SELECTOR  one look in every frame for shown text or a shown element (MCP wait repeats it)
     scroll up|down|left|right [STEPS] [--ref REF]  scroll by STEPS x 100 CSS px
-    scroll-to REF                   center REF in the view
+    scroll-to TARGET                center TARGET in the view
     screenshot [PATH] [--region X0,Y0,X1,Y1] [--scale S]  save the tab as PNG
     resize WIDTH HEIGHT             resize the tab's window in points
     javascript [--frame REF] CODE   run CODE in the page's main world and print its last expression as JSON
-    file-upload REF PATH...         give files to the file input REF (or the one it labels or holds), or drop them on REF
+    file-upload TARGET PATH...      give files to the file input TARGET (or the one it labels or holds), or drop them on TARGET
     console [--errors] [--pattern REGEX] [--limit N] [--clear]  console messages from every frame, newest N (default 50, up to 200)
     network [--pattern TEXT] [--limit N] [--clear] | --id ID  requests a tab_create tab made, newest N (default 50, up to 200), or one request's headers and bodies
     dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
@@ -46,6 +46,8 @@ enum CommandLineParsing {
       --no-window-fields            leave window-under-pointer fields unset on mouse events
     mcp                             run as a stdio MCP server
 
+  REF is 12, or 5:12 inside iframe 5's frame. TARGET is REF, or --name NAME and/or --role ROLE picking the one element find's rules match,
+  an exact name winning; key and scroll take --name and --role in place of --ref too.
   Without --tab, commands act on the active tab of the last focused window.
   """
 
@@ -67,7 +69,7 @@ enum CommandLineParsing {
     case "click":
       let action = try option("--action", &rest)
       let modifiers = try option("--modifiers", &rest)
-      invocation = try Invocation(command: .click(tabId: tabId, ref: ref(rest.first, "REF"), actionName: action, modifierNames: modifiers))
+      invocation = try Invocation(command: .click(tabId: tabId, target: leadingTarget(&rest), actionName: action, modifierNames: modifiers))
     case "drag":
       guard rest.count >= 2 else { throw Failure(.invalidArgument, "drag needs REF and TO") }
 
@@ -81,7 +83,7 @@ enum CommandLineParsing {
       let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
       let depth = try option("--depth", &rest).map { try integer($0, "--depth") }
       invocation = try Invocation(command: .readPage(tabId: tabId, filter: flag("--all", &rest) ? .all : .interactive, maxChars: maxChars, root: ref, depth: depth))
-    case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, ref: ref(rest.first, "REF")))
+    case "scroll-to": invocation = try Invocation(command: .scrollTo(tabId: tabId, target: leadingTarget(&rest)))
     case "resize":
       guard rest.count == 2 else { throw Failure(.invalidArgument, "resize needs WIDTH and HEIGHT") }
 
@@ -127,21 +129,25 @@ enum CommandLineParsing {
 
       invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, windowFields: windowFields))
     case "form-input":
-      guard rest.count >= 2 else { throw Failure(.invalidArgument, "form-input needs REF and VALUE") }
+      let target = try leadingTarget(&rest)
+
+      guard !rest.isEmpty else { throw Failure(.invalidArgument, "form-input needs TARGET and VALUE") }
 
       // Free text is taken verbatim, so it skips the stray option check below.
-      return try Invocation(command: .formInput(tabId: tabId, ref: ref(rest[0], "REF"), value: .text(rest.dropFirst().joined(separator: " "))))
+      return Invocation(command: .formInput(tabId: tabId, target: target, value: .text(rest.joined(separator: " "))))
     case "javascript":
       let frame = try rest.first == "--frame" ? option("--frame", &rest).map { try Self.ref($0, "--frame") } : nil
 
       // CODE is taken verbatim, so it skips the stray option check below.
       return try Invocation(command: .javascript(tabId: tabId, text: rest.joined(separator: " "), frame: frame))
     case "file-upload":
-      guard rest.count >= 2 else { throw Failure(.invalidArgument, "file-upload needs REF and at least one PATH") }
+      let target = try leadingTarget(&rest)
+
+      guard !rest.isEmpty else { throw Failure(.invalidArgument, "file-upload needs TARGET and at least one PATH") }
 
       // Paths are taken verbatim, relative ones from the current directory, so they skip the stray option check below.
-      let paths = rest.dropFirst().map { URL(filePath: $0, relativeTo: URL.currentDirectory()).standardizedFileURL.path }
-      return try Invocation(command: .fileUpload(tabId: tabId, ref: ref(rest[0], "REF"), paths: paths))
+      let paths = rest.map { URL(filePath: $0, relativeTo: URL.currentDirectory()).standardizedFileURL.path }
+      return try Invocation(command: .fileUpload(tabId: tabId, target: target, paths: paths))
     case "find":
       let role = try option("--role", &rest) ?? ""
       let name = rest.joined(separator: " ")
@@ -167,12 +173,12 @@ enum CommandLineParsing {
 
       if let textStart { rest.removeSubrange(textStart...) }
 
-      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
+      let target = try optionalTarget(&rest)
       let times = try option("--repeat", &rest).map { try integer($0, "--repeat") } ?? 1
       let keys = text != nil && rest.isEmpty ? nil : rest.joined(separator: " ")
-      invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, ref: ref, times: times))
+      invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, target: target, times: times))
     case "scroll":
-      let ref = try option("--ref", &rest).map { try Self.ref($0, "--ref") }
+      let target = try optionalTarget(&rest)
 
       guard let direction = rest.first else { throw Failure(.invalidArgument, "scroll needs a direction: up, down, left or right") }
 
@@ -180,7 +186,7 @@ enum CommandLineParsing {
 
       guard let steps = Double(stepsText) else { throw Failure(.invalidArgument, "STEPS must be a number, not \(stepsText)") }
 
-      invocation = try Invocation(command: .scroll(tabId: tabId, ref: ref, direction: direction, amount: steps))
+      invocation = try Invocation(command: .scroll(tabId: tabId, target: target, direction: direction, amount: steps))
     default:
       throw Failure(.invalidArgument, "unknown command \(name)")
     }
@@ -206,6 +212,31 @@ enum CommandLineParsing {
     case "hover": return try .hover(ref: Self.ref(arguments[0], "REF"))
     default: return try .drag(from: Self.ref(arguments[0], "FROM"), to: Self.ref(arguments[1], "TO"))
     }
+  }
+
+  /// REF as the first word, or --name NAME and --role ROLE in either order at the front, removed from words.
+  private static func leadingTarget(_ words: inout [String]) throws -> ElementTarget {
+    var named: [String: String] = [:]
+
+    while let first = words.first, ["--name", "--role"].contains(first) {
+      guard words.count > 1 else { throw Failure(.invalidArgument, "\(first) needs a value") }
+      guard named[first] == nil else { throw Failure(.invalidArgument, "\(first) repeated") }
+
+      named[first] = words[1]
+      words.removeFirst(2)
+    }
+
+    if let target = try ElementTarget.from(ref: nil, name: named["--name"], role: named["--role"]) { return target }
+
+    let target = try ElementTarget.ref(ref(words.first, "TARGET"))
+    words.removeFirst()
+    return target
+  }
+
+  /// --ref REF, or --name NAME and --role ROLE, anywhere in words; nil when none is given.
+  private static func optionalTarget(_ words: inout [String]) throws -> ElementTarget? {
+    let ref = try option("--ref", &words).map { try Self.ref($0, "--ref") }
+    return try ElementTarget.from(ref: ref, name: option("--name", &words), role: option("--role", &words))
   }
 
   /// Removes `name VALUE` from words and returns VALUE.

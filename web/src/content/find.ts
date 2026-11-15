@@ -1,30 +1,45 @@
-import type { ElementInfo, Failure, FindResult } from "../shared/protocol";
+import type {
+  ElementInfo,
+  Failure,
+  FindResult,
+  TargetResult,
+} from "../shared/protocol";
 import { authorRoles, contentRoles, nameOf, roleOf } from "./describe";
 import { flatElements } from "./flat";
 import { readViewport, visibleArea } from "./geometry";
 import { elementInfo, hasBox, isInteractive } from "./snapshot";
 
-let limit = 20;
+export let findLimit = 20;
 
-export function find(name: string, role: string): FindResult | Failure {
-  let needle = name.trim().toLowerCase();
-  let wantedRole = role.trim().toLowerCase();
+export let onScreenFirst = <Match extends { inViewport: boolean }>(
+  matches: Match[],
+) => [
+  ...matches.filter((match) => match.inViewport),
+  ...matches.filter((match) => !match.inViewport),
+];
 
-  if (!needle && !wantedRole)
-    return {
-      ok: false,
-      error: "find needs a name or a role",
-      code: "invalid_argument",
-    };
+// Exact name matches first, each group on-screen first.
+export let exactFirst = <Match extends { exact: boolean; inViewport: boolean }>(
+  matches: Match[],
+) => [
+  ...onScreenFirst(matches.filter((match) => match.exact)),
+  ...onScreenFirst(matches.filter((match) => !match.exact)),
+];
 
-  let visible = visibleArea(readViewport());
-  let matches: ElementInfo[] = [];
-  let onScreen = 0;
+let query = (name: string, role: string) => ({
+  needle: name.trim().toLowerCase(),
+  wantedRole: role.trim().toLowerCase(),
+});
 
-  // On-screen matches come first, so a scrolled page's offscreen matches higher up never crowd them out of the cap.
+let noQuery = (op: string): Failure => ({
+  ok: false,
+  error: `${op} needs a name or a role`,
+  code: "invalid_argument",
+});
+
+// Rendered elements whose accessible name contains needle and whose role is wantedRole, both lowercase and either empty, in document order.
+function* matching(needle: string, wantedRole: string) {
   for (let element of flatElements(document)) {
-    if (onScreen >= limit) break;
-
     if (!hasBox(element)) continue;
 
     let elementRole = roleOf(element);
@@ -38,7 +53,7 @@ export function find(name: string, role: string): FindResult | Failure {
         : [];
     // As in read_page, a clickable generic or group wrapping other widgets is not named by their text.
     let wraps = !contentRoles.has(elementRole) && inner.length > 0;
-    let elementName = nameOf(
+    let name = nameOf(
       element,
       (contentRoles.has(elementRole) ||
         (interactive && !authorRoles.has(elementRole))) &&
@@ -50,22 +65,55 @@ export function find(name: string, role: string): FindResult | Failure {
 
     if (
       only &&
-      nameOf(only) === elementName &&
+      nameOf(only) === name &&
       (!wantedRole || roleOf(only).toLowerCase() === wantedRole)
     )
       continue;
 
-    if (needle && !elementName.toLowerCase().includes(needle)) continue;
+    if (needle && !name.toLowerCase().includes(needle)) continue;
 
-    let info = elementInfo(element, visible, elementName);
+    yield { element, name };
+  }
+}
+
+export function find(name: string, role: string): FindResult | Failure {
+  let { needle, wantedRole } = query(name, role);
+
+  if (!needle && !wantedRole) return noQuery("find");
+
+  let visible = visibleArea(readViewport());
+  let matches: ElementInfo[] = [];
+  let onScreen = 0;
+
+  // On-screen matches come first, so a scrolled page's offscreen matches higher up never crowd them out of the cap.
+  for (let match of matching(needle, wantedRole)) {
+    let info = elementInfo(match.element, visible, match.name);
     matches.push(info);
 
     if (info.inViewport) onScreen++;
+
+    if (onScreen >= findLimit) break;
   }
 
-  let ordered = [
-    ...matches.filter((match) => match.inViewport),
-    ...matches.filter((match) => !match.inViewport),
-  ];
-  return { ok: true, matches: ordered.slice(0, limit) };
+  return { ok: true, matches: onScreenFirst(matches).slice(0, findLimit) };
+}
+
+// Every match for an action's name and role, counted whole: exact ones, whose name equals name with case and surrounding whitespace ignored, come first,
+// each group on-screen first. A role alone has no exact matches, since an unnamed element would equal the empty name.
+export function target(name: string, role: string): TargetResult | Failure {
+  let { needle, wantedRole } = query(name, role);
+
+  if (!needle && !wantedRole) return noQuery("target");
+
+  let visible = visibleArea(readViewport());
+  let matches = [...matching(needle, wantedRole)].map((match) => ({
+    ...elementInfo(match.element, visible, match.name),
+    exact: needle !== "" && match.name.trim().toLowerCase() === needle,
+  }));
+  return {
+    ok: true,
+    matches: exactFirst(matches).slice(0, findLimit),
+    matched: matches.length,
+    exact: matches.filter((match) => match.exact).length,
+  };
 }
