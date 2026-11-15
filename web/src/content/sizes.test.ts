@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-// Output sizes, in characters, of the leaner reads against the reads they replace; DECISIONS.md records these numbers.
+// Output sizes, in characters, of the leaner reads against the reads they replace.
 import { beforeEach, describe, expect, test, vi } from "vitest";
 import type { PageTextResult, ReadPageResult } from "../shared/protocol";
 import { pageText } from "./pageText";
