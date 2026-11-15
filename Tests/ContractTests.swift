@@ -130,7 +130,10 @@ struct ContractTests {
 
   @Test func contentResultsDecode() throws {
     let element = #"{"ref":4,"tag":"button","role":"button","name":"Go","rect":{"left":1,"top":2,"width":3,"height":4},"inViewport":true}"#
-    #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"[4] button Go","truncated":true}"#).truncated)
+    #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"[4] button Go","truncated":true,"above":null,"below":null}"#).truncated)
+    #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"","truncated":false,"above":null,"below":null}"#).leftOut == nil)
+    #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"","truncated":false,"above":0,"below":0}"#).leftOut == "(viewport only; nothing above or below)")
+    #expect(try decode(ReadPageResult.self, #"{"ok":true,"url":"u","title":"t","viewport":\#(viewport),"text":"","truncated":false,"above":1840,"below":0}"#).leftOut == "(viewport only; 1840 px above and 0 px below left out)")
     #expect(try decode(FindResult.self, #"{"ok":true,"matches":[\#(element)]}"#).matches[0].disabled == nil)
     #expect(try decode(PageTextResult.self, #"{"ok":true,"url":"u","title":"t","text":"hello","truncated":false}"#).text == "hello")
     #expect(try decode(ScrollResult.self, #"{"ok":true,"moved":false,"viewport":\#(viewport)}"#).viewport.scrollY == 40)
@@ -174,7 +177,8 @@ struct ContractTests {
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
     #expect(ContentRequest.setColor(ref: PageRef(frames: [5], local: 3), value: "#00ff00").json == ["op": "setColor", "ref": "5:3", "value": "#00ff00"])
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
-    #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3)])
+    #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3, viewport: true).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3), "viewport": .bool(true)])
+    #expect(ContentRequest.pageText(maxChars: 100, format: .markdown, ref: PageRef(frames: [5], local: 2)).json == ["op": "pageText", "maxChars": .number(100), "format": "markdown", "ref": "5:2"])
     #expect(ContentRequest.scrollIntoView(ref: 7).json == ["op": "scrollIntoView", "ref": "7"])
     #expect(ContentRequest.drag(ref: PageRef(frames: [5], local: 12), to: PageRef(frames: [5], local: 3)).json == ["op": "drag", "ref": "5:12", "to": "5:3"])
     #expect(ContentRequest.syntheticClick(ref: PageRef(frames: [5], local: 12), action: .double, modifiers: [.cmd, .shift]).json == ["op": "syntheticClick", "ref": "5:12", "action": "double_click", "modifiers": .array(["cmd", "shift"])])

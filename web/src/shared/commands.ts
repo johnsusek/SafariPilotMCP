@@ -15,6 +15,7 @@ import type {
   LoggedEvent,
   Modifier,
   Rect,
+  TextFormat,
   UploadFile,
   UploadResult,
   Viewport,
@@ -42,16 +43,24 @@ export type PageRequest =
     }
   | { op: "drag"; ref: RefPath; to: RefPath }
   | { op: "upload"; ref: RefPath; files: UploadFile[] }
+  // viewport keeps only what shows in the view, in every frame read.
   | {
       op: "readPage";
       filter: "interactive" | "all";
       maxChars: number;
       ref: RefPath | null;
       depth: number | null;
+      viewport: boolean;
     }
   | { op: "find"; name: string; role: string }
   | { op: "waitFor"; text: string | null; selector: string | null }
-  | { op: "pageText"; maxChars: number }
+  // ref limits the text to that element and the frames inside it.
+  | {
+      op: "pageText";
+      maxChars: number;
+      format: TextFormat;
+      ref: RefPath | null;
+    }
   | { op: "scroll"; ref: RefPath | null; left: number; top: number }
   | { op: "scrollIntoView"; ref: RefPath }
   | {
@@ -136,6 +145,7 @@ export type PageSnapshotResult = {
   viewport: Viewport;
   elements: PageElement[];
 };
+// above and below are the top read frame's, as in ReadPageResult.
 export type PageReadResult = {
   ok: true;
   url: string;
@@ -143,6 +153,8 @@ export type PageReadResult = {
   viewport: Viewport;
   text: string;
   truncated: boolean;
+  above: number | null;
+  below: number | null;
 };
 
 // windowFrame is the tab's window in screen coordinates (browser.windows.get), null when unavailable.
