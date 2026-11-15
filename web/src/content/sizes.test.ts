@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 // Output sizes, in characters, of the leaner reads against the reads they replace.
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import type { PageTextResult, ReadPageResult } from "../shared/protocol";
 import { pageText } from "./pageText";
 import { refFor } from "./refs";
@@ -10,6 +10,17 @@ let tree = (viewport: boolean, ref: number | null = null) =>
   (readPage("all", 1e6, ref, null, "", viewport, null) as ReadPageResult).text;
 let text = (format: "text" | "markdown", ref: number | null) =>
   (pageText(1e6, format, ref) as PageTextResult).text;
+
+// refs.ts seeds its first ref at random, and fewer digits would shrink the sizes below; pin it to a six-digit start while it loads.
+let random = vi.hoisted(() => {
+  let original = Math.random;
+  Math.random = () => 0.5;
+  return original;
+});
+
+beforeAll(() => {
+  Math.random = random;
+});
 
 beforeEach(() => {
   vi.restoreAllMocks();
