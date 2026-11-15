@@ -41,6 +41,12 @@ Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 - After the action's own check, `diff` waits until the DOM has been still for 100 ms (inline style changes do not count, so a scripted animation cannot hold it) and every fetch and XHR started since `diffStart` has finished (counted by the main-world capture), at most 2 s after the input, then walks again. It answers added subtrees as read_page lines with refs, changed elements with what they were, changed text, and the topmost removed elements, each under a line naming its nearest surviving ancestor.
 - A navigation, a replaced acted frame or an opened dialog leaves the reply as it was. A page past 20000 elements is too large to diff. Replies cut the diff at 2000 characters and count what was left out.
 
+## Targets
+
+- click, form_input, key, scroll, scroll_to and file_upload take a ref or a name and/or role. Code: `target` in `web/src/content/find.ts` and `web/src/background/page.ts`, `resolving` in `App/Commands.swift`.
+- A name costs one round trip before the action. Every frame find reads walks its rendered elements with find's matching, offscreen ones included, and the background takes the only exact name (case and surrounding whitespace ignored), else the only match. A role alone needs exactly one match.
+- No match or several fail before anything acts; several list up to 20 candidates with refs, exact names first. Otherwise the reply starts with the element and ref it resolved to, and the ref path runs unchanged.
+
 ## Pages
 
 - Refs come from the content script on first sight per frame, stored in a WeakMap, and numbered from a random base per document so a stale ref fails instead of hitting another element.

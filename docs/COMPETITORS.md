@@ -52,6 +52,6 @@ Checked: [Epistates/MCPSafari](https://github.com/Epistates/MCPSafari) at 13ba54
 1. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem scripts/install.sh works around.
 2. **Strict arguments** (MCPSafari ToolArguments.swift:97-104): refuse unknown, mistyped or out-of-range arguments before anything runs.
 3. **Hover:** all three have it. Apple's comes from inside the engine, so CSS :hover may apply, which untrusted events cannot do.
-4. **Smaller tools:** full-page screenshots, back, forward and reload, `drop_file` for drop zones without a file input, targeting by visible text, console level filter and clear on read, network filters by method, status and time.
+4. **Smaller tools:** full-page screenshots, back, forward and reload, `drop_file` for drop zones without a file input, console level filter and clear on read, network filters by method, status and time.
 5. **Native input guards:** fail fast while the screen is locked (safari-mcp safari.js:1447-1462); never resend an action whose page navigated before replying (MCPSafari `reply_lost`).
 6. **Release gate:** require recorded live Safari checks before tagging, as MCPSafari's release-qualification.json does, for the many "not verified live" items here.
