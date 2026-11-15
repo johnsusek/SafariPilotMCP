@@ -34,6 +34,8 @@ export function inspect(ref: number): InspectResult | Failure {
     checked: null,
     selectedIndex: null,
     options: null,
+    min: null,
+    max: null,
   };
 
   if (element instanceof HTMLSelectElement) {
@@ -61,6 +63,25 @@ export function inspect(ref: number): InspectResult | Failure {
       value: element.value,
       kind: element.type,
       checked: element.checked,
+    };
+
+  // A native range reports min 0 and max 100 when unset; an ARIA slider may leave either out.
+  if (element instanceof HTMLInputElement && element.type === "range")
+    return {
+      ...base,
+      value: element.value,
+      kind: "slider",
+      min: Number(element.min || 0),
+      max: Number(element.max || 100),
+    };
+
+  if (element.getAttribute("role") === "slider")
+    return {
+      ...base,
+      value: element.getAttribute("aria-valuenow"),
+      kind: "slider",
+      min: numberOrNull(element.getAttribute("aria-valuemin")),
+      max: numberOrNull(element.getAttribute("aria-valuemax")),
     };
 
   if (element instanceof HTMLInputElement && element.type === "color")
@@ -108,6 +129,12 @@ export function inspect(ref: number): InspectResult | Failure {
       checked: element.getAttribute("aria-checked") === "true",
     };
   return base;
+}
+
+function numberOrNull(text: string | null) {
+  if (text === null || text.trim() === "") return null;
+  let number = Number(text);
+  return Number.isFinite(number) ? number : null;
 }
 
 // No AX path sets a color input: its AXColorWell ignores AXValue and opens a popover of unnamed swatches. The isolated world's

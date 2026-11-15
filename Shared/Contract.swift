@@ -103,8 +103,8 @@ struct EventsResult: Codable, Sendable {
     throw Failure(.pageBusy, "the frame of iframe \(frame) did not answer within 2 s, so \(consequence)")
   }
 }
-/// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; checked is set for checkbox and radio, selectedIndex and options for both select kinds.
-enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", color, other }
+/// listbox is a select shown as a list (multiple or size over 1); date, time and datetime-local are inputs WebKit draws as separate typed fields; slider is a range input or role=slider; checked is set for checkbox and radio, selectedIndex and options for both select kinds, min and max for a slider when known.
+enum ControlKind: String, Codable, Sendable { case text, checkbox, radio, select, listbox, date, time, dateTimeLocal = "datetime-local", color, slider, other }
 struct SelectOption: Codable, Sendable, Equatable { let value: String; let label: String; let disabled: Bool }
 struct InspectResult: Codable, Sendable {
   let ref: PageRef
@@ -115,6 +115,8 @@ struct InspectResult: Codable, Sendable {
   let checked: Bool?
   let selectedIndex: Int?
   let options: [SelectOption]?
+  let min: Double?
+  let max: Double?
 }
 struct ReadPageResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let text: String; let truncated: Bool }
 struct FindResult: Codable, Sendable { let matches: [ElementInfo] }

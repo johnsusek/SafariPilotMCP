@@ -779,6 +779,8 @@ describe("runPage reads", () => {
             checked: null,
             selectedIndex: null,
             options: null,
+            min: null,
+            max: null,
           }
         : request.op === "scroll"
           ? { ok: true, moved: true, viewport: viewport() }

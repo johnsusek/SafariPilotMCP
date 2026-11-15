@@ -76,3 +76,32 @@ test("setColor refuses other elements and disabled color inputs", () => {
     code: "not_actionable",
   });
 });
+
+test("a range input and an ARIA slider are sliders with their bounds", () => {
+  document.body.innerHTML =
+    '<input type="range" min="5" max="50" value="10"><input type="range"><div role="slider" aria-valuenow="3.5" aria-valuemin="0"></div><div role="slider"></div>';
+  let [range, plain, aria, bare] = document.querySelectorAll("input, div");
+  expect(inspect(refFor(range))).toMatchObject({
+    kind: "slider",
+    value: "10",
+    min: 5,
+    max: 50,
+  });
+  expect(inspect(refFor(plain))).toMatchObject({
+    kind: "slider",
+    min: 0,
+    max: 100,
+  });
+  expect(inspect(refFor(aria))).toMatchObject({
+    kind: "slider",
+    value: "3.5",
+    min: 0,
+    max: null,
+  });
+  expect(inspect(refFor(bare))).toMatchObject({
+    kind: "slider",
+    value: null,
+    min: null,
+    max: null,
+  });
+});

@@ -1,7 +1,7 @@
 import ApplicationServices
 import Foundation
 
-/// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, or a color input from the page script, then reads the control back from the page.
+/// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, a slider with real key presses, or a color input from the page script, then reads the control back from the page.
 extension Commands {
   func formInput(_ tabId: Int?, _ ref: PageRef, _ value: FormValue) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
@@ -22,6 +22,10 @@ extension Commands {
       guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a color input, so value must be a string such as #00ff00") }
 
       return try await setColor(tab, ref, text)
+    case .slider:
+      guard case let .text(text) = value, let wanted = Double(text) else { throw Failure(.invalidArgument, "ref \(ref) is a slider, so value must be a number") }
+
+      return try await setSlider(tab, ref, control, wanted)
     case .listbox: throw Failure(.invalidArgument, "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
     case .other: throw Failure(.invalidArgument, "ref \(ref) is not a text field, slider, checkbox, radio, select or color input; use click or key")
     }
@@ -156,6 +160,74 @@ extension Commands {
     ]
     let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string("color"), "readBack": .string(shown)])
     return await withLanding(CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data), tab, since: acted)
+  }
+
+  /// An ARIA slider ignores AXValue, so real keys move every slider: Home or End reach a known end, one arrow press measures the step and which arrow raises the value,
+  /// then the presses that remain go in one run and a second run corrects a page that skipped some. A value between steps ends on the nearest step.
+  private func setSlider(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ wanted: Double) async throws -> CLIReply {
+    let shown = { (number: Double) in number.formatted(.number.grouping(.never)) }
+    let number = { (control: InspectResult) in control.value.flatMap(Double.init) }
+
+    guard var current = number(control) else { throw Failure(.notActionable, "slider ref \(ref) shows no numeric value (aria-valuenow), so where it lands cannot be read back") }
+
+    if let min = control.min, wanted < min { throw Failure(.invalidArgument, "slider ref \(ref) goes down to \(shown(min)), so it cannot be set to \(shown(wanted))") }
+
+    if let max = control.max, wanted > max { throw Failure(.invalidArgument, "slider ref \(ref) goes up to \(shown(max)), so it cannot be set to \(shown(wanted))") }
+
+    var data: [String: JSONValue] = ["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string("slider")]
+
+    if current == wanted { return CLIReply(ok: true, text: "slider ref \(ref) is already at \(shown(wanted)); nothing pressed", data: .object(data)) }
+
+    let start = current
+    var pressed: [String] = []
+    var acted = ContinuousClock.now
+
+    func press(_ name: String, _ times: Int, until done: @escaping (Double) -> Bool) async throws {
+      let reply = try await key(tab.id, [KeyChord.parse(name)], ref, times)
+
+      guard reply.ok else { throw Failure(reply.code ?? .inputUnconfirmed, "pressing \(name) on slider ref \(ref) failed: \(reply.text)") }
+
+      acted = ContinuousClock.now
+      pressed.append(times > 1 ? "\(name) x\(times)" : name)
+      let after = try await settled(tab.id, ref) { number($0).map(done) ?? false }
+
+      guard let value = number(after) else { throw Failure(.notActionable, "slider ref \(ref) stopped showing a numeric value after \(name)") }
+
+      current = value
+    }
+
+    if wanted == control.min || wanted == control.max { try await press(wanted == control.min ? "Home" : "End", 1) { $0 == wanted } }
+
+    var step = 0.0
+
+    if current != wanted {
+      let before = current
+      let first = wanted > current ? "ArrowRight" : "ArrowLeft"
+      let other = wanted > current ? "ArrowLeft" : "ArrowRight"
+      try await press(first, 1) { $0 != before }
+      step = current - before
+
+      guard step != 0 else { throw Failure(.notActionable, "slider ref \(ref) stayed at \(shown(before)) after \(first), so it does not take arrow keys; use click or key") }
+
+      let raise = step > 0 ? first : other
+      let lower = step > 0 ? other : first
+
+      for _ in 0 ..< 2 where abs(wanted - current) > abs(step) / 2 {
+        let count = Int((abs(wanted - current) / abs(step)).rounded())
+
+        guard count <= 500 else { throw Failure(.invalidArgument, "slider ref \(ref) moves \(shown(abs(step))) per arrow press, so \(shown(wanted)) is \(count) presses away; pick a value within 500 steps") }
+
+        let expected = current + Double(count) * abs(step) * (wanted > current ? 1 : -1)
+        try await press(wanted > current ? raise : lower, count) { abs($0 - expected) < abs(step) / 2 }
+      }
+    }
+
+    let matched = current == wanted || abs(wanted - current) <= abs(step) / 2
+    let note = current == wanted ? "(matches)" : matched ? "(nearest step of \(shown(abs(step))))" : "(DIFFERS)"
+    data["readBack"] = .number(current)
+    data["pressed"] = .array(pressed.map { .string($0) })
+    let lines = ["moved slider ref \(ref) from \(shown(start)) by pressing \(pressed.joined(separator: ", "))", "read back: \(shown(current)) \(note)"]
+    return await withLanding(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: .object(data), code: matched ? nil : .inputUnconfirmed), tab, since: acted)
   }
 
   /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.

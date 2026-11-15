@@ -91,8 +91,29 @@ document.addEventListener("alpine:init", () => {
       dialog: "",
       files: {},
       console: "",
+      range: "10",
+      ariaSlider: 4,
     },
     log: [],
+
+    // Steps by 2 like an APG slider, ArrowUp and ArrowRight raising it, PageUp and PageDown by 10.
+    slide(event) {
+      let moves = {
+        ArrowRight: 2,
+        ArrowUp: 2,
+        ArrowLeft: -2,
+        ArrowDown: -2,
+        PageUp: 10,
+        PageDown: -10,
+      };
+      let ends = { Home: 0, End: 20 };
+
+      if (!(event.key in moves) && !(event.key in ends)) return;
+
+      event.preventDefault();
+      let next = ends[event.key] ?? this.values.ariaSlider + moves[event.key];
+      this.values.ariaSlider = Math.min(20, Math.max(0, next));
+    },
 
     init() {
       for (let type of loggedTypes) {

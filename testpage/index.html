@@ -104,6 +104,18 @@
       </div>
 
       <div class="row">
+        <span>Range</span>
+        <input id="range" type="range" min="0" max="50" step="5" value="10" @input="values.range = $event.target.value" />
+        <output x-text="values.range"></output>
+      </div>
+
+      <div class="row">
+        <span>ARIA slider</span>
+        <div id="aria-slider" class="fake" role="slider" tabindex="0" aria-label="ARIA slider" aria-valuemin="0" aria-valuemax="20" :aria-valuenow="values.ariaSlider" @keydown="slide($event)" x-text="values.ariaSlider"></div>
+        <output x-text="values.ariaSlider"></output>
+      </div>
+
+      <div class="row">
         <span>Editable</span>
         <div id="editable" class="editable" contenteditable="true" @input="bump('editable')">Edit me</div>
         <output x-text="counts.editable"></output>

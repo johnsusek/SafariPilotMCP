@@ -234,6 +234,7 @@ export type ControlKind =
   | "time"
   | "datetime-local"
   | "color"
+  | "slider"
   | "other";
 export type SelectOption = { value: string; label: string; disabled: boolean };
 export type InspectResult = {
@@ -246,6 +247,8 @@ export type InspectResult = {
   checked: boolean | null;
   selectedIndex: number | null;
   options: SelectOption[] | null;
+  min: number | null;
+  max: number | null;
 };
 
 // readPage: an indented element tree as text, one node per line, with refs from the same
