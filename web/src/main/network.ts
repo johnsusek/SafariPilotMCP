@@ -3,7 +3,9 @@ import type { BodyRecord } from "../shared/protocol";
 // Keeps the bodies of the page's fetch and XMLHttpRequest calls, which webRequest cannot show; the background's webRequest log has every request's metadata.
 // The isolated content script dispatches a take event whose detail is the request as JSON ({url, method, time}), and the capture answers synchronously
 // with an answer event carrying the closest record as JSON, or "null". Both listen in the capture phase from document_start, like the console capture.
+// A pending event ({since}, epoch ms) is answered the same way with how many calls started since then have not finished, which a page diff waits for.
 export let takeEvent = "safaripilot-network-take";
+export let pendingEvent = "safaripilot-network-pending";
 export let answerEvent = "safaripilot-network-answer";
 export let maxRecords = 200;
 export let maxBody = 100000;
@@ -86,6 +88,13 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
   let originalOpen = xhr.open;
   let originalSend = xhr.send;
   let opened = new WeakMap<XMLHttpRequest, { method: string; url: string }>();
+  // Start times of calls whose response has not fully arrived; each call's done removes its own.
+  let unfinished = new Set<{ time: number }>();
+  let track = () => {
+    let call = { time: now() };
+    unfinished.add(call);
+    return () => unfinished.delete(call);
+  };
   let absolute = (url: string) => {
     try {
       return new Url(url, page.location.href).href;
@@ -171,14 +180,25 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
             .then((text) => (record.requestBody = clip(text).text))
             .catch(() => {});
 
-        let pending = apply(originalFetch, this, args) as Promise<Response>;
-        pending.then(
-          (response) =>
-            readResponse(record, response).catch(
-              (error) => (record.note = `body not read: ${error}`),
-            ),
-          (error) => (record.note = `failed: ${error}`),
-        );
+        let done = track();
+        let pending: Promise<Response>;
+
+        try {
+          pending = apply(originalFetch, this, args) as Promise<Response>;
+        } catch (error) {
+          done();
+          throw error;
+        }
+
+        pending
+          .then(
+            (response) =>
+              readResponse(record, response).catch(
+                (error) => (record.note = `body not read: ${error}`),
+              ),
+            (error) => (record.note = `failed: ${error}`),
+          )
+          .finally(done);
         return pending;
       } catch {
         return apply(originalFetch, this, args);
@@ -195,8 +215,12 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
   } as typeof xhr.open;
 
   xhr.send = function send(this: XMLHttpRequest, ...args: unknown[]) {
+    let done = () => {};
+
     try {
       arm();
+      done = track();
+      this.addEventListener("loadend", () => done());
       let call = opened.get(this);
 
       if (call) {
@@ -238,7 +262,12 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
       }
     } catch {}
 
-    return apply(originalSend, this, args);
+    try {
+      return apply(originalSend, this, args);
+    } catch (error) {
+      done();
+      throw error;
+    }
   } as typeof xhr.send;
 
   let take = (event: Event) => {
@@ -254,9 +283,23 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
     dispatch(new Custom(answerEvent, { detail: answer }));
   };
 
-  // document.open() erases a window's listeners, so every fetch and send adds the take listener again; adding one already there does nothing.
+  let countPending = (event: Event) => {
+    let answer = "null";
+
+    try {
+      let since = Number(parse(String((event as CustomEvent).detail)).since);
+      answer = String(
+        [...unfinished].filter((call) => call.time >= since).length,
+      );
+    } catch {}
+
+    dispatch(new Custom(answerEvent, { detail: answer }));
+  };
+
+  // document.open() erases a window's listeners, so every fetch and send adds the listeners again; adding one already there does nothing.
   function arm() {
     listen(takeEvent, take, true);
+    listen(pendingEvent, countPending, true);
   }
 
   arm();

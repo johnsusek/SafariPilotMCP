@@ -1,4 +1,4 @@
-import { answerEvent, maxBody, takeEvent } from "../main/network";
+import { answerEvent, maxBody, pendingEvent, takeEvent } from "../main/network";
 import type { BodyRecord, NetworkBodyResult } from "../shared/protocol";
 
 let waiting = false;
@@ -32,26 +32,35 @@ let recordOf = (raw: Record<string, unknown>): BodyRecord => ({
   note: text(raw.note),
 });
 
-export function takeBody(
-  url: string,
-  method: string,
-  time: number,
-): NetworkBodyResult {
+// Asks the main-world capture, which answers synchronously; undefined when no capture answered.
+function ask(type: string, detail: unknown) {
   // document.open() erases the window's listeners, so the reader is added again; a listener already there is not added twice.
   installNetworkReader();
   waiting = true;
   reply = undefined;
   window.dispatchEvent(
-    new CustomEvent(takeEvent, {
-      detail: JSON.stringify({ url, method, time }),
-    }),
+    new CustomEvent(type, { detail: JSON.stringify(detail) }),
   );
   waiting = false;
+  return typeof reply === "string" ? reply : undefined;
+}
 
-  if (typeof reply !== "string")
-    return { ok: true, capturing: false, record: null };
+// How many of this frame's fetch and XMLHttpRequest calls started at or after since (epoch ms) have not finished; null when no capture answered.
+export function pendingSince(since: number) {
+  let count = Number(ask(pendingEvent, { since }));
+  return Number.isInteger(count) && count >= 0 ? count : null;
+}
 
-  let parsed = JSON.parse(reply) as unknown;
+export function takeBody(
+  url: string,
+  method: string,
+  time: number,
+): NetworkBodyResult {
+  let answer = ask(takeEvent, { url, method, time });
+
+  if (answer === undefined) return { ok: true, capturing: false, record: null };
+
+  let parsed = JSON.parse(answer) as unknown;
   return {
     ok: true,
     capturing: true,
