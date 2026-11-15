@@ -1,0 +1,189 @@
+name: Release
+
+# A pushed vX.Y.Z tag (from scripts/release.sh) builds, signs, notarizes and publishes that version, then bumps the johnsusek/tap cask.
+# A manual run from a branch is a dry run: it does everything up to publishing and attaches the DMG and appcast to the run.
+
+on:
+  push:
+    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DEVELOPER_DIR: /Applications/Xcode_27.2.app/Contents/Developer
+  REPO_URL: https://github.com/johnsusek/SafariPilotMCP
+  TEAM_ID: WX2UGCD2SK
+  OUT: build/release
+  DERIVED: build/ReleaseData
+
+jobs:
+  release:
+    runs-on: xcode-27
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve version
+        run: |
+          version=$(sed -nE 's/^    MARKETING_VERSION: "(.*)"/\1/p' project.yml)
+
+          if [[ $GITHUB_REF_TYPE == tag && $GITHUB_REF_NAME != "v$version" ]]; then
+            echo "tag $GITHUB_REF_NAME does not match MARKETING_VERSION $version" >&2
+            exit 1
+          fi
+
+          [[ -f docs/releases/$version.md ]] || { echo "missing docs/releases/$version.md" >&2; exit 1; }
+          echo "VERSION=$version" >> "$GITHUB_ENV"
+          [[ $GITHUB_REF_TYPE == tag ]] || echo "DRY_RUN=1" >> "$GITHUB_ENV"
+
+      - name: Install signing credentials
+        env:
+          CERTIFICATE_P12: ${{ secrets.MACOS_CERTIFICATE_P12 }}
+          CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          PROVISIONING_PROFILE: ${{ secrets.PROVISIONING_PROFILE }}
+          NOTARY_KEY: ${{ secrets.APP_STORE_CONNECT_PRIVATE_KEY }}
+          SPARKLE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          keychain="$RUNNER_TEMP/release.keychain-db"
+          password=$(uuidgen)
+          echo "$CERTIFICATE_P12" | base64 --decode > "$RUNNER_TEMP/certificate.p12"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -P "$CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k "$keychain"
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          rm "$RUNNER_TEMP/certificate.p12"
+          security find-identity -v -p codesigning "$keychain" | grep -q "Developer ID Application: .*($TEAM_ID)" || { echo "no Developer ID Application identity for $TEAM_ID in the p12" >&2; exit 1; }
+          echo "KEYCHAIN=$keychain" >> "$GITHUB_ENV"
+
+          profile="$RUNNER_TEMP/profile.provisionprofile"
+          echo "$PROVISIONING_PROFILE" | base64 --decode > "$profile"
+          uuid=$(security cms -D -i "$profile" | plutil -extract UUID raw -)
+          mkdir -p "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles"
+          cp "$profile" "$HOME/Library/Developer/Xcode/UserData/Provisioning Profiles/$uuid.provisionprofile"
+          echo "PROFILE_UUID=$uuid" >> "$GITHUB_ENV"
+
+          printf '%s\n' "$NOTARY_KEY" > "$RUNNER_TEMP/AuthKey.p8"
+          printf '%s' "$SPARKLE_KEY" > "$RUNNER_TEMP/sparkle_private_key"
+          chmod 600 "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/sparkle_private_key"
+
+      # A command-line profile override applies to every target, but only the app has one;
+      # routing it through a setting keyed by product name leaves the extension and CLI without one.
+      - name: Archive
+        run: |
+          brew install --quiet xcodegen
+          npm --prefix web ci --silent
+          xcodegen generate --quiet
+          xcodebuild archive -quiet -project SafariPilot.xcodeproj -scheme SafariPilot -configuration Release -destination 'generic/platform=macOS' -archivePath "$OUT/SafariPilot.xcarchive" -derivedDataPath "$DERIVED" \
+            CODE_SIGN_STYLE=Manual "CODE_SIGN_IDENTITY=Developer ID Application" "DEVELOPMENT_TEAM=$TEAM_ID" "OTHER_CODE_SIGN_FLAGS=--keychain $KEYCHAIN" \
+            'PROVISIONING_PROFILE_SPECIFIER=$(RELEASE_PROFILE_FOR_$(PRODUCT_NAME))' "RELEASE_PROFILE_FOR_SafariPilot=$PROFILE_UUID"
+
+      - name: Export
+        run: |
+          cat > "$OUT/ExportOptions.plist" <<EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>developer-id</string>
+            <key>signingStyle</key>
+            <string>manual</string>
+            <key>signingCertificate</key>
+            <string>Developer ID Application</string>
+            <key>teamID</key>
+            <string>$TEAM_ID</string>
+            <key>provisioningProfiles</key>
+            <dict>
+              <key>net.johnsolo.SafariPilot</key>
+              <string>$PROFILE_UUID</string>
+            </dict>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive -quiet -archivePath "$OUT/SafariPilot.xcarchive" -exportPath "$OUT/export" -exportOptionsPlist "$OUT/ExportOptions.plist"
+          codesign --verify --deep --strict "$OUT/export/SafariPilot.app"
+
+      - name: Build DMG
+        run: |
+          dmg="$OUT/SafariPilot-$VERSION.dmg"
+          mkdir "$OUT/dmg"
+          ditto "$OUT/export/SafariPilot.app" "$OUT/dmg/SafariPilot.app"
+          ln -s /Applications "$OUT/dmg/Applications"
+          hdiutil create -quiet -volname SafariPilot -srcfolder "$OUT/dmg" -format UDZO "$dmg"
+          codesign --sign "Developer ID Application" --keychain "$KEYCHAIN" --timestamp "$dmg"
+          echo "DMG=$dmg" >> "$GITHUB_ENV"
+
+      - name: Notarize and staple
+        env:
+          NOTARY_KEY_ID: ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          NOTARY_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+        run: |
+          result=$(xcrun notarytool submit "$DMG" --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" --wait --output-format json)
+          verdict=$(plutil -extract status raw - <<< "$result")
+
+          if [[ $verdict != Accepted ]]; then
+            xcrun notarytool log "$(plutil -extract id raw - <<< "$result")" --key "$RUNNER_TEMP/AuthKey.p8" --key-id "$NOTARY_KEY_ID" --issuer "$NOTARY_ISSUER_ID" >&2
+            echo "notarization: $verdict" >&2
+            exit 1
+          fi
+
+          xcrun stapler staple -q "$DMG"
+          spctl --assess --type open --context context:primary-signature "$DMG"
+          spctl --assess --type execute "$OUT/export/SafariPilot.app"
+          (cd "$OUT" && shasum -a 256 "$(basename "$DMG")" > "$(basename "$DMG").sha256")
+
+      # The feed URL reads appcast.xml from the latest release, so it lists only this version; its .md twin becomes the embedded notes.
+      - name: Generate appcast
+        run: |
+          mkdir "$OUT/feed"
+          cp "$DMG" "$OUT/feed/"
+          cp "docs/releases/$VERSION.md" "$OUT/feed/SafariPilot-$VERSION.md"
+          "$DERIVED/SourcePackages/artifacts/sparkle/Sparkle/bin/generate_appcast" --ed-key-file "$RUNNER_TEMP/sparkle_private_key" --embed-release-notes --maximum-deltas 0 --download-url-prefix "$REPO_URL/releases/download/v$VERSION/" --link "$REPO_URL" "$OUT/feed"
+          swift scripts/verify-appcast.swift "$OUT/feed/appcast.xml" "$DMG" "$(sed -nE 's/^ +SUPublicEDKey: (.*)/\1/p' project.yml)"
+
+      # The release stays a draft until every asset is up, so the feed never points at a missing DMG.
+      - name: Publish release
+        if: env.DRY_RUN != '1'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "v$VERSION" "$DMG" "$DMG.sha256" "$OUT/feed/appcast.xml" --draft --verify-tag --title "SafariPilot $VERSION" --notes-file "docs/releases/$VERSION.md"
+          gh release edit "v$VERSION" --draft=false --latest
+
+      - name: Bump Homebrew cask
+        if: env.DRY_RUN != '1'
+        env:
+          TAP_TOKEN: ${{ secrets.TAP_TOKEN }}
+        run: |
+          tap="$RUNNER_TEMP/tap"
+          git clone -q "https://x-access-token:$TAP_TOKEN@github.com/johnsusek/homebrew-tap.git" "$tap"
+          sha=$(shasum -a 256 "$DMG" | cut -d' ' -f1)
+          sed -i '' -E "s/^(  version ).*/\1\"$VERSION\"/; s/^(  sha256 ).*/\1\"$sha\"/" "$tap/Casks/safaripilot.rb"
+          git -C "$tap" -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" commit -q -m "safaripilot $VERSION" -- Casks/safaripilot.rb
+          git -C "$tap" push -q
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: SafariPilot-${{ env.VERSION }}
+          path: |
+            build/release/*.dmg
+            build/release/*.sha256
+            build/release/feed/appcast.xml
+          if-no-files-found: ignore
+
+      - name: Clean up credentials
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/AuthKey.p8" "$RUNNER_TEMP/sparkle_private_key" "$RUNNER_TEMP/profile.provisionprofile"
+          [[ -z ${KEYCHAIN:-} ]] || security delete-keychain "$KEYCHAIN"
