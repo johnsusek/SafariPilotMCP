@@ -3,7 +3,8 @@ import Foundation
 
 /// key: posts pid-targeted key presses at a tab's focused element without activating Safari, then counts the keydowns the page logged.
 extension Commands {
-  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: PageRef?, _ times: Int) async throws -> CLIReply {
+  /// showChanges false leaves the page diff to a caller that presses keys as part of its own action, as form_input on a slider does.
+  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: PageRef?, _ times: Int, showChanges: Bool = true) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let target: AXEngine.Target
     let focusNode: AXNode
@@ -27,6 +28,7 @@ extension Commands {
 
     if let ref { try before.requireAnswered(ref.frame, so: "keys for ref \(ref) could not be counted; nothing was pressed") }
 
+    let watch = showChanges ? await watchChanges(tab.id, ref) : nil
     var poster = EventPoster(pid: pid, windowID: nil)
     let presses = Array(repeating: chords, count: times).joined()
 
@@ -101,6 +103,10 @@ extension Commands {
       return CLIReply(ok: true, text: ([text] + landed.lines).joined(separator: "\n"), data: .object(data))
     }
 
+    var changed: [String] = []
+
+    if let watch { changed = [await changes(watch, since: acted)] }
+
     data["navigated"] = .bool(false)
     data["delivered"] = .number(Double(keydowns.count))
     data["keydowns"] = try JSONValue(encoding: keydowns)
@@ -111,14 +117,14 @@ extension Commands {
         "pressed \(pressed) in tab \(tab.id); only \(keydowns.count) of \(expected) keydowns reached the page within 1.5 s, so Safari, or a frame SafariPilot cannot read, took the rest\(busy.isEmpty ? "" : " (frames still busy: \(busy.joined(separator: ", ")))")",
         "post access (CGPreflightPostEventAccess): \(CGPreflightPostEventAccess())",
         "logged keydowns:",
-      ] + (logged.isEmpty ? ["  none"] : logged) + landed.lines
+      ] + (logged.isEmpty ? ["  none"] : logged) + landed.lines + changed
       return CLIReply(failing: .inputUnconfirmed, text: lines.joined(separator: "\n"), data: .object(data))
     }
 
     let extra = keydowns.count > expected ? ", more than posted, so other key input reached the page too" : ""
     let last = keydowns.last.map { event in "\(event.ref.map { "[\($0)] " } ?? "")\(event.target)" } ?? "?"
     let text = "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)"
-    return CLIReply(ok: true, text: ([text] + landed.lines).joined(separator: "\n"), data: .object(data))
+    return CLIReply(ok: true, text: ([text] + landed.lines + changed).joined(separator: "\n"), data: .object(data))
   }
 
   private func focused(in target: AXEngine.Target) -> AXNode? {

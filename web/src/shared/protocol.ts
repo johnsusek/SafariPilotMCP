@@ -114,7 +114,12 @@ export type ContentRequest =
       clear: boolean;
     }
   // The body record of this frame's fetch or XMLHttpRequest call with url and method that started closest to time (epoch ms).
-  | { op: "networkBody"; url: string; method: string; time: number };
+  | { op: "networkBody"; url: string; method: string; time: number }
+  // Before an action: keeps this frame's rendered tree, as read_page filter all walks it, and watches its DOM for changes.
+  | { op: "diffStart" }
+  // After it: waits up to waitMs for the DOM to be still and the fetch and XMLHttpRequest calls started since diffStart to finish, then answers what differs,
+  // cut at maxChars, with prefix in front of every ref.
+  | { op: "diff"; prefix: string; waitMs: number; maxChars: number };
 
 // What a caller does about a failure; errorCodes.json gives each code its retry flag and next step, which the MCP server adds to the reply.
 export type ErrorCode = keyof (typeof import("./errorCodes.json"))["codes"];
@@ -340,6 +345,26 @@ export type NetworkBodyResult = {
   record: BodyRecord | null;
 };
 
+// diffStart: tooLarge says the page has more elements than a diff walks, so diff will answer only that.
+export type DiffStartResult = { ok: true; tooLarge: boolean };
+// diff: lines are context lines ("in main [ref=4]:") and change lines starting "+ " (added), "~ " (changed, with what it was) or "- " (removed); added, changed
+// and removed count every change line, omitted those cut at maxChars. started is false when this document saw no diffStart, as one that replaced it.
+// tracked is false when no main-world capture answered, so fetch and XMLHttpRequest calls were not waited for; pending counts those unfinished when the wait ended,
+// and settled says the wait ended because the DOM was still and nothing was pending rather than at waitMs.
+export type DiffResult = {
+  ok: true;
+  started: boolean;
+  tooLarge: boolean;
+  lines: string[];
+  added: number;
+  changed: number;
+  removed: number;
+  omitted: number;
+  tracked: boolean;
+  pending: number;
+  settled: boolean;
+};
+
 export type ContentResponse =
   | Failure
   | PingResult
@@ -360,4 +385,6 @@ export type ContentResponse =
   | FrameBoxResult
   | HitFrameResult
   | ConsoleResult
-  | NetworkBodyResult;
+  | NetworkBodyResult
+  | DiffStartResult
+  | DiffResult;

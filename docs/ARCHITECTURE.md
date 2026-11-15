@@ -34,6 +34,13 @@ Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 - Every action is verified: click counts trusted clicks in the target frame, key counts trusted keydowns, form_input reads the value back. A miss fails with `input_unconfirmed`.
 - After an action, a settle step waits up to 15 s for a page load the action started and reports where the tab landed.
 
+## Page diffs
+
+- click, form_input, key, drag and file_upload end with what they changed, so a follow-up read_page is rarely needed. Code: `web/src/content/changes.ts`, `diff` in `web/src/background/page.ts`, `withOutcome` and `changes` in `App/Commands.swift`.
+- Right before the input, a `diffStart` op in the top frame and the acted ref's frame keeps the rendered tree (read_page's walk with filter all) and starts a MutationObserver, open shadow roots included. Other frames are not read.
+- After the action's own check, `diff` waits until the DOM has been still for 100 ms and every fetch and XHR started since `diffStart` has finished (counted by the main-world capture), at most 2 s after the input, then walks again. It answers added subtrees as read_page lines with refs, changed elements with what they were, changed text, and the topmost removed elements, each under a line naming its nearest surviving ancestor.
+- A navigation, a replaced acted frame or an opened dialog leaves the reply as it was. A page past 20000 elements is too large to diff. Replies cut the diff at 2000 characters and count what was left out.
+
 ## Pages
 
 - Refs come from the content script on first sight per frame, stored in a WeakMap, and numbered from a random base per document so a stale ref fails instead of hitting another element.

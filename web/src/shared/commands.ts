@@ -60,7 +60,11 @@ export type PageRequest =
       pattern: string | null;
       limit: number;
       clear: boolean;
-    };
+    }
+  // Before an action on ref (or on the focused element when null): the top frame and ref's frame keep their rendered trees and watch for changes.
+  | { op: "diffStart"; ref: RefPath | null }
+  // After it: what those frames changed, top frame first, waiting up to waitMs for them to settle, cut at maxChars.
+  | { op: "diff"; ref: RefPath | null; waitMs: number; maxChars: number };
 
 // Page-wide results: refs are paths and rects are in top-frame CSS px.
 export type PageElement = Omit<ElementInfo, "ref"> & { ref: RefPath };
@@ -108,6 +112,22 @@ export type PageWaitResult = {
   title: string | null;
   match: (PageElement & { text: string }) | null;
   pending: string | null;
+};
+// The diff of the top frame and the acted ref's frame. replaced is the path of a frame ("" for the top one) whose document is not the one diffStart saw,
+// which leaves every other field empty; omitted counts the change lines cut at maxChars; untracked lists frames whose fetch and XMLHttpRequest calls were not waited for,
+// pending counts those still unfinished, and settled says every frame was still with nothing pending when its wait ended.
+export type PageDiffResult = {
+  ok: true;
+  replaced: RefPath | null;
+  tooLarge: boolean;
+  lines: string[];
+  added: number;
+  changed: number;
+  removed: number;
+  omitted: number;
+  untracked: RefPath[];
+  pending: number;
+  settled: boolean;
 };
 export type PageSnapshotResult = {
   ok: true;
@@ -264,6 +284,7 @@ export type CommandResponse =
   | PageFindResult
   | PageWaitResult
   | PageSnapshotResult
+  | PageDiffResult
   | PageReadResult
   | TabsResult
   | TabResult

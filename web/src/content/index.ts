@@ -1,4 +1,5 @@
 import type { ContentRequest, ContentResponse } from "../shared/protocol";
+import { startDiff, takeDiff } from "./changes";
 import { installReader, takeConsole } from "./console";
 import { installLogger, takeEvents } from "./events";
 import { drag } from "./drag";
@@ -63,6 +64,9 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       );
     if (request.op === "networkBody")
       return takeBody(request.url, request.method, request.time);
+    if (request.op === "diffStart") return startDiff();
+    if (request.op === "diff")
+      return await takeDiff(request.prefix, request.waitMs, request.maxChars);
     return {
       ok: false,
       error: `unknown op ${JSON.stringify((request as { op: unknown }).op)}`,

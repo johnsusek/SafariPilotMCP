@@ -19,12 +19,13 @@ import { hidden, redactUrl } from "../shared/redact";
 import { isSensitive } from "./sensitive";
 import { isInteractive } from "./snapshot";
 
-type Item =
+export type Item =
   | { text: string }
   | { element: Element; role: string; name: string; children: Item[] };
 
 // left is a lower bound on output characters still wanted; building stops once it runs out, since a large page would otherwise be walked whole for a short answer.
-type Walk = { interactiveOnly: boolean; left: number };
+// nodes is how many more elements may be looked at, which bounds the walk's time on a huge page.
+type Walk = { interactiveOnly: boolean; left: number; nodes: number };
 
 type Output = {
   lines: string[];
@@ -95,7 +96,11 @@ function add(items: Item[], child: Node, walk: Walk) {
     return;
   }
 
-  if (!(child instanceof Element) || isPruned(child)) return;
+  if (!(child instanceof Element)) return;
+
+  walk.nodes -= 1;
+
+  if (isPruned(child)) return;
 
   if (isInvisible(child)) {
     for (let item of build(child, walk)) {
@@ -187,13 +192,13 @@ function add(items: Item[], child: Node, walk: Walk) {
   walk.left -= role.length + name.length + 8;
 }
 
-function build(node: Node, walk: Walk): Item[] {
+export function build(node: Node, walk: Walk): Item[] {
   let items: Item[] = [];
   // Text takes its parent's visibility.
   let hidden: boolean | undefined;
 
   for (let child of flatChildren(node)) {
-    if (walk.left <= 0) break;
+    if (walk.left <= 0 || walk.nodes <= 0) break;
 
     if (child.nodeType === Node.TEXT_NODE) {
       hidden ??= node instanceof Element && isInvisible(node);
@@ -207,7 +212,7 @@ function build(node: Node, walk: Walk): Item[] {
   return items;
 }
 
-function valueOf(element: Element) {
+export function valueOf(element: Element) {
   let tag = element.localName;
 
   if (tag === "select")
@@ -244,7 +249,7 @@ function shortHref(anchor: HTMLAnchorElement) {
   );
 }
 
-function statesOf(element: Element, role: string) {
+export function statesOf(element: Element, role: string) {
   let states: string[] = [];
   let html = element as HTMLInputElement;
   let aria = (name: string) => element.getAttribute(`aria-${name}`);
@@ -332,23 +337,25 @@ function emit(output: Output, line: string) {
   return true;
 }
 
+export let headOf = (role: string, name: string) =>
+  name ? `${role} ${JSON.stringify(name)}` : role;
+
+export let quoted = (text: string) => JSON.stringify(collapse(text, textMax));
+
 function render(items: Item[], depth: number, output: Output): boolean {
   let indent = "  ".repeat(depth);
 
   for (let item of items) {
     if ("text" in item) {
-      let quoted = JSON.stringify(collapse(item.text, textMax));
-
-      if (!emit(output, `${indent}${quoted}`)) return false;
+      if (!emit(output, `${indent}${quoted(item.text)}`)) return false;
 
       continue;
     }
 
     let { element, role, name, children } = item;
-    let label = name ? ` ${JSON.stringify(name)}` : "";
     let states = statesOf(element, role).map((state) => ` ${state}`);
     let ref = refFor(element);
-    let line = `${indent}${role}${label} [ref=${output.prefix}${ref}]${states.join("")}`;
+    let line = `${indent}${headOf(role, name)} [ref=${output.prefix}${ref}]${states.join("")}`;
 
     if (!emit(output, line)) return false;
 
@@ -381,7 +388,21 @@ let newWalk = (
 ): Walk => ({
   interactiveOnly: filter === "interactive",
   left: Number.isFinite(maxDepth) ? Infinity : maxChars * 3,
+  nodes: Infinity,
 });
+
+let newOutput = (
+  maxChars: number,
+  maxDepth: number,
+  prefix: string,
+): Output => ({ lines: [], length: 0, maxChars, maxDepth, prefix, frames: [] });
+
+// Every line of items and what is inside them, as read_page shows them from depth 0.
+export function linesOf(items: Item[], prefix: string) {
+  let output = newOutput(Infinity, Infinity, prefix);
+  render(items, 0, output);
+  return output.lines;
+}
 
 function textOf(
   items: Item[],
@@ -390,14 +411,7 @@ function textOf(
   maxDepth: number,
   prefix: string,
 ) {
-  let output: Output = {
-    lines: [],
-    length: 0,
-    maxChars,
-    maxDepth,
-    prefix,
-    frames: [],
-  };
+  let output = newOutput(maxChars, maxDepth, prefix);
   let complete = render(items, 0, output);
   return {
     text: output.lines.join("\n"),

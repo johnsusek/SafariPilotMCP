@@ -244,6 +244,10 @@ enum ContentRequest: Equatable, Sendable {
   case scrollIntoView(ref: PageRef)
   /// The newest limit console messages, of errors and exceptions only when onlyErrors, whose text matches pattern (a case-insensitive JavaScript regular expression); clear empties every read frame's buffer afterwards.
   case console(onlyErrors: Bool, pattern: String?, limit: Int, clear: Bool)
+  /// Before an action on ref (the focused element when nil): the top frame and ref's frame keep their rendered trees and watch for changes.
+  case diffStart(ref: PageRef?)
+  /// After it: what those frames changed, waiting up to waitMs for them to settle, cut at maxChars.
+  case diff(ref: PageRef?, waitMs: Int, maxChars: Int)
 
   var json: [String: JSONValue] {
     switch self {
@@ -265,6 +269,8 @@ enum ContentRequest: Equatable, Sendable {
     case let .scroll(ref, left, top): ["op": "scroll", "ref": ref.map { .string($0.description) } ?? .null, "left": .number(left), "top": .number(top)]
     case let .scrollIntoView(ref): ["op": "scrollIntoView", "ref": .string(ref.description)]
     case let .console(onlyErrors, pattern, limit, clear): ["op": "console", "onlyErrors": .bool(onlyErrors), "pattern": pattern.map { .string($0) } ?? .null, "limit": .number(Double(limit)), "clear": .bool(clear)]
+    case let .diffStart(ref): ["op": "diffStart", "ref": ref.map { .string($0.description) } ?? .null]
+    case let .diff(ref, waitMs, maxChars): ["op": "diff", "ref": ref.map { .string($0.description) } ?? .null, "waitMs": .number(Double(waitMs)), "maxChars": .number(Double(maxChars))]
     }
   }
 }

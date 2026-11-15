@@ -121,9 +121,41 @@ struct Commands {
     }
   }
 
-  func withLanding(_ reply: CLIReply, _ tab: TabInfo, since acted: ContinuousClock.Instant) async -> CLIReply {
-    let lines = await landing(tab, since: acted).lines
+  /// Ends an action's reply with where the tab landed when its page moved, else with what the action changed on the page.
+  func withOutcome(_ reply: CLIReply, _ tab: TabInfo, since acted: ContinuousClock.Instant, _ watch: ChangeWatch) async -> CLIReply {
+    let landed = await landing(tab, since: acted)
+    let lines = landed.moved ? landed.lines : landed.lines + [await changes(watch, since: acted)]
     return CLIReply(ok: reply.ok, text: ([reply.text] + lines).joined(separator: "\n"), data: reply.data, code: reply.code)
+  }
+
+  /// A page diff started right before an action's input; failure is why it could not start, which the reply says where the diff would be.
+  struct ChangeWatch {
+    let tabId: Int
+    let ref: PageRef?
+    let failure: String?
+  }
+
+  /// Keeps what the top frame and ref's frame show, so changes(_:since:) can say what the input changed. A diff that cannot start never stops the action.
+  func watchChanges(_ tabId: Int, _ ref: PageRef?) async -> ChangeWatch {
+    do {
+      _ = try await content(tabId, .diffStart(ref: ref))
+      return ChangeWatch(tabId: tabId, ref: ref, failure: nil)
+    } catch {
+      return ChangeWatch(tabId: tabId, ref: ref, failure: "\(error)")
+    }
+  }
+
+  /// What the input changed, once the page is still and its requests are done, or PageDiffResult.wait after the input.
+  func changes(_ watch: ChangeWatch, since acted: ContinuousClock.Instant) async -> String {
+    if let failure = watch.failure { return "page changes not read: \(failure)" }
+
+    let waitMs = max(0, Int(((PageDiffResult.wait - (.now - acted)) / .milliseconds(1)).rounded(.up)))
+
+    do {
+      return try await content(watch.tabId, .diff(ref: watch.ref, waitMs: waitMs, maxChars: PageDiffResult.maxChars)).decode(PageDiffResult.self).text
+    } catch {
+      return "page changes not read: \(error)"
+    }
   }
 
   func describe(_ event: LoggedEvent) -> String {
@@ -381,6 +413,7 @@ struct Commands {
 
     let matched = matchLines(located, match)
     let matchedRole = match.node.role
+    let watch = await watchChanges(tab.id, ref)
     let pressed = try AXEngine.press(match)
     let acted = ContinuousClock.now
     try await Task.sleep(for: .milliseconds(150))
@@ -413,18 +446,21 @@ struct Commands {
     // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
     if !navigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
-      return CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
+      return await CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines + [changes(watch, since: acted)]).joined(separator: "\n"), data: .null)
     }
 
     // WebKit can report a frame's elements at their old place for a while after it scrolls, so a press matched by frame can land on a neighbor.
     if !frame.isEmpty, !navigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
       lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
-      return CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines).joined(separator: "\n"), data: .null)
+      return await CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines + [changes(watch, since: acted)]).joined(separator: "\n"), data: .null)
     }
 
     let outcome = pageNavigated || (navigated && clicks.isEmpty) ? "; the page navigated" : frameNavigated ? "; the frame of iframe \(frame) navigated or closed" : ", click on \(clicks.last.map { "\($0.ref.map { "[\($0)] " } ?? "")\($0.target)" } ?? "?")"
     lines[0] += outcome
     lines += matched + landed.lines
+
+    if !navigated, !frameNavigated { lines.append(await changes(watch, since: acted)) }
+
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
       "ref": .string(ref.description),
@@ -445,6 +481,7 @@ struct Commands {
     let located = try await locateHittable(tab.id, ref)
     try refuseSandboxed(located, "a click")
     let held = modifiers.isEmpty ? "" : " with \(modifiers.map(\.rawValue).joined(separator: "+"))"
+    let watch = await watchChanges(tab.id, ref)
     let response: JSONValue
 
     // A listener that opens a dialog stops the dispatch mid-sequence; the remaining events run once handle_dialog answers it.
@@ -459,7 +496,7 @@ struct Commands {
     let result = try response.decode(SyntheticClickResult.self)
     let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
     let text = "dispatched a synthetic \(action.rawValue.split(separator: "_").joined(separator: " "))\(held) on ref \(ref) \(result.target) in tab \(tab.id) as untrusted events: \(events); browser defaults such as text selection and the context menu do not run; focus is on \(result.focused)"
-    return await withLanding(CLIReply(ok: true, text: text, data: response), tab, since: acted)
+    return await withOutcome(CLIReply(ok: true, text: text, data: response), tab, since: acted, watch)
   }
 
   /// Untrusted events never start Safari's own drag, so the content script plays one; no AX is involved, so the tab stays where it is in its window.
@@ -467,6 +504,7 @@ struct Commands {
     let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
     let located = try await locateHittable(tab.id, ref)
     try refuseSandboxed(located, "a drag")
+    let watch = await watchChanges(tab.id, ref)
     let response: JSONValue
 
     // A listener that opens a dialog stops the drag mid-sequence; the remaining events run once handle_dialog answers it.
@@ -487,12 +525,13 @@ struct Commands {
     case (false, _): "released on \(result.target)"
     }
     let text = "dragged ref \(ref) \(result.source) to ref \(to) in tab \(tab.id) as \(kind) of untrusted events: \(events); \(outcome)"
-    return await withLanding(CLIReply(ok: true, text: text, data: response), tab, since: acted)
+    return await withOutcome(CLIReply(ok: true, text: text, data: response), tab, since: acted, watch)
   }
 
   /// Safari's open panel cannot be driven in the background, so the content script hands the page File objects instead; no AX is involved, so the tab stays where it is in its window.
   private func fileUpload(_ tabId: Int?, _ ref: PageRef, _ files: [UploadFile]) async throws -> CLIReply {
     let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let watch = await watchChanges(tab.id, ref)
     let response: JSONValue
 
     // A change or drop listener that opens a dialog keeps the page from answering until handle_dialog closes it.
@@ -503,6 +542,7 @@ struct Commands {
       return try CLIReply(ok: true, text: text, data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
     }
 
+    let acted = ContinuousClock.now
     let result = try response.decode(UploadResult.self)
     let sent = result.files.map { "\($0.name) (\($0.size) bytes\($0.type.isEmpty ? "" : ", \($0.type)"))" }.joined(separator: ", ")
     let events = result.dispatched.map { $0.canceled ? "\($0.type) (canceled)" : $0.type }.joined(separator: ", ")
@@ -510,7 +550,7 @@ struct Commands {
     case .input: "set \(result.target) for ref \(ref) in tab \(tab.id) to \(sent) and dispatched untrusted \(events)"
     case .drop: "dropped \(sent) on \(result.target) for ref \(ref) in tab \(tab.id) as untrusted \(events)\(result.dispatched.last?.canceled == true ? "" : "; no drop listener called preventDefault, so the page may have ignored it")"
     }
-    return CLIReply(ok: true, text: text, data: response)
+    return await withOutcome(CLIReply(ok: true, text: text, data: response), tab, since: acted, watch)
   }
 
   /// Dumps the AX windows and frames next to the content script's viewport so window matching and mapping can be calibrated in one run.

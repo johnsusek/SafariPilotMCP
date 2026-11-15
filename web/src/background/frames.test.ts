@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, test } from "vitest";
 import type {
   ContentRequest,
   ContentResponse,
+  DiffResult,
   FrameEntry,
   Rect,
   Viewport,
@@ -992,6 +993,133 @@ describe("runPage waitFor", () => {
       ok: false,
       error: '"li[" is not a valid CSS selector',
       code: "invalid_argument",
+    });
+  });
+});
+
+describe("runPage diff", () => {
+  let result = (extra: Partial<DiffResult> = {}): DiffResult => ({
+    ok: true,
+    started: true,
+    tooLarge: false,
+    lines: [],
+    added: 0,
+    changed: 0,
+    removed: 0,
+    omitted: 0,
+    tracked: true,
+    pending: 0,
+    settled: true,
+    ...extra,
+  });
+  let diffs = (top: DiffResult, frame?: DiffResult) => {
+    documents[0].answer = (request) =>
+      request.op === "diff" ? top : undefined;
+    documents[100].answer = (request) =>
+      request.op === "diff" && frame ? frame : undefined;
+  };
+  let take = (ref: string | null, maxChars = 2000) =>
+    runPage(send, { op: "diff", ref, waitMs: 1500, maxChars });
+
+  test("diffStart starts the top frame and the ref's frame, and no other", async () => {
+    let started = (request: ContentRequest) =>
+      request.op === "diffStart"
+        ? ({ ok: true, tooLarge: false } as const)
+        : undefined;
+    documents[0].answer = started;
+    documents[100].answer = started;
+    documents[200].answer = started;
+    expect(await runPage(send, { op: "diffStart", ref: "5:12" })).toEqual({
+      ok: true,
+      tooLarge: false,
+    });
+    expect(
+      calls
+        .filter(([, request]) => request.op === "diffStart")
+        .map(([id]) => id),
+    ).toEqual([0, 100]);
+    calls = [];
+    await runPage(send, { op: "diffStart", ref: null });
+    expect(
+      calls
+        .filter(([, request]) => request.op === "diffStart")
+        .map(([id]) => id),
+    ).toEqual([0]);
+  });
+
+  test("the acted frame's lines follow the top frame's, with its prefix, and counts add up", async () => {
+    diffs(
+      result({ lines: ['+ button "A" [ref=7]'], added: 1, tracked: false }),
+      result({
+        lines: ["in iframe 5:", '- alert "Saved"'],
+        removed: 1,
+        pending: 1,
+        settled: false,
+      }),
+    );
+    expect(await take("5:12")).toEqual({
+      ok: true,
+      replaced: null,
+      tooLarge: false,
+      lines: ['+ button "A" [ref=7]', "in iframe 5:", '- alert "Saved"'],
+      added: 1,
+      changed: 0,
+      removed: 1,
+      omitted: 0,
+      untracked: [""],
+      pending: 1,
+      settled: false,
+    });
+    expect(calls).toContainEqual([
+      100,
+      { op: "diff", prefix: "5:", waitMs: 1500, maxChars: 2000 },
+    ]);
+  });
+
+  test("frame lines past maxChars are cut on a line boundary without a dangling context line", async () => {
+    diffs(
+      result({ lines: ["+ " + "x".repeat(20)], added: 1 }),
+      result({
+        lines: ["in iframe 5:", "+ " + "y".repeat(20), "+ z"],
+        added: 2,
+        omitted: 3,
+      }),
+    );
+    expect(await take("5:12", 30)).toMatchObject({
+      lines: ["+ " + "x".repeat(20)],
+      added: 3,
+      omitted: 5,
+    });
+    diffs(
+      result({ lines: ["+ a"], added: 4, omitted: 3 }),
+      result({ lines: ["in iframe 5:", "+ b"], added: 1 }),
+    );
+    expect(await take("5:12")).toMatchObject({ lines: ["+ a"], omitted: 4 });
+  });
+
+  test("a replaced document, a gone frame or a page too large leaves no lines", async () => {
+    diffs(result({ started: false }), result({ lines: ["+ a"] }));
+    expect(await take("5:12")).toMatchObject({ replaced: "", lines: [] });
+    diffs(result({ lines: ["+ a"] }), result({ started: false }));
+    expect(await take("5:12")).toMatchObject({ replaced: "5", lines: [] });
+    diffs(result({ lines: ["+ a"] }));
+    documents[0].frames = [];
+    expect(await take("5:12")).toMatchObject({ replaced: "5", lines: [] });
+    documents[0].frames = [entry(5, 100, rect(10, 100, 400, 300))];
+    diffs(result({ lines: ["+ a"] }), result({ tooLarge: true }));
+    expect(await take("5:12")).toMatchObject({ tooLarge: true, lines: [] });
+  });
+
+  test("a frame that fails says which", async () => {
+    diffs(result());
+    documents[100].answer = (request) =>
+      request.op === "diff"
+        ? { ok: false, error: "it broke", code: "failed" }
+        : undefined;
+    expect(await take("5:12")).toEqual({
+      ok: false,
+      error: "it broke (in the frame of iframe 5)",
+      code: "failed",
     });
   });
 });

@@ -12,7 +12,7 @@ Checked: Safari 27 on macOS 27 (the local `safaridriver` binary, its tools/list 
 - **Authorization:** anything that can run `/usr/bin/safaridriver --mcp` gets in once Developer > "Allow remote automation and external agents" is on. No per-client prompt found.
 - **Secrets:** page text marks password fields secure and leaves out text field values (TextExtractionToStringConversion.cpp:1156-1172, 1513). JavaScript, console and network output are not filtered.
 - **Tools (17):** list_tabs, create_tab, switch_tab, close_tab, navigate_to_url, wait_for_navigation, page_info, get_page_content (textTree, markdown, html, json or plainText; subframes; event listeners), page_interactions (batched click, type, keyPress, scroll, selectText, selectMenuItem, hover, highlightText; targets by UID, find-in-page text or point; returns a page diff), evaluate_javascript (frameId), screenshot (to a file; full page), set_viewport_size, set_emulated_media, browser_console_messages (level filter, clear on read), list_network_requests and get_network_request (all request types, text bodies, filters by method, status range, URL and time), browser_dialogs.
-- **Has that SafariPilot lacks:** hover from inside the engine, page diffs after actions, full-page screenshots, print media emulation, markdown, HTML and JSON page output, find-in-page targeting, network filters, nothing to install.
+- **Has that SafariPilot lacks:** hover from inside the engine, full-page screenshots, print media emulation, markdown, HTML and JSON page output, find-in-page targeting, network filters, nothing to install.
 - **Lacks:** the signed-in profile, file upload, drag, per-client approval, secret redaction beyond page text, waiting for text or a selector, real key presses.
 - **Intended use:** debugging, compatibility, performance and accessibility checks of your own pages.
 - **Unverified:** cookie isolation under MCP, background use, whether MCP windows block user input like classic WebDriver's glass pane, the minimum macOS.
@@ -49,10 +49,9 @@ Checked: [Epistates/MCPSafari](https://github.com/Epistates/MCPSafari) at 13ba54
 
 ## Worth borrowing
 
-1. **Page diff after an action** (Apple's page_interactions, safari-mcp's snapshot diff): return what changed after click, form_input and key instead of a separate read_page.
-2. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem scripts/install.sh works around.
-3. **Strict arguments** (MCPSafari ToolArguments.swift:97-104): refuse unknown, mistyped or out-of-range arguments before anything runs.
-4. **Hover:** all three have it. Apple's comes from inside the engine, so CSS :hover may apply, which untrusted events cannot do.
-5. **Smaller tools:** full-page screenshots, back, forward and reload, `drop_file` for drop zones without a file input, targeting by visible text, console level filter and clear on read, network filters by method, status and time.
-6. **Native input guards:** fail fast while the screen is locked (safari-mcp safari.js:1447-1462); never resend an action whose page navigated before replying (MCPSafari `reply_lost`).
-7. **Release gate:** require recorded live Safari checks before tagging, as MCPSafari's release-qualification.json does, for the many "not verified live" items here.
+1. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem scripts/install.sh works around.
+2. **Strict arguments** (MCPSafari ToolArguments.swift:97-104): refuse unknown, mistyped or out-of-range arguments before anything runs.
+3. **Hover:** all three have it. Apple's comes from inside the engine, so CSS :hover may apply, which untrusted events cannot do.
+4. **Smaller tools:** full-page screenshots, back, forward and reload, `drop_file` for drop zones without a file input, targeting by visible text, console level filter and clear on read, network filters by method, status and time.
+5. **Native input guards:** fail fast while the screen is locked (safari-mcp safari.js:1447-1462); never resend an action whose page navigated before replying (MCPSafari `reply_lost`).
+6. **Release gate:** require recorded live Safari checks before tagging, as MCPSafari's release-qualification.json does, for the many "not verified live" items here.

@@ -2,7 +2,9 @@ import { clip } from "../content/pageText";
 import { intersect } from "../content/geometry";
 import type {
   CommandResponse,
+  RefPath,
   PageConsoleResult,
+  PageDiffResult,
   PageElement,
   PageEvent,
   PageRequest,
@@ -13,6 +15,7 @@ import type {
   ClickResult,
   ConsoleResult,
   ContentResponse,
+  DiffResult,
   DragResult,
   ElementInfo,
   EventsResult,
@@ -28,6 +31,7 @@ import type {
 } from "../shared/protocol";
 import {
   failureFrom,
+  frameTimeoutMs,
   inFrame,
   locatePath,
   maxFrameDepth,
@@ -40,6 +44,7 @@ import {
   type Send,
   timed,
   walkPath,
+  withTimeout,
 } from "./frames";
 
 let findLimit = 20;
@@ -296,6 +301,123 @@ async function events(send: Send, request: PageRequest & { op: "events" }) {
   };
 }
 
+// A diff reads only the top frame and the frame of the ref acted on, so ad frames neither add lines nor hold up the wait for quiet.
+let actedFrames = (ref: RefPath | null) =>
+  ref === null ? [] : parsePath(ref).frames;
+
+let inActedFrame = (failure: Failure, frames: number[]): Failure => ({
+  ...failure,
+  error: `${failure.error} (in the frame of iframe ${frames.join(":")})`,
+});
+
+async function diffStart(
+  send: Send,
+  request: PageRequest & { op: "diffStart" },
+) {
+  let frames = actedFrames(request.ref);
+  let top = await send(0, { op: "diffStart" });
+
+  if (!top.ok || !frames.length) return top;
+
+  let { frameId } = await walkPath(send, frames, false);
+  let started = await timed(send, frameId, { op: "diffStart" });
+  return started.ok ? top : inActedFrame(started, frames);
+}
+
+let noDiff: PageDiffResult = {
+  ok: true,
+  replaced: null,
+  tooLarge: false,
+  lines: [],
+  added: 0,
+  changed: 0,
+  removed: 0,
+  omitted: 0,
+  untracked: [],
+  pending: 0,
+  settled: true,
+};
+
+let isChange = (line: string) => !line.startsWith("in ");
+
+// Both frames wait for quiet at once; the acted frame's lines follow the top frame's within maxChars, and an iframe that is gone or has no frame took its document with it.
+async function diff(send: Send, request: PageRequest & { op: "diff" }) {
+  let { waitMs, maxChars } = request;
+  let frames = actedFrames(request.ref);
+  let path = frames.join(":");
+  let topReply = send(0, { op: "diff", prefix: "", waitMs, maxChars });
+  let frameReply = frames.length
+    ? walkPath(send, frames, false).then(
+        ({ frameId }) =>
+          withTimeout(
+            send(frameId, { op: "diff", prefix: `${path}:`, waitMs, maxChars }),
+            waitMs + frameTimeoutMs,
+            `no answer within ${waitMs + frameTimeoutMs} ms`,
+          ),
+        (error) => {
+          let code = failureFrom(error)?.code;
+
+          if (code === "stale_ref" || code === "not_actionable") return null;
+
+          throw error;
+        },
+      )
+    : undefined;
+  let [top, frame] = await Promise.all([topReply, frameReply]);
+
+  if (!top.ok) return top;
+
+  if (frame && !frame.ok) return inActedFrame(frame, frames);
+
+  let diffs = [top, frame].filter(Boolean) as DiffResult[];
+
+  if (!diffs[0].started) return { ...noDiff, replaced: "" };
+
+  if (frame === null || diffs[1]?.started === false)
+    return { ...noDiff, replaced: path };
+
+  if (diffs.some((result) => result.tooLarge))
+    return { ...noDiff, tooLarge: true };
+
+  let [first, second] = diffs;
+  let lines = [...first.lines];
+  let length = lines.join("\n").length;
+  let omitted = first.omitted + (second?.omitted ?? 0);
+  let cut = first.omitted > 0;
+
+  for (let line of second?.lines ?? []) {
+    let next = length + (lines.length ? 1 : 0) + line.length;
+    cut ||= next > maxChars;
+
+    if (cut) {
+      if (isChange(line)) omitted++;
+
+      continue;
+    }
+
+    lines.push(line);
+    length = next;
+  }
+
+  if (lines.length && !isChange(lines.at(-1)!)) lines.pop();
+
+  let sum = (key: "added" | "changed" | "removed" | "pending") =>
+    diffs.reduce((total, result) => total + result[key], 0);
+  return {
+    ...noDiff,
+    lines,
+    added: sum("added"),
+    changed: sum("changed"),
+    removed: sum("removed"),
+    omitted,
+    untracked: diffs.flatMap((result, index) =>
+      result.tracked ? [] : [index ? path : ""],
+    ),
+    pending: sum("pending"),
+    settled: diffs.every((result) => result.settled),
+  };
+}
+
 type ReadRequest = PageRequest & { op: "readPage" };
 
 // Reads one frame's tree, then each frame under its iframe lines with what is left of maxChars at that line, indented one level below it.
@@ -438,6 +560,10 @@ async function dispatch(
   if (request.op === "waitFor") return await waitFor(send, request);
 
   if (request.op === "pageText") return await pageText(send, request.maxChars);
+
+  if (request.op === "diffStart") return await diffStart(send, request);
+
+  if (request.op === "diff") return await diff(send, request);
 
   if (request.op === "scroll" && request.ref === null)
     return await send(0, { ...request, ref: null });
