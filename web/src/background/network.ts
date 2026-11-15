@@ -10,9 +10,11 @@ import type { Failure, NetworkBodyResult } from "../shared/protocol";
 import { redactBody, redactHeaders, redactUrl } from "../shared/redact";
 import { type Send, thrown } from "./frames";
 
+// rawRequestHeaders keeps the values redaction hides, for page_fetch to replay inside the extension; shown() strips it, so no reply carries it.
 type Recorded = NetworkEntry & {
   rawUrl: string;
   requestHeaders: NetworkHeader[] | null;
+  rawRequestHeaders: NetworkHeader[] | null;
   responseHeaders: NetworkHeader[] | null;
 };
 type Log = { entries: Recorded[]; dropped: number };
@@ -83,6 +85,7 @@ let onBeforeRequest = (details: Details) => {
     redirect: null,
     error: null,
     requestHeaders: null,
+    rawRequestHeaders: null,
     responseHeaders: null,
   };
 
@@ -98,8 +101,13 @@ let onBeforeRequest = (details: Details) => {
 let onSendHeaders = (details: Details) => {
   let entry = open.get(details.requestId)?.entry;
 
-  if (entry && details.requestHeaders)
-    entry.requestHeaders = redactHeaders(details.requestHeaders);
+  if (!entry || !details.requestHeaders) return;
+
+  entry.requestHeaders = redactHeaders(details.requestHeaders);
+  entry.rawRequestHeaders = details.requestHeaders.map(({ name, value }) => ({
+    name,
+    value: value ?? "",
+  }));
 };
 
 // A response that ends the entry: completed, or redirected to another hop.
@@ -250,9 +258,41 @@ let notRecording = (tabId: number): Failure => ({
 let shown = ({
   rawUrl: _rawUrl,
   requestHeaders: _requestHeaders,
+  rawRequestHeaders: _rawRequestHeaders,
   responseHeaders: _responseHeaders,
   ...entry
 }: Recorded): NetworkEntry => entry;
+
+// The logged request, raw values included, for use inside the extension only.
+export function loggedRequest(tabId: number, requestId: string) {
+  let log = logs.get(tabId);
+
+  if (!log) throw thrown(notRecording(tabId));
+
+  let entry = log.entries.find((logged) => logged.id === requestId);
+
+  if (!entry)
+    throw thrown({
+      ok: false,
+      error: `tab ${tabId} has no logged request ${requestId}; read_network_requests lists the ids it keeps`,
+      code: "invalid_argument",
+    });
+
+  return entry;
+}
+
+// Origins the tab's logged requests went to; none for a tab SafariPilot does not log.
+export function loggedOrigins(tabId: number) {
+  let origins = new Set<string>();
+
+  for (let entry of logs.get(tabId)?.entries ?? []) {
+    try {
+      origins.add(new URL(entry.rawUrl).origin);
+    } catch {}
+  }
+
+  return origins;
+}
 
 export function listRequests(
   tabId: number,
@@ -285,19 +325,7 @@ export async function requestDetail(
   tabId: number,
   requestId: string,
 ): Promise<NetworkRequestResult> {
-  let log = logs.get(tabId);
-
-  if (!log) throw thrown(notRecording(tabId));
-
-  let entry = log.entries.find((logged) => logged.id === requestId);
-
-  if (!entry)
-    throw thrown({
-      ok: false,
-      error: `tab ${tabId} has no logged request ${requestId}; read_network_requests lists the ids it keeps`,
-      code: "invalid_argument",
-    });
-
+  let entry = loggedRequest(tabId, requestId);
   let request = {
     ...shown(entry),
     requestHeaders: entry.requestHeaders,

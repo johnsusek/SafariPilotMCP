@@ -97,7 +97,8 @@ export let redactHeaders = (headers: { name: string; value?: string }[]) =>
     value: isSecretHeader(name) ? hidden : (value ?? ""),
   }));
 
-let formBody = /^[^=&\s]+=[^&\s]*(&[^=&\s]+=[^&\s]*)*$/;
+// Names hold no quote or brace, so compact JSON holding a URL with a query (no whitespace, = and & inside) is not taken for a form.
+let formBody = /^[^=&\s"{}]+=[^&\s]*(&[^=&\s"{}]+=[^&\s]*)*$/;
 
 // A JSON key and its scalar value, a string or a bare word such as a number, plain or escaped inside a JSON string ({\"token\":\"x\"}).
 // Read with patterns rather than JSON.parse, so a body cut short is still redacted.

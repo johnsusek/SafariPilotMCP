@@ -1,4 +1,4 @@
-import type { BodyRecord } from "../shared/protocol";
+import type { BodyRecord, PageFetchAnswer } from "../shared/protocol";
 
 // Keeps the bodies of the page's fetch and XMLHttpRequest calls, which webRequest cannot show; the background's webRequest log has every request's metadata.
 // The isolated content script dispatches a take event whose detail is the request as JSON ({url, method, time}), and the capture answers synchronously
@@ -7,6 +7,10 @@ import type { BodyRecord } from "../shared/protocol";
 export let takeEvent = "safaripilot-network-take";
 export let pendingEvent = "safaripilot-network-pending";
 export let answerEvent = "safaripilot-network-answer";
+// page_fetch: the isolated script sends {id, url, method, headers, body, replay, timeoutMs} as JSON and the capture acks with {id, accepted: true} at once,
+// then answers {id, answer} or {id, failure}. Its listener runs first and stops the event, so no page listener sees a request that may carry a replayed header.
+export let fetchEvent = "safaripilot-fetch";
+export let fetchAnswerEvent = "safaripilot-fetch-answer";
 export let maxRecords = 200;
 export let maxBody = 100000;
 // webRequest stamps a request a little after the page called fetch or send, and a fetch from a service worker or a slow main thread later still.
@@ -83,11 +87,24 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
   let Url = page.URL;
   let Decoder = page.TextDecoder;
   let RequestType = page.Request;
+  let Search = page.URLSearchParams;
+  let Abort = page.AbortController;
+  let later = page.setTimeout.bind(page);
+  let cancelLater = page.clearTimeout.bind(page);
   let originalFetch = page.fetch;
   let xhr = page.XMLHttpRequest.prototype;
   let originalOpen = xhr.open;
   let originalSend = xhr.send;
   let opened = new WeakMap<XMLHttpRequest, { method: string; url: string }>();
+  // Records whose requestBody is the body exactly as sent (a string or URLSearchParams within maxBody), which a page_fetch replay may send again.
+  let exactBodies = new WeakSet<BodyRecord>();
+  let keepBody = (record: BodyRecord, body: unknown) => {
+    if (
+      (typeof body === "string" || body instanceof Search) &&
+      String(body).length <= maxBody
+    )
+      exactBodies.add(record);
+  };
   // Start times of calls whose response has not fully arrived; each call's done removes its own.
   let unfinished = new Set<{ time: number }>();
   let track = () => {
@@ -133,12 +150,9 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
   };
 
   // Reads a clone of the response up to maxBody characters, then cancels it; the page reads the original as it would have.
-  let readResponse = async (record: BodyRecord, response: Response) => {
-    finish(record, response.status, response.headers.get("content-type") ?? "");
-
-    if (record.note !== null) return;
-
-    let reader = response.clone().body?.getReader();
+  // Reads a body as text up to maxBody characters, cancelling the rest; cut says there was more.
+  let readText = async (body: ReadableStream<Uint8Array> | null) => {
+    let reader = body?.getReader();
     let decoder = new Decoder();
     let text = "";
 
@@ -150,15 +164,22 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
       text += decoder.decode(value, { stream: true });
 
       if (text.length > maxBody) {
-        record.truncated = true;
         reader.cancel().catch(() => {});
-        break;
+        return { text: clip(text).text, cut: true };
       }
     }
 
-    record.responseBody = clip(
-      text + (record.truncated ? "" : decoder.decode()),
-    ).text;
+    return { text: clip(text + decoder.decode()).text, cut: false };
+  };
+
+  let readResponse = async (record: BodyRecord, response: Response) => {
+    finish(record, response.status, response.headers.get("content-type") ?? "");
+
+    if (record.note !== null) return;
+
+    let { text, cut } = await readText(response.clone().body);
+    record.responseBody = text;
+    record.truncated = cut;
   };
 
   page.fetch = {
@@ -171,6 +192,7 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
         let url = request ? request.url : String(input);
         let body = init?.body ?? null;
         let record = start(method, url, describeBody(body, page));
+        keepBody(record, body);
 
         // A Request's own body is read from a copy before fetch consumes it.
         if (body === null && request?.body)
@@ -225,6 +247,7 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
 
       if (call) {
         let record = start(call.method, call.url, describeBody(args[0], page));
+        keepBody(record, args[0]);
         let request = this;
         request.addEventListener("loadend", () => {
           try {
@@ -296,10 +319,146 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
     dispatch(new Custom(answerEvent, { detail: answer }));
   };
 
+  let failing = (error: string, code = "failed") => ({ error, code });
+
+  // A text body is read up to maxBody characters; a binary one has its bytes counted. The timeout's abort ends either read.
+  let readBody = async (answer: PageFetchAnswer, response: Response) => {
+    if (!response.body) return;
+
+    if (isTextual(answer.contentType)) {
+      let { text, cut } = await readText(response.body);
+      answer.body = text;
+      answer.size = text.length;
+      answer.truncated = cut;
+      return;
+    }
+
+    let reader = response.body.getReader();
+    answer.binary = true;
+
+    for (;;) {
+      let part = await reader.read();
+
+      if (part.done) break;
+
+      answer.size += part.value.byteLength;
+    }
+  };
+
+  let sendFromPage = async (request: Record<string, unknown>) => {
+    let method = String(request.method);
+    let body = request.body === null ? null : String(request.body);
+    let replay = request.replay as Record<string, unknown> | null;
+
+    if (replay && body === null && method !== "GET" && method !== "HEAD") {
+      let record = closest(
+        records,
+        String(replay.url),
+        String(replay.method),
+        Number(replay.time),
+      );
+
+      if (!record)
+        throw failing(
+          "no fetch or XMLHttpRequest call in this frame matches the logged request, so its body is unknown; pass body",
+          "invalid_argument",
+        );
+
+      if (record.requestBody !== null && !exactBodies.has(record))
+        throw failing(
+          `the logged request's body was not kept as text (form data, a file, binary data or over ${maxBody} characters); pass body`,
+          "invalid_argument",
+        );
+
+      body = record.requestBody;
+    }
+
+    let timeoutMs = Number(request.timeoutMs);
+    let controller = new Abort();
+    let timer = later(() => controller.abort(), timeoutMs);
+
+    try {
+      let response = (await apply(originalFetch, page, [
+        String(request.url),
+        {
+          method,
+          headers: (request.headers as { name: string; value: string }[]).map(
+            ({ name, value }) => [String(name), String(value)],
+          ),
+          body,
+          credentials: "include",
+          signal: controller.signal,
+        },
+      ])) as Response;
+      let answer: PageFetchAnswer = {
+        ok: true,
+        status: response.status,
+        statusText: response.statusText,
+        url: response.url,
+        redirected: response.redirected,
+        headers: [...response.headers].map(([name, value]) => ({
+          name,
+          value,
+        })),
+        contentType: response.headers.get("content-type") ?? "",
+        binary: false,
+        size: 0,
+        body: null,
+        truncated: false,
+      };
+
+      if (method !== "HEAD") await readBody(answer, response);
+
+      return answer;
+    } catch (error) {
+      if (controller.signal.aborted)
+        throw failing(
+          `no whole response within ${timeoutMs / 1000} s, so the request was aborted`,
+          "timed_out",
+        );
+
+      throw failing(
+        `the request failed: ${error}; a network error, or the server's CORS rules refuse a credentialed request from this page`,
+      );
+    } finally {
+      cancelLater(timer);
+    }
+  };
+
+  let serve = (event: Event) => {
+    event.stopImmediatePropagation();
+    let request: Record<string, unknown>;
+
+    try {
+      request = Object(parse(String((event as CustomEvent).detail)));
+    } catch {
+      return;
+    }
+
+    let reply = (message: object) =>
+      dispatch(
+        new Custom(fetchAnswerEvent, {
+          detail: stringify({ id: String(request.id), ...message }),
+        }),
+      );
+    reply({ accepted: true });
+    sendFromPage(request).then(
+      (answer) => reply({ answer }),
+      (failure) =>
+        reply({
+          failure:
+            typeof failure?.code === "string"
+              ? failure
+              : failing(`page_fetch failed: ${failure}`),
+        }),
+    );
+  };
+
   // document.open() erases a window's listeners, so every fetch and send adds the listeners again; adding one already there does nothing.
   function arm() {
     listen(takeEvent, take, true);
     listen(pendingEvent, countPending, true);
+    listen(fetchEvent, serve, true);
   }
 
   arm();

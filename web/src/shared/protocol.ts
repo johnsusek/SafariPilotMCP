@@ -117,6 +117,17 @@ export type ContentRequest =
     }
   // The body record of this frame's fetch or XMLHttpRequest call with url and method that started closest to time (epoch ms).
   | { op: "networkBody"; url: string; method: string; time: number }
+  // Sends a request from this frame's main world with the fetch its capture kept, aborted after timeoutMs; in a replay (the logged call's url, method and
+  // time) a null body sends that call's body.
+  | {
+      op: "pageFetch";
+      url: string;
+      method: string;
+      headers: { name: string; value: string }[];
+      body: string | null;
+      replay: { url: string; method: string; time: number } | null;
+      timeoutMs: number;
+    }
   // Before an action: keeps this frame's rendered tree, as read_page filter all walks it, and watches its DOM for changes.
   | { op: "diffStart" }
   // After it: waits up to waitMs for the DOM to be still and the fetch and XMLHttpRequest calls started since diffStart to finish, then answers what differs,
@@ -357,6 +368,22 @@ export type NetworkBodyResult = {
   record: BodyRecord | null;
 };
 
+// What the page's fetch answered, before redaction, which the background does before anything leaves the extension: url is where redirects ended; size counts
+// a text body's characters as read (truncated when cut at the capture's maxBody) or a binary body's bytes.
+export type PageFetchAnswer = {
+  ok: true;
+  status: number;
+  statusText: string;
+  url: string;
+  redirected: boolean;
+  headers: { name: string; value: string }[];
+  contentType: string;
+  binary: boolean;
+  size: number;
+  body: string | null;
+  truncated: boolean;
+};
+
 // diffStart: tooLarge says the page has more elements than a diff walks, so diff will answer only that.
 export type DiffStartResult = { ok: true; tooLarge: boolean };
 // diff: lines are context lines ("in main [ref=4]:") and change lines starting "+ " (added), "~ " (changed, with what it was) or "- " (removed); added, changed
@@ -399,5 +426,6 @@ export type ContentResponse =
   | HitFrameResult
   | ConsoleResult
   | NetworkBodyResult
+  | PageFetchAnswer
   | DiffStartResult
   | DiffResult;

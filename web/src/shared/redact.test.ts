@@ -57,6 +57,14 @@ test("bodies hide secret form parameters and JSON values", () => {
   );
   expect(redactBody("plain text")).toBe("plain text");
   expect(
+    redactBody('{"access_token":"abc","next":"https://a.test/?page=2&sig=s"}'),
+  ).toBe(
+    '{"access_token":"[hidden]","next":"https://a.test/?page=2&sig=[hidden]"}',
+  );
+  expect(redactBody('[{"key":"k","u":"/x?a=1&b=2"}]')).toBe(
+    '[{"key":"[hidden]","u":"/x?a=1&b=2"}]',
+  );
+  expect(
     redactBody(
       '{"data": "{\\"token\\":\\"abc\\",\\"n\\":1}", "url": "https://a.test/x?api_key=k&q=1"}',
     ),

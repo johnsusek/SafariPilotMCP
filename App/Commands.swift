@@ -37,6 +37,7 @@ struct Commands {
     case let .consoleMessages(tabId, onlyErrors, pattern, limit, clear): try await consoleMessages(tabId, onlyErrors, pattern, limit, clear)
     case let .networkRequests(tabId, urlPattern, limit, clear): try await networkRequests(tabId, urlPattern, limit, clear)
     case let .networkRequest(tabId, requestId): try await networkRequest(tabId, requestId)
+    case let .pageFetch(tabId, request): try await pageFetch(tabId, request)
     case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
     case let .key(tabId, chords, target?, times): try await resolving(tabId, target) { try await key(tabId, chords, $0, times) }
     case let .key(tabId, chords, nil, times): try await key(tabId, chords, nil, times)
@@ -338,6 +339,13 @@ struct Commands {
   private func networkRequest(_ tabId: Int?, _ requestId: String) async throws -> CLIReply {
     let response = try await call(.networkRequest(tabId: tabId, requestId: requestId))
     return try CLIReply(ok: true, text: response.decode(NetworkRequestResult.self).text(), data: response)
+  }
+
+  /// The method gate's setting is read here, in the app, and travels in the command the client never sees.
+  private func pageFetch(_ tabId: Int?, _ request: PageFetchRequest) async throws -> CLIReply {
+    let writes = UserDefaults.standard.bool(forKey: PageFetchRequest.writesKey)
+    let response = try await call(.pageFetch(tabId: tabId, request: request, writes: writes))
+    return try CLIReply(ok: true, text: response.decode(PageFetchResult.self).text, data: response)
   }
 
   /// Safari may clamp the size to the screen, so the reply reports the frame it actually got.

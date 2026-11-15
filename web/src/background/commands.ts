@@ -19,6 +19,7 @@ import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
 import { listRequests, piloting, requestDetail } from "./network";
+import { runPageFetch } from "./pageFetch";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
 
@@ -261,6 +262,16 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
   if (command.type === "networkRequest") {
     let tab = await resolveTab(command.tabId);
     return await requestDetail(await sender(tab.id), tab.id, command.requestId);
+  }
+
+  if (command.type === "pageFetch") {
+    let tab = await resolveTab(command.tabId);
+    return await runPageFetch(
+      tab,
+      await sender(tab.id),
+      command.request,
+      command.writes,
+    );
   }
 
   if (command.type === "settle")

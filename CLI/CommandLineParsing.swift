@@ -37,6 +37,8 @@ enum CommandLineParsing {
     file-upload TARGET PATH...      give files to the file input TARGET (or the one it labels or holds), or drop them on TARGET
     console [--errors] [--pattern REGEX] [--limit N] [--clear]  console messages from every frame, newest N (default 50, up to 200)
     network [--pattern TEXT] [--limit N] [--clear] | --id ID  requests a tab_create tab made, newest N (default 50, up to 200), or one request's headers and bodies
+    fetch URL [--method M] | --id ID [--query NAME=VALUE]...  send a request from the page, or replay a logged one with its headers
+      [--header 'NAME: VALUE']... [--body TEXT] [--pick PATH] [--max-chars N]
     dialog accept|dismiss [--text TEXT]  press OK or Cancel on the tab's alert, confirm or prompt, typing TEXT into a prompt
     debug-ax [REF]                  AX windows and frames next to viewport metrics
     debug-frames                    each frame's content script, iframes and logged clicks and keydowns
@@ -98,6 +100,24 @@ enum CommandLineParsing {
       let pattern = try option("--pattern", &rest)
       let limit = try option("--limit", &rest).map { try integer($0, "--limit") }
       invocation = try Invocation(command: .network(tabId: tabId, requestId: requestId, urlPattern: pattern, limit: limit, clear: flag("--clear", &rest)))
+    case "fetch":
+      let requestId = try option("--id", &rest)
+      let method = try option("--method", &rest)
+      let body = try option("--body", &rest)
+      let pick = try option("--pick", &rest)
+      let maxChars = try option("--max-chars", &rest).map { try integer($0, "--max-chars") } ?? AppCommand.defaultMaxChars
+      let headers = try repeated("--header", &rest).map { line -> (String, String?) in
+        guard let colon = line.firstIndex(of: ":") else { throw Failure(.invalidArgument, "--header takes 'NAME: VALUE', not \(line)") }
+        return (String(line[..<colon]), String(line[line.index(after: colon)...].drop(while: \.isWhitespace)))
+      }
+      let query = try repeated("--query", &rest).map { pair -> (String, String?) in
+        guard let equals = pair.firstIndex(of: "=") else { throw Failure(.invalidArgument, "--query takes NAME=VALUE, not \(pair)") }
+        return (String(pair[..<equals]), String(pair[pair.index(after: equals)...]))
+      }
+      let url = requestId == nil ? rest.first : nil
+      rest.removeFirst(url == nil ? 0 : 1)
+      let request = try PageFetchRequest(url: url, method: method, requestId: requestId, query: Dictionary(query, uniquingKeysWith: { $1 }), headers: Dictionary(headers, uniquingKeysWith: { $1 }), body: body, pick: pick, maxChars: maxChars)
+      invocation = Invocation(command: .pageFetch(tabId: tabId, request: request))
     case "dialog":
       // --text takes every word after it verbatim.
       let textStart = rest.firstIndex(of: "--text")
@@ -247,6 +267,15 @@ enum CommandLineParsing {
     let value = words[index + 1]
     words.removeSubrange(index ... index + 1)
     return value
+  }
+
+  /// Removes every `name VALUE` from words and returns the values in order.
+  private static func repeated(_ name: String, _ words: inout [String]) throws -> [String] {
+    var values: [String] = []
+
+    while let value = try option(name, &words) { values.append(value) }
+
+    return values
   }
 
   private static func flag(_ name: String, _ words: inout [String]) -> Bool {

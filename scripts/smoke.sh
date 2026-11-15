@@ -121,6 +121,23 @@ site_network() {
   close_tab
 }
 
+# httpbin echoes the request, so a replay's hidden header shows up by name in the redacted echo; writes must be off in General.
+site_pagefetch() {
+  open_tab "https://httpbin.org/html"
+  safaripilot --tab $tab navigate "https://httpbin.org/html" >/dev/null
+  check "page_fetch: url mode, picked" '^Body at url:' fetch /get?n=1 --pick url
+  verdict "page_fetch: answered from the page" 'GET https://httpbin.org/get\?n=1 answered 200'
+  safaripilot --tab $tab javascript "(await fetch('/anything?page=1', {headers: {'X-Csrf-Token': 'csrf-raw-value'}})).status" >/dev/null
+  check "page_fetch: the page's call is logged" 'GET https://httpbin.org/anything\?page=1' network --pattern /anything
+  local id=$(print -r -- "$output" | sed -nE 's/.* id ([0-9]+) GET .*/\1/p' | tail -1)
+  check "page_fetch: replay sends the hidden header" '"X-Csrf-Token": "\[hidden\]"' fetch --id ${id:-0} --query page=2
+  verdict "page_fetch: replay sets the query" '"page": "2"'
+  refute "page_fetch: no raw header value" 'csrf-raw-value'
+  check "page_fetch: POST refused while writes are off" 'Allow page_fetch Writes' fetch /post --method POST --body '{}'
+  check "page_fetch: another host refused" 'is neither' fetch https://example.com/
+  close_tab
+}
+
 site_youtube() {
   open_tab "https://www.youtube.com/"
   local search=$(ref "Search" combobox)
@@ -316,7 +333,7 @@ for attempt in {1..30}; do
 done
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
 
 for site in $sites; do
   site_$site
