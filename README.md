@@ -18,7 +18,7 @@ Just like Claude in Chrome, SafariPilot opens its own tabs and works there in th
 - **The whole page.** Iframes, cross-origin ones included, are read and acted in. Claude can answer an alert that is already open, upload files without the file picker, drag, and read console and network logs with request bodies.
 - **Site APIs at API speed.** Once the network log shows a site's JSON calls, Claude can send them again from inside the page with `page_fetch`, SafariPilot filling in the auth and CSRF headers Claude never sees. Only GET and HEAD, unless you turn on **Allow page_fetch Writes** in the **General** pane.
 - **You approve every client.** Nothing connects without your say, since each new client asks for your approval first.
-- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from everything Claude reads in pages, URLs and network logs.
+- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from Claude's page reads, URLs and network logs. Screenshots and scripts Claude runs with `javascript` are not filtered.
 
 ## Requirements
 
@@ -27,7 +27,13 @@ Just like Claude in Chrome, SafariPilot opens its own tabs and works there in th
 
 ## Install
 
-Download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest), drag SafariPilot to Applications and open it. It lives in the menu bar; choose **Settings…** there to see its window. Then:
+```bash
+brew install --cask johnsusek/tap/safaripilot
+```
+
+Or download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest) and drag SafariPilot to Applications.
+
+Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see its window. Then:
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**. Allowing it on every website saves a prompt per site.
 2. In SafariPilot's **General** pane, grant **Accessibility** (used to click and type).
