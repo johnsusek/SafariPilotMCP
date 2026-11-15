@@ -79,13 +79,13 @@ function isTransformed(iframe: HTMLIFrameElement, bounds: DOMRect) {
   return false;
 }
 
-export function frameEntry(iframe: HTMLIFrameElement): FrameEntry {
-  let bounds = iframe.getBoundingClientRect();
+// Where the iframe's document is drawn: its content box, inside border and padding, from its bounding box.
+export function contentBox(iframe: HTMLIFrameElement, bounds: DOMRect) {
   let style = getComputedStyle(iframe);
   let px = (value: string) => parseFloat(value) || 0;
   let left = px(style.paddingLeft);
   let top = px(style.paddingTop);
-  let box = toRect(
+  return toRect(
     new DOMRect(
       bounds.left + iframe.clientLeft + left,
       bounds.top + iframe.clientTop + top,
@@ -93,6 +93,11 @@ export function frameEntry(iframe: HTMLIFrameElement): FrameEntry {
       iframe.clientHeight - top - px(style.paddingBottom),
     ),
   );
+}
+
+export function frameEntry(iframe: HTMLIFrameElement): FrameEntry {
+  let bounds = iframe.getBoundingClientRect();
+  let box = contentBox(iframe, bounds);
   return {
     ref: refFor(iframe),
     frameId: frameIdOf(iframe),
