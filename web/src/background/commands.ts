@@ -266,12 +266,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
 
   if (command.type === "pageFetch") {
     let tab = await resolveTab(command.tabId);
-    return await runPageFetch(
-      tab,
-      await sender(tab.id),
-      command.request,
-      command.writes,
-    );
+    return await runPageFetch(tab, await sender(tab.id), command.request);
   }
 
   if (command.type === "settle")

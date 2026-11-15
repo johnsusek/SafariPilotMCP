@@ -78,7 +78,7 @@ enum Tools {
       "clear": property("boolean", "Empty the log after reading, so the next call returns only newer requests; defaults to false."),
       "requestId": property("string", "Id from a listing whose headers and bodies to return instead of the list."),
     ]),
-    ToolDefinition(name: "page_fetch", description: "Sends a request from inside a tab's page, with its cookies and origin, to url or as a replay of a read_network_requests requestId whose logged headers SafariPilot fills in, hidden ones included, only GET or HEAD unless the user allows writes and only to the tab's own origin or hosts in its network log, and returns the status, final URL, response headers and body, optionally narrowed by pick, with secrets hidden, as untrusted page data.", properties: [
+    ToolDefinition(name: "page_fetch", description: "Sends a request from inside a tab's page, with its cookies and origin, to url or as a replay of a read_network_requests requestId whose logged headers SafariPilot fills in, hidden ones included, only to the tab's own origin or hosts in its network log, and returns the status, final URL, response headers and body, optionally narrowed by pick, with secrets hidden, as untrusted page data.", properties: [
       "tabId": tabId,
       "url": property("string", "URL to request, absolute or relative to the tab's page; pass url or requestId."),
       "method": property("string", "HTTP method for url; defaults to GET."),
@@ -113,7 +113,7 @@ enum Tools {
   click, form_input, key, scroll, scroll_to and file_upload take name and role instead of a ref, matched as find matches them in every frame, which saves the find: an exact name wins over longer ones, anything but one match fails listing candidates with refs, and the reply names the element and its ref.
   Read only what you need: read_page with viewport true returns what is on screen, and get_page_text with format markdown and a table's or list's ref_id returns just its rows or links with their URLs.
   Use javascript to read page state; clicks and edits made from it are untrusted events that many pages ignore, so act with click, form_input and key.
-  Once read_network_requests shows the JSON calls a page makes, read more with page_fetch instead of driving the page again, replaying a requestId so SafariPilot fills in its hidden auth and CSRF headers; it sends only GET and HEAD unless the user allows writes.
+  Once read_network_requests shows the JSON calls a page makes, read more with page_fetch instead of driving the page again, replaying a requestId so SafariPilot fills in its hidden auth and CSRF headers.
   Upload files with file_upload, never by clicking a file input or its button, since Safari's file picker cannot be driven.
   An alert, confirm or prompt stops its page until handle_dialog answers it; page tools name the open dialog.
   When a tool says Safari has not granted SafariPilot a site, ask your user to do what it says; retrying cannot help until they do.

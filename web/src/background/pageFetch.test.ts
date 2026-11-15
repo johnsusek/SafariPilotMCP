@@ -85,17 +85,10 @@ let request = (overrides: Partial<PageFetchRequest>): PageFetchRequest => ({
 });
 
 let pilotTab = { id: 3, url: "https://a.test/app/page" };
-let run = (
-  overrides: Partial<PageFetchRequest>,
-  writes = false,
-  tab = pilotTab,
-) => pageFetch.runPageFetch(tab, send, request(overrides), writes);
-let failing = (
-  overrides: Partial<PageFetchRequest>,
-  writes = false,
-  tab = pilotTab,
-) =>
-  run(overrides, writes, tab).then(
+let run = (overrides: Partial<PageFetchRequest>, tab = pilotTab) =>
+  pageFetch.runPageFetch(tab, send, request(overrides));
+let failing = (overrides: Partial<PageFetchRequest>, tab = pilotTab) =>
+  run(overrides, tab).then(
     () => null,
     (error) => failureFrom(error),
   );
@@ -225,11 +218,11 @@ describe("host rule", () => {
 
   test("a tab without a log still reaches its own origin", async () => {
     let other = { id: 9, url: "https://c.test/" };
-    await run({ url: "/a" }, false, other);
+    await run({ url: "/a" }, other);
     expect(sent).toHaveLength(1);
-    expect(
-      (await failing({ url: "https://a.test/" }, false, other))?.code,
-    ).toBe("invalid_argument");
+    expect((await failing({ url: "https://a.test/" }, other))?.code).toBe(
+      "invalid_argument",
+    );
   });
 
   test("redacts URLs in its refusal", async () => {
@@ -239,70 +232,24 @@ describe("host rule", () => {
   });
 });
 
-describe("method gate", () => {
-  test("sends GET and HEAD and refuses other methods until writes, naming the setting", async () => {
+describe("methods", () => {
+  test("sends any method with its body", async () => {
     await run({ url: "/a", method: "head" });
-    expect(sent[0].request).toMatchObject({ method: "HEAD" });
-
-    for (let method of ["POST", "put", "DELETE", "PATCH", "OPTIONS"])
-      expect(
-        await failing({ url: "/a", method, body: "{}" }),
-        method,
-      ).toMatchObject({
-        code: "invalid_argument",
-        error: expect.stringContaining(
-          `turns on ${pageFetch.writesSetting} in SafariPilot's General settings`,
-        ),
-      });
-
-    expect(sent).toHaveLength(1);
-    await run({ url: "/a", method: "post", body: "{}" }, true);
-    expect(sent[1].request).toMatchObject({ method: "POST", body: "{}" });
-  });
-
-  test("refuses method override headers until writes", async () => {
-    for (let name of [
-      "X-HTTP-Method-Override",
-      "x-http-method",
-      "X-Method-Override",
-    ])
-      expect(
-        await failing({ url: "/a", headers: { [name]: "DELETE" } }),
-        name,
-      ).toMatchObject({
-        code: "invalid_argument",
-        error: expect.stringContaining(`${name} refused`),
-      });
-
-    await run(
-      { url: "/a", headers: { "X-HTTP-Method-Override": "DELETE" } },
-      true,
-    );
-    expect(sent).toHaveLength(1);
-  });
-
-  test("refuses a replayed write and a replayed override until writes", async () => {
-    log("1", "https://a.test/api/save", "POST");
-    expect((await failing({ requestId: "1" }))?.error).toContain(
-      "POST https://a.test/api/save refused",
-    );
-    log("2", "https://a.test/api/get", "GET", 0, [
-      { name: "X-HTTP-Method-Override", value: "PUT" },
+    await run({ url: "/a", method: "post", body: "{}" });
+    expect(sent.map(({ request }) => request)).toMatchObject([
+      { method: "HEAD" },
+      { method: "POST", body: "{}" },
     ]);
-    expect((await failing({ requestId: "2" }))?.error).toContain(
-      "X-HTTP-Method-Override refused",
-    );
-    expect(sent).toEqual([]);
   });
 
   test("refuses a body on GET and HEAD, and methods fetch never sends", async () => {
     expect((await failing({ url: "/a", body: "x" }))?.error).toBe(
       "GET cannot carry a body; leave out body",
     );
-    expect((await failing({ url: "/a", method: "TRACE" }, true))?.error).toBe(
+    expect((await failing({ url: "/a", method: "TRACE" }))?.error).toBe(
       "TRACE is a method fetch never sends",
     );
-    expect((await failing({ url: "/a", method: "GE T" }, true))?.error).toMatch(
+    expect((await failing({ url: "/a", method: "GE T" }))?.error).toMatch(
       /not an HTTP method/,
     );
   });
@@ -343,15 +290,12 @@ describe("replay", () => {
 
   test("merges query, headers and body over the logged request", async () => {
     log("1", "https://a.test/api/items?page=1&q=x&sort=new", "POST");
-    await run(
-      {
-        requestId: "1",
-        query: { page: "2", q: null, extra: "a b" },
-        headers: { accept: "text/csv", "X-CSRF-Token": null, "X-Trace": "1" },
-        body: '{"n":2}',
-      },
-      true,
-    );
+    await run({
+      requestId: "1",
+      query: { page: "2", q: null, extra: "a b" },
+      headers: { accept: "text/csv", "X-CSRF-Token": null, "X-Trace": "1" },
+      body: '{"n":2}',
+    });
     expect(sent[0].request).toMatchObject({
       url: "https://a.test/api/items?page=2&sort=new&extra=a+b",
       method: "POST",
@@ -380,10 +324,13 @@ describe("replay", () => {
       error:
         "tab 3 has no logged request 1; read_network_requests lists the ids it keeps",
     });
-    let unlogged = await failing({ requestId: "1" }, false, {
-      id: 9,
-      url: "https://a.test/",
-    });
+    let unlogged = await failing(
+      { requestId: "1" },
+      {
+        id: 9,
+        url: "https://a.test/",
+      },
+    );
     expect(unlogged?.code).toBe("tab_unavailable");
   });
 

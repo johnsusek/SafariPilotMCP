@@ -12,10 +12,6 @@ struct PageFetchRequest: Codable, Sendable, Equatable {
   let pick: String?
   let maxChars: Int
 
-  /// The General setting that lets page_fetch send methods other than GET and HEAD; web/src/background/pageFetch.ts names it in refusals.
-  static let writesKey = "pageFetchWrites"
-  static let writesLabel = "Allow page_fetch Writes"
-
   init(url: String?, method: String?, requestId: String?, query: [String: String?], headers: [String: String?], body: String?, pick: String?, maxChars: Int) throws {
     switch (url, requestId) {
     case (nil, nil): throw Failure(.invalidArgument, "page_fetch takes url or requestId")

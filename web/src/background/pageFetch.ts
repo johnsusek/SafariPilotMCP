@@ -61,19 +61,9 @@ let browserAdded = new Set([
   "if-modified-since",
 ]);
 
-// Servers that honor these turn a GET into another method.
-let methodOverrides = new Set([
-  "x-http-method-override",
-  "x-http-method",
-  "x-method-override",
-]);
-
 let token = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 // The page aborts the request after this, inside the 15 s a content send waits, so a hung endpoint cannot hold the command queue.
 export let pageFetchTimeoutMs = 10000;
-let readMethods = ["GET", "HEAD"];
-// The General settings toggle that allows other methods, as PageFetchRequest.writesLabel in Shared/PageFetch.swift names it.
-export let writesSetting = "Allow page_fetch Writes";
 
 function withOverrides(
   headers: NetworkHeader[],
@@ -172,37 +162,18 @@ function resolve(
   };
 }
 
-// Refuses what page_fetch does not send: a method or method override other than GET and HEAD unless writes, a body on GET or HEAD, any URL but http and
+// Refuses what page_fetch does not send: a body on GET or HEAD, any URL but http and
 // https ones to the tab's own origin or an origin already in its network log (Safari logs nothing of a new tab's first load, so its own origin always counts).
-function guard(
-  target: Target,
-  tabUrl: string,
-  logged: Set<string>,
-  writes: boolean,
-) {
+function guard(target: Target, tabUrl: string, logged: Set<string>) {
   let { method, url } = target;
   let named = `${method} ${redactUrl(url)}`;
-  let ask = `page_fetch sends only GET and HEAD until your user turns on ${writesSetting} in SafariPilot's General settings; ask them, or send a GET`;
 
   if (!token.test(method))
     refuse(`method ${JSON.stringify(method)} is not an HTTP method`);
   if (["CONNECT", "TRACE", "TRACK"].includes(method))
     refuse(`${method} is a method fetch never sends`);
 
-  if (!writes) {
-    if (!readMethods.includes(method)) refuse(`${named} refused: ${ask}`);
-
-    let override = target.headers.find(({ name }) =>
-      methodOverrides.has(name.toLowerCase()),
-    );
-
-    if (override)
-      refuse(
-        `${override.name} refused: it asks the server for another method, and ${ask}`,
-      );
-  }
-
-  if (target.body !== null && readMethods.includes(method))
+  if (target.body !== null && (method === "GET" || method === "HEAD"))
     refuse(`${method} cannot carry a body; leave out body`);
 
   let parsed = new URL(url);
@@ -224,12 +195,11 @@ export async function runPageFetch(
   tab: { id: number; url?: string },
   send: Send,
   request: PageFetchRequest,
-  writes: boolean,
 ): Promise<PageFetchResult> {
   let steps = request.pick === null ? null : parsePick(request.pick);
   let tabUrl = tab.url ?? "";
   let target = resolve(tab.id, tabUrl, request);
-  guard(target, tabUrl, loggedOrigins(tab.id), writes);
+  guard(target, tabUrl, loggedOrigins(tab.id));
 
   let named = `${target.method} ${redactUrl(target.url)}`;
   let answer = await send(target.frameId, {

@@ -351,10 +351,8 @@ struct Commands {
     return try CLIReply(ok: true, text: response.decode(NetworkRequestResult.self).text(), data: response)
   }
 
-  /// The method gate's setting is read here, in the app, and travels in the command the client never sees.
   private func pageFetch(_ tabId: Int?, _ request: PageFetchRequest) async throws -> CLIReply {
-    let writes = UserDefaults.standard.bool(forKey: PageFetchRequest.writesKey)
-    let response = try await call(.pageFetch(tabId: tabId, request: request, writes: writes))
+    let response = try await call(.pageFetch(tabId: tabId, request: request))
     return try CLIReply(ok: true, text: response.decode(PageFetchResult.self).text, data: response)
   }
 

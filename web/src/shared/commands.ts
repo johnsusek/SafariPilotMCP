@@ -219,13 +219,8 @@ export type Command =
     }
   // One logged request with its headers and, for a fetch or XMLHttpRequest call, the bodies its frame's capture kept.
   | { type: "networkRequest"; tabId: number | null; requestId: string }
-  // Sends a request from the page's main world; writes is the app's setting allowing methods other than GET and HEAD.
-  | {
-      type: "pageFetch";
-      tabId: number | null;
-      request: PageFetchRequest;
-      writes: boolean;
-    };
+  // Sends a request from the page's main world.
+  | { type: "pageFetch"; tabId: number | null; request: PageFetchRequest };
 
 // Either url (absolute or relative to the tab's URL) with method, or requestId to replay with query parameters set; a null query or header value removes
 // the logged one, and a null body in a replay sends the original call's body.

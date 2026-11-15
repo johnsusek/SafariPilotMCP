@@ -46,8 +46,8 @@ struct PageFetchTests {
 
   @Test func encodesForTheBackgroundAndRoundTrips() throws {
     let replay = try request(requestId: "12", query: ["q": nil], headers: ["A": "1"])
-    #expect(BackgroundCommand.pageFetch(tabId: 4, request: replay, writes: false).json == [
-      "type": "pageFetch", "tabId": .number(4), "writes": .bool(false),
+    #expect(BackgroundCommand.pageFetch(tabId: 4, request: replay).json == [
+      "type": "pageFetch", "tabId": .number(4),
       "request": .object(["url": .null, "method": .null, "requestId": "12", "query": .object(["q": .null]), "headers": .object(["A": "1"]), "body": .null, "pick": .null, "maxChars": .number(50000)]),
     ])
     let command = AppCommand.pageFetch(tabId: 2, request: replay)
