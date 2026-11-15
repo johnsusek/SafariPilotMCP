@@ -1,5 +1,7 @@
 <p align="center"><img src="docs/logo/logo-color.svg" height="160" alt="SafariPilot"></p>
 
+<p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a></p>
+
 # SafariPilot
 
 **SafariPilot lets Claude work in your Safari, while you keep using your Mac.**
