@@ -43,7 +43,7 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**.
 2. In SafariPilot's **General** pane, grant **Accessibility**.
-3. In the **Clients** pane, choose **Claude Desktop** to add SafariPilot to its config, or **Claude Code** to copy a `claude mcp add` command.
+3. In the **Clients** pane, set up your client: Claude Desktop, Claude Code, ChatGPT and Codex, Cursor, VS Code or LM Studio. **Other Clients** copies a standard `mcpServers` entry.
 
 ### Build from source
 

@@ -138,7 +138,7 @@ targets:
       - CLI/CommandLineParsing.swift
       - CLI/Wait.swift
       - CLI/ToolResult.swift
-      - App/ClaudeSetup.swift
+      - App/ClientSetup.swift
       - App/ClientCredentials.swift
       - App/ApprovalQueue.swift
       - App/CommandQueue.swift

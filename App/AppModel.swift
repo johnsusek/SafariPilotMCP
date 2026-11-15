@@ -27,9 +27,8 @@ final class AppModel {
   private(set) var axTrusted = AXIsProcessTrusted()
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
-  /// Whether each client's config already runs SafariPilot from any source.
-  private(set) var desktopSetUp = false
-  private(set) var codeSetUp = false
+  /// The clients whose config already runs SafariPilot from any source.
+  private(set) var configured: Set<ClientSetup.Client> = []
   private(set) var loginItem = SMAppService.mainApp.status
 
   private(set) var log: [LogEntry] = []
@@ -80,8 +79,16 @@ final class AppModel {
   private func refreshSetUp() {
     let read = { (url: URL) in try? Data(contentsOf: url) }
     let resolve = { (path: String) in URL(filePath: path).resolvingSymlinksInPath().path }
-    desktopSetUp = ClaudeSetup.desktopHasServer(config: read(ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath, resolve: resolve) { gate.knows(credential: $0) }
-    codeSetUp = ClaudeSetup.codeHasServer(config: read(ClaudeSetup.codeConfigURL), serverPath: ClaudeSetup.serverPath, resolve: resolve)
+    let path = ClientSetup.serverPath
+    let knows = { (credential: String) in self.gate.knows(credential: credential) }
+
+    configured = Set(ClientSetup.Client.allCases.filter { client in
+      if let json = client.json { return ClientSetup.hasServer(config: read(json.url), key: json.key, serverPath: path, resolve: resolve, knows: knows) }
+
+      if client == .claudeCode { return ClientSetup.codeHasServer(config: read(ClientSetup.codeConfigURL), serverPath: path, resolve: resolve) }
+
+      return ClientSetup.codexHasServer(config: read(ClientSetup.codexConfigURL), serverPath: path, resolve: resolve, knows: knows)
+    })
   }
 
   func refreshExtensionState() async {
@@ -115,36 +122,101 @@ final class AppModel {
     loginItem = SMAppService.mainApp.status
   }
 
-  /// After a confirmation, writes this app's server into Claude Desktop's config; a config that is not a JSON object is refused, not overwritten.
-  func configureClaudeDesktop() {
-    let url = ClaudeSetup.desktopConfigURL
+  func setUp(_ client: ClientSetup.Client) {
+    if let json = client.json { return configure(client, json) }
+
+    if client == .claudeCode { return copy(name: client.rawValue) { ClientSetup.codeCommand(serverPath: ClientSetup.serverPath, credential: $0) } }
+
+    Task { await configureCodex() }
+  }
+
+  private func confirmed(_ client: ClientSetup.Client, _ path: String) -> Bool {
     let confirm = NSAlert()
     confirm.messageText = "Set Up SafariPilot Server"
-    confirm.informativeText = "Adds SafariPilot to Claude Desktop's settings, with a credential that identifies Claude Desktop to SafariPilot. Your other servers stay as they are.\n\n\(url.path)"
+    confirm.informativeText = "Adds SafariPilot to \(client.rawValue)'s settings, with a credential that identifies it to SafariPilot. Your other servers stay as they are.\n\n\(path)"
     confirm.addButton(withTitle: "Set Up")
     confirm.addButton(withTitle: "Cancel")
     NSApp.activate()
-    guard confirm.runModal() == .alertFirstButtonReturn else { return }
+    return confirm.runModal() == .alertFirstButtonReturn
+  }
+
+  /// After a confirmation, writes this app's server into the client's JSON config; a config that is not a JSON object is refused, not overwritten.
+  private func configure(_ client: ClientSetup.Client, _ json: ClientSetup.JSONConfig) {
+    guard confirmed(client, json.url.path) else { return }
 
     do {
-      let existing = FileManager.default.fileExists(atPath: url.path) ? try Data(contentsOf: url) : nil
-      let credential = try gate.credentialForSettings(name: "Claude Desktop", existing: ClaudeSetup.credential(in: existing))
-      let merged = try ClaudeSetup.merged(config: existing, serverPath: ClaudeSetup.serverPath, credential: credential)
-      try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-      try merged.write(to: url, options: .atomic)
-      desktopSetUp = true
-      alert("Added to Claude Desktop", "Quit and reopen Claude to load SafariPilot.")
+      let existing = FileManager.default.fileExists(atPath: json.url.path) ? try Data(contentsOf: json.url) : nil
+      let credential = try gate.credentialForSettings(name: client.rawValue, existing: ClientSetup.credential(in: existing, key: json.key))
+      let merged = try ClientSetup.merged(config: existing, in: json, serverPath: ClientSetup.serverPath, credential: credential)
+      try FileManager.default.createDirectory(at: json.url.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try merged.write(to: json.url, options: .atomic)
+      configured.insert(client)
+      alert("Added to \(client.rawValue)", "Quit and reopen \(client.rawValue) to load SafariPilot.")
     } catch {
-      alert("Couldn't Update Claude Desktop", "\(error)")
+      alert("Couldn't Update \(client.rawValue)", "\(error)")
     }
   }
 
-  /// Copies the command with a new untrusted credential, to this Mac only since it holds a secret.
-  func copyClaudeCodeCommand() {
+  /// Runs ChatGPT's bundled codex, or the one the login shell finds, so Codex writes its own TOML.
+  private func configureCodex() async {
+    guard let codex = await codexPath() else { return alert("Codex Not Found", "Install ChatGPT or the Codex CLI, then try again.") }
+
+    guard confirmed(.codex, ClientSetup.codexConfigURL.path) else { return }
+
     do {
-      let credential = try gate.credentialForSettings(name: "Claude Code", existing: nil)
+      let existing = ClientSetup.codexServers(toml: try? Data(contentsOf: ClientSetup.codexConfigURL))[ClientSetup.serverName]?.credential
+      let credential = try gate.credentialForSettings(name: ClientSetup.Client.codex.rawValue, existing: existing)
+      let (status, output) = try await run(codex, ClientSetup.codexArguments(serverPath: ClientSetup.serverPath, credential: credential))
+
+      guard status == 0 else { return alert("Couldn't Update ChatGPT and Codex", "codex exited with status \(status).\n\n\(output)") }
+
+      configured.insert(.codex)
+      alert("Added to ChatGPT and Codex", "Quit and reopen ChatGPT, or start a new Codex session, to load SafariPilot.")
+    } catch {
+      alert("Couldn't Update ChatGPT and Codex", "\(error)")
+    }
+  }
+
+  private func codexPath() async -> String? {
+    if FileManager.default.isExecutableFile(atPath: ClientSetup.bundledCodex) { return ClientSetup.bundledCodex }
+
+    let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
+    guard let (status, output) = try? await run(shell, ["-lc", "command -v codex"]), status == 0 else { return nil }
+
+    let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
+    return FileManager.default.isExecutableFile(atPath: path) ? path : nil
+  }
+
+  /// Runs a tool to completion and returns its status with stdout and stderr together.
+  private func run(_ path: String, _ arguments: [String]) async throws -> (Int32, String) {
+    let process = Process()
+    let pipe = Pipe()
+    process.executableURL = URL(filePath: path)
+    process.arguments = arguments
+    process.standardOutput = pipe
+    process.standardError = pipe
+    process.standardInput = FileHandle.nullDevice
+
+    let status = try await withCheckedThrowingContinuation { continuation in
+      process.terminationHandler = { continuation.resume(returning: $0.terminationStatus) }
+
+      do { try process.run() } catch { continuation.resume(throwing: error) }
+    }
+
+    return (status, String(decoding: pipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self))
+  }
+
+  /// Copies a standard mcpServers entry for any other client.
+  func copyConfigJSON() {
+    copy(name: "Other Client") { try ClientSetup.snippet(serverPath: ClientSetup.serverPath, credential: $0) }
+  }
+
+  /// Copies text holding a new untrusted credential, to this Mac only since it holds a secret.
+  private func copy(name: String, _ text: (String) throws -> String) {
+    do {
+      let value = try text(gate.credentialForSettings(name: name, existing: nil))
       NSPasteboard.general.prepareForNewContents(with: .currentHostOnly)
-      NSPasteboard.general.setString(ClaudeSetup.codeCommand(serverPath: ClaudeSetup.serverPath, credential: credential), forType: .string)
+      NSPasteboard.general.setString(value, forType: .string)
     } catch {
       alert("Couldn't Create a Credential", "\(error)")
     }

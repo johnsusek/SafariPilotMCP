@@ -7,17 +7,19 @@ struct ClientsView: View {
   var body: some View {
     Form {
       Section("Connect a Client") {
-        LabeledContent {
-          if model.desktopSetUp { Text("Already set up").foregroundStyle(.secondary) } else { Button("Set Up…") { model.configureClaudeDesktop() } }
-        } label: {
-          Text("Claude Desktop")
-          Text("Adds SafariPilot to Claude Desktop's MCP servers.")
+        ForEach(ClientSetup.Client.allCases) { client in
+          LabeledContent {
+            if model.configured.contains(client) { Text("Already set up").foregroundStyle(.secondary) } else { Button(client == .claudeCode ? "Copy" : "Set Up…") { model.setUp(client) } }
+          } label: {
+            Text(client.rawValue)
+            Text(detail(client))
+          }
         }
         LabeledContent {
-          if model.codeSetUp { Text("Already set up").foregroundStyle(.secondary) } else { Button("Copy") { model.copyClaudeCodeCommand() } }
+          Button("Copy") { model.copyConfigJSON() }
         } label: {
-          Text("Claude Code")
-          Text("Copies a claude mcp add command with a new credential.")
+          Text("Other Clients")
+          Text("Copies an mcpServers JSON entry with a new credential.")
         }
       }
 
@@ -63,5 +65,13 @@ struct ClientsView: View {
     } message: {
       Text("Their credentials stop working and they must be approved again.")
     }
+  }
+
+  private func detail(_ client: ClientSetup.Client) -> String {
+    if let json = client.json { return "Adds SafariPilot to \((json.url.path as NSString).abbreviatingWithTildeInPath)." }
+
+    if client == .claudeCode { return "Copies a claude mcp add command with a new credential." }
+
+    return "Runs codex mcp add, for ChatGPT's Mac app and Codex CLI."
   }
 }

@@ -12,7 +12,7 @@ How SafariPilot works inside. For what it does and how to use it, see the [READM
 | Shared | `Shared/` | Wire types, contract, redaction, error codes, viewport and window matching. |
 
 ```
-Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ SafariPilot.app ◀──native messaging──▶ extension background ──▶ content scripts
+Client ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ SafariPilot.app ◀──native messaging──▶ extension background ──▶ content scripts
                                                                 │
                                                                 └── Accessibility (AXPress, AXValue) and pid-targeted key events ──▶ Safari
 ```

@@ -37,10 +37,7 @@ struct SafariPilotApp: App {
           .disabled(delegate.model.axTrusted)
         Button("Open Extension Settings") { Task { await delegate.model.openExtensionSettings() } }
         Divider()
-        Button("Configure Claude Desktop…") { delegate.model.configureClaudeDesktop() }
-          .disabled(delegate.model.desktopSetUp)
-        Button("Copy Server Command to Clipboard") { delegate.model.copyClaudeCodeCommand() }
-          .disabled(delegate.model.codeSetUp)
+        SetUpClientMenu(model: delegate.model)
         Divider()
         Button("Clear Log") { delegate.model.clearLog() }
           .keyboardShortcut("k")
@@ -72,6 +69,21 @@ struct SafariPilotApp: App {
   }
 }
 
+private struct SetUpClientMenu: View {
+  let model: AppModel
+
+  var body: some View {
+    Menu("Set Up Client") {
+      ForEach(ClientSetup.Client.allCases) { client in
+        Button(client == .claudeCode ? "Copy Claude Code Command" : "\(client.rawValue)…") { model.setUp(client) }
+          .disabled(model.configured.contains(client))
+      }
+      Divider()
+      Button("Copy Config JSON") { model.copyConfigJSON() }
+    }
+  }
+}
+
 private struct MenuBarMenu: View {
   let model: AppModel
   @Environment(\.openWindow) private var openWindow
@@ -80,10 +92,7 @@ private struct MenuBarMenu: View {
     @Bindable var model = model
     Toggle("Enable MCP Server", isOn: $model.serverEnabled)
     Divider()
-    Button("Configure Claude Desktop…") { model.configureClaudeDesktop() }
-      .disabled(model.desktopSetUp)
-    Button("Copy Server Command to Clipboard") { model.copyClaudeCodeCommand() }
-      .disabled(model.codeSetUp)
+    SetUpClientMenu(model: model)
     Divider()
     Button("Check for Updates…") { model.updates.check() }
       .disabled(!model.updates.canCheck)
