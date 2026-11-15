@@ -4,23 +4,23 @@
 
 # SafariPilot
 
-**SafariPilot lets Claude work in your Safari, while you keep using your Mac.**
+**SafariPilot lets AI agents work in your Safari, while you keep using your Mac.**
 
 Just like Claude in Chrome: Open Safari tabs and work on them in the background, without taking over your cursor.
 
 ## Features
 
-- **Your signed-in Safari.** Claude works in the Safari you already use, with your logins and cookies.
+- **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
 - **No cursor takeover.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. 
 - **Real clicks and typing.** Clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
-- **Optimized token usage.** Actions return what they changed on the page, avoiding reading the page again. Claude can also read only what's onscreen, or just one table or list of links as markdown.
+- **Optimized token usage.** Actions return what they changed on the page, avoiding reading the page again. Agents can also read only what's onscreen, or just one table or list of links as markdown.
 
 ## Security and trust
 
 - **Approve every client.** Each new client asks for your approval first. Disconnect one in **Clients** and it must be approved again.
-- **Tab isolation.** Claude sees only the tabs it opened and the popups they open.
-- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from Claude's page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
-- **Secure local connection.** The Safari extension, the app and Claude talk locally, and every connection needs a secret token that changes each launch.
+- **Tab isolation.** An agent sees only the tabs it opened and the popups they open.
+- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from agents' page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
+- **Secure local connection.** The Safari extension, the app and your agent talk locally, and every connection needs a secret token that changes each launch.
 
 ## Requirements
 
