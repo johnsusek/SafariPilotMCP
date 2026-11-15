@@ -38,7 +38,9 @@ struct SafariPilotApp: App {
         Button("Open Extension Settings") { Task { await delegate.model.openExtensionSettings() } }
         Divider()
         Button("Configure Claude Desktop…") { delegate.model.configureClaudeDesktop() }
+          .disabled(delegate.model.desktopSetUp)
         Button("Copy Server Command to Clipboard") { delegate.model.copyClaudeCodeCommand() }
+          .disabled(delegate.model.codeSetUp)
         Divider()
         Button("Clear Log") { delegate.model.clearLog() }
           .keyboardShortcut("k")
@@ -79,7 +81,9 @@ private struct MenuBarMenu: View {
     Toggle("Enable MCP Server", isOn: $model.serverEnabled)
     Divider()
     Button("Configure Claude Desktop…") { model.configureClaudeDesktop() }
+      .disabled(model.desktopSetUp)
     Button("Copy Server Command to Clipboard") { model.copyClaudeCodeCommand() }
+      .disabled(model.codeSetUp)
     Divider()
     Button("Check for Updates…") { model.updates.check() }
       .disabled(!model.updates.canCheck)

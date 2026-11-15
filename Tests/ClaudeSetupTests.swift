@@ -41,4 +41,35 @@ struct ClaudeSetupTests {
   @Test func codeCommandCarriesTheCredentialAndQuotesThePath() {
     #expect(ClaudeSetup.codeCommand(serverPath: "/A B/safaripilot", credential: "sp_x") == "claude mcp add --scope user --env SAFARIPILOT_CREDENTIAL=sp_x safaripilot -- '/A B/safaripilot' mcp")
   }
+
+  let links = ["/opt/homebrew/bin/safaripilot": "/Applications/SafariPilot.app/Contents/SharedSupport/safaripilot"]
+  func resolve(_ path: String) -> String { links[path] ?? path }
+  func data(_ json: String) -> Data { Data(json.utf8) }
+
+  func desktop(config: String? = nil) -> Bool {
+    ClaudeSetup.desktopHasServer(config: config.map(data), serverPath: path, resolve: resolve) { $0 == credential }
+  }
+
+  func code(config: String? = nil) -> Bool {
+    ClaudeSetup.codeHasServer(config: config.map(data), serverPath: path, resolve: resolve)
+  }
+
+  @Test func desktopFindsEveryKindOfSetup() {
+    #expect(!desktop())
+    #expect(desktop(config: #"{"mcpServers":{"safaripilot":{"command":"\#(path)","args":["mcp"],"env":{"SAFARIPILOT_CREDENTIAL":"sp_test"}}}}"#))
+    #expect(desktop(config: #"{"mcpServers":{"browser":{"command":"/opt/homebrew/bin/safaripilot","args":["mcp"]}}}"#))
+    #expect(!desktop(config: #"{"mcpServers":{"other":{"command":"node","args":["/Users/me/SafariPilot/index.js"]}}}"#))
+  }
+
+  @Test func desktopKeepsReAddingAStaleOwnEntry() {
+    #expect(!desktop(config: #"{"mcpServers":{"safaripilot":{"command":"/old/safaripilot","args":["mcp"],"env":{"SAFARIPILOT_CREDENTIAL":"sp_test"}}}}"#))
+    #expect(!desktop(config: #"{"mcpServers":{"safaripilot":{"command":"\#(path)","args":["mcp"],"env":{"SAFARIPILOT_CREDENTIAL":"sp_gone"}}}}"#))
+  }
+
+  @Test func codeFindsUserAndProjectServers() {
+    #expect(!code())
+    #expect(code(config: #"{"mcpServers":{"safaripilot":{"type":"stdio","command":"\#(path)","args":["mcp"],"env":{}}}}"#))
+    #expect(code(config: #"{"projects":{"/Users/me/app":{"mcpServers":{"browser":{"command":"/opt/homebrew/bin/safaripilot","args":["mcp"]}}}}}"#))
+    #expect(!code(config: #"{"mcpServers":{"safaripilot":{"command":"/old/safaripilot","args":["mcp"]}},"projects":{"/Users/me/app":{"mcpServers":{}}}}"#))
+  }
 }

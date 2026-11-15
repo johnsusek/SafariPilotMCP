@@ -26,7 +26,9 @@ final class AppModel {
   private(set) var axTrusted = AXIsProcessTrusted()
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
-  private(set) var desktopAdded = false
+  /// Whether each client's config already runs SafariPilot from any source.
+  private(set) var desktopSetUp = false
+  private(set) var codeSetUp = false
   private(set) var loginItem = SMAppService.mainApp.status
 
   private(set) var log: [LogEntry] = []
@@ -68,10 +70,17 @@ final class AppModel {
         loginItem = SMAppService.mainApp.status
         await refreshExtensionState()
         gate.dropExited()
-        desktopAdded = ClaudeSetup.isAdded(config: try? Data(contentsOf: ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath) { gate.knows(credential: $0) }
+        refreshSetUp()
         try? await Task.sleep(for: .seconds(3))
       }
     }
+  }
+
+  private func refreshSetUp() {
+    let read = { (url: URL) in try? Data(contentsOf: url) }
+    let resolve = { (path: String) in URL(filePath: path).resolvingSymlinksInPath().path }
+    desktopSetUp = ClaudeSetup.desktopHasServer(config: read(ClaudeSetup.desktopConfigURL), serverPath: ClaudeSetup.serverPath, resolve: resolve) { gate.knows(credential: $0) }
+    codeSetUp = ClaudeSetup.codeHasServer(config: read(ClaudeSetup.codeConfigURL), serverPath: ClaudeSetup.serverPath, resolve: resolve)
   }
 
   func refreshExtensionState() async {
@@ -122,7 +131,7 @@ final class AppModel {
       let merged = try ClaudeSetup.merged(config: existing, serverPath: ClaudeSetup.serverPath, credential: credential)
       try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
       try merged.write(to: url, options: .atomic)
-      desktopAdded = true
+      desktopSetUp = true
       alert("Added to Claude Desktop", "Quit and reopen Claude to load SafariPilot.")
     } catch {
       alert("Couldn't Update Claude Desktop", "\(error)")

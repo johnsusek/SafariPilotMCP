@@ -8,13 +8,13 @@ struct ClientsView: View {
     Form {
       Section("Connect a Client") {
         LabeledContent {
-          Button(model.desktopAdded ? "Set Up Again…" : "Set Up…") { model.configureClaudeDesktop() }
+          if model.desktopSetUp { Text("Already set up").foregroundStyle(.secondary) } else { Button("Set Up…") { model.configureClaudeDesktop() } }
         } label: {
           Text("Claude Desktop")
           Text("Adds SafariPilot to Claude Desktop's MCP servers.")
         }
         LabeledContent {
-          Button("Copy") { model.copyClaudeCodeCommand() }
+          if model.codeSetUp { Text("Already set up").foregroundStyle(.secondary) } else { Button("Copy") { model.copyClaudeCodeCommand() } }
         } label: {
           Text("Claude Code")
           Text("Copies a claude mcp add command with a new credential.")
