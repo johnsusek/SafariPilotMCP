@@ -150,12 +150,9 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
   };
 
   // Reads a clone of the response up to maxBody characters, then cancels it; the page reads the original as it would have.
-  let readResponse = async (record: BodyRecord, response: Response) => {
-    finish(record, response.status, response.headers.get("content-type") ?? "");
-
-    if (record.note !== null) return;
-
-    let reader = response.clone().body?.getReader();
+  // Reads a body as text up to maxBody characters, cancelling the rest; cut says there was more.
+  let readText = async (body: ReadableStream<Uint8Array> | null) => {
+    let reader = body?.getReader();
     let decoder = new Decoder();
     let text = "";
 
@@ -167,15 +164,22 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
       text += decoder.decode(value, { stream: true });
 
       if (text.length > maxBody) {
-        record.truncated = true;
         reader.cancel().catch(() => {});
-        break;
+        return { text: clip(text).text, cut: true };
       }
     }
 
-    record.responseBody = clip(
-      text + (record.truncated ? "" : decoder.decode()),
-    ).text;
+    return { text: clip(text + decoder.decode()).text, cut: false };
+  };
+
+  let readResponse = async (record: BodyRecord, response: Response) => {
+    finish(record, response.status, response.headers.get("content-type") ?? "");
+
+    if (record.note !== null) return;
+
+    let { text, cut } = await readText(response.clone().body);
+    record.responseBody = text;
+    record.truncated = cut;
   };
 
   page.fetch = {
@@ -317,44 +321,28 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
 
   let failing = (error: string, code = "failed") => ({ error, code });
 
-  // Reads a text body up to maxBody characters, or counts a binary one's bytes; the timeout's abort ends either read.
+  // A text body is read up to maxBody characters; a binary one has its bytes counted. The timeout's abort ends either read.
   let readBody = async (answer: PageFetchAnswer, response: Response) => {
-    let reader = response.body?.getReader();
+    if (!response.body) return;
 
-    if (!reader) return;
-
-    if (!isTextual(answer.contentType)) {
-      answer.binary = true;
-
-      for (
-        let part = await reader.read();
-        !part.done;
-        part = await reader.read()
-      )
-        answer.size += part.value.byteLength;
-
+    if (isTextual(answer.contentType)) {
+      let { text, cut } = await readText(response.body);
+      answer.body = text;
+      answer.size = text.length;
+      answer.truncated = cut;
       return;
     }
 
-    let decoder = new Decoder();
-    let text = "";
+    let reader = response.body.getReader();
+    answer.binary = true;
 
-    for (
+    for (;;) {
       let part = await reader.read();
-      !part.done;
-      part = await reader.read()
-    ) {
-      text += decoder.decode(part.value, { stream: true });
 
-      if (text.length > maxBody) {
-        answer.truncated = true;
-        reader.cancel().catch(() => {});
-        break;
-      }
+      if (part.done) break;
+
+      answer.size += part.value.byteLength;
     }
-
-    answer.body = clip(text + (answer.truncated ? "" : decoder.decode())).text;
-    answer.size = answer.body.length;
   };
 
   let sendFromPage = async (request: Record<string, unknown>) => {

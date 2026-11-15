@@ -11,7 +11,7 @@ import { redactBody, redactHeaders, redactUrl } from "../shared/redact";
 import { type Send, thrown } from "./frames";
 
 // rawRequestHeaders keeps the values redaction hides, for page_fetch to replay inside the extension; shown() strips it, so no reply carries it.
-export type Recorded = NetworkEntry & {
+type Recorded = NetworkEntry & {
   rawUrl: string;
   requestHeaders: NetworkHeader[] | null;
   rawRequestHeaders: NetworkHeader[] | null;

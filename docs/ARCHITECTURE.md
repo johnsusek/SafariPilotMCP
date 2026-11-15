@@ -53,7 +53,9 @@ Claude ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 - The MCP server sees only tabs it opened plus their popups (by `openerTabId`). All sessions share one SafariPilot window.
 - Secret fields (passwords, OTP, card numbers and secret-named fields, rules in `web/src/content/sensitive.ts`) never leave the content script; they show as `value=[hidden]`.
 - URL credentials and secret query or fragment parameters are hidden in every reply (`web/src/shared/redact.ts` and `Shared/Redaction.swift`, sharing `redactUrl.cases.json`). Cookie, Set-Cookie and secret headers and body fields are hidden in network logs.
-- The activity log shows typed text by size, never in clear.
+- page_fetch (`web/src/background/pageFetch.ts`) sends from the page's main world with the `fetch` the capture kept at document_start, over a CustomEvent pair whose request no page listener sees. A replay fills in the logged request's raw headers, which the background keeps beside the redacted ones in memory only and never puts in a reply; Cookie, Origin, Referer, `sec-` and the browser's own headers are left for the browser. Its reply goes through the same redaction before `pick`, so a path cannot lift a hidden value out from under its name.
+- page_fetch sends only GET and HEAD unless the owner turns on Allow page_fetch Writes in General; the app reads that setting and puts it in the command it sends the extension, so a client cannot lift it. Requests go only to the tab's own origin and origins already in its network log.
+- The activity log shows typed text by size, never in clear, and page_fetch by method, redacted URL, header names and body sizes.
 
 ## Errors
 

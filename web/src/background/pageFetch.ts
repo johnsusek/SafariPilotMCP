@@ -40,7 +40,7 @@ let forbidden = new Set([
   "via",
 ]);
 
-export let isForbiddenHeader = (name: string) => {
+let isForbiddenHeader = (name: string) => {
   let lower = name.toLowerCase();
   return (
     forbidden.has(lower) ||
@@ -71,23 +71,11 @@ let methodOverrides = new Set([
 let token = /^[!#$%&'*+.^_`|~0-9A-Za-z-]+$/;
 // The page aborts the request after this, inside the 15 s a content send waits, so a hung endpoint cannot hold the command queue.
 export let pageFetchTimeoutMs = 10000;
-export let readMethods = ["GET", "HEAD"];
-// The General settings toggle that allows other methods, as App/Views/GeneralView.swift labels it.
+let readMethods = ["GET", "HEAD"];
+// The General settings toggle that allows other methods, as PageFetchRequest.writesLabel in Shared/PageFetch.swift names it.
 export let writesSetting = "Allow page_fetch Writes";
 
-// What a replay sends: the logged request with query parameters set or removed, its headers minus the browser's own, and the caller's headers over them.
-export function replayHeaders(
-  logged: NetworkHeader[],
-  overrides: Record<string, string | null>,
-) {
-  let headers = logged.filter(
-    ({ name }) =>
-      !isForbiddenHeader(name) && !browserAdded.has(name.toLowerCase()),
-  );
-  return withOverrides(headers, overrides);
-}
-
-export function withOverrides(
+function withOverrides(
   headers: NetworkHeader[],
   overrides: Record<string, string | null>,
 ) {
@@ -118,7 +106,8 @@ export function withOverrides(
   return merged;
 }
 
-export function withQuery(url: string, query: Record<string, string | null>) {
+// Sets or removes (null) query parameters; with none the URL stays exactly as logged.
+function withQuery(url: string, query: Record<string, string | null>) {
   if (Object.keys(query).length === 0) return url;
 
   let parsed = new URL(url);
@@ -170,7 +159,13 @@ function resolve(
     url: withQuery(entry.rawUrl, request.query),
     method: entry.method,
     frameId: entry.frameId,
-    headers: replayHeaders(entry.rawRequestHeaders ?? [], request.headers),
+    headers: withOverrides(
+      (entry.rawRequestHeaders ?? []).filter(
+        ({ name }) =>
+          !isForbiddenHeader(name) && !browserAdded.has(name.toLowerCase()),
+      ),
+      request.headers,
+    ),
     body: request.body,
     replay: { url: entry.rawUrl, method: entry.method, time: entry.time },
     replayOf: entry.id,
@@ -179,7 +174,7 @@ function resolve(
 
 // Refuses what page_fetch does not send: a method or method override other than GET and HEAD unless writes, a body on GET or HEAD, any URL but http and
 // https ones to the tab's own origin or an origin already in its network log (Safari logs nothing of a new tab's first load, so its own origin always counts).
-export function guard(
+function guard(
   target: Target,
   tabUrl: string,
   logged: Set<string>,

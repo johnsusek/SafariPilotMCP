@@ -16,7 +16,7 @@ struct PageFetchRequest: Codable, Sendable, Equatable {
   static let writesKey = "pageFetchWrites"
   static let writesLabel = "Allow page_fetch Writes"
 
-  init(url: String?, method: String?, requestId: String?, query: [String: String?] = [:], headers: [String: String?] = [:], body: String?, pick: String?, maxChars: Int) throws {
+  init(url: String?, method: String?, requestId: String?, query: [String: String?], headers: [String: String?], body: String?, pick: String?, maxChars: Int) throws {
     switch (url, requestId) {
     case (nil, nil): throw Failure(.invalidArgument, "page_fetch takes url or requestId")
     case (_?, _?): throw Failure(.invalidArgument, "page_fetch takes url or requestId, not both")

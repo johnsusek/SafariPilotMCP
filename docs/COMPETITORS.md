@@ -47,6 +47,10 @@ Checked: [Epistates/MCPSafari](https://github.com/Epistates/MCPSafari) at 13ba54
 - **Lacks:** trusted clicks, background native input, client approval, own-tabs-only scope, answering an open dialog, network bodies, cookie and header redaction, scroll_to, an activity log.
 - **Health:** 65 stars, MIT, mostly one maintainer, 14 releases through v0.3.2 and none since. About 590 Node and 330 Swift test cases; CI on Xcode 27.1 and 26.6 with CodeQL, Gitleaks and OSV; releases signed and notarized. 0.4.0 waits on a release gate of live Safari checks, all still pending.
 
+## Replaying a site's API
+
+Checked 2026-11-15 at the commits above: none of the three sends a request from inside the page as a tool. Apple's 17 tools and MCPSafari's 27 have no fetch or replay tool; safari-mcp's 98 include `safari_mock_route` and `safari_throttle_network`, which change the page's own requests, but nothing that sends one. In all three the way to call a site's API is their JavaScript tool, whose results are not redacted and which, unlike SafariPilot's page_fetch, cannot send a CSRF or auth header without showing it to the model.
+
 ## Worth borrowing
 
 1. **Extension location check** (MCPSafari Diagnostics.swift:360-373): warn when PlugInKit loads the extension from outside /Applications, the stale-copy problem scripts/install.sh works around.
