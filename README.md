@@ -9,8 +9,8 @@ Just like Claude in Chrome, SafariPilot opens its own tabs and works there in th
 ## Features
 
 - **Your signed-in Safari.** Claude works in the Safari you already use, with your logins and cookies.
+- **No cursor takeover.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. 
 - **Real clicks and typing.** Clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
-- **Out of your way.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari. 
 - **Its own tabs only.** Claude sees only the tabs it opened and the popups they open. 
 - **Replies show what changed.** Clicks, typing, form edits, drags and uploads end with what they added, changed or removed on the page, so Claude rarely reads it again.
 - **Acts by name.** Claude can click "Sign in" or fill "Email" without reading the page first, and fails rather than guess when more than one element matches.
