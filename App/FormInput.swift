@@ -167,7 +167,8 @@ extension Commands {
   }
 
   /// An ARIA slider ignores AXValue, so real keys move every slider: Home or End reach a known end, one arrow press measures the step and which arrow raises the value,
-  /// then the presses that remain go in one run and a second run corrects a page that skipped some. A value between steps ends on the nearest step.
+  /// then the presses that remain go in one run and up to two more correct a page that skipped some or moved on its own, unless a run barely moved the value, which reads as stale.
+  /// A value between steps ends on the nearest step.
   private func setSlider(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ wanted: Double) async throws -> CLIReply {
     let shown = { (number: Double) in number.formatted(.number.grouping(.never)) }
     let number = { (control: InspectResult) in control.value.flatMap(Double.init) }
@@ -194,9 +195,26 @@ extension Commands {
 
       acted = ContinuousClock.now
       pressed.append(times > 1 ? "\(name) x\(times)" : name)
-      let after = try await settled(tab.id, ref) { number($0).map(done) ?? false }
+      var after = try await inspect(tab.id, ref)
+      let prompt = number(after).map(done) ?? false
 
-      guard let value = number(after) else { throw Failure(.notActionable, "slider ref \(ref) stopped showing a numeric value after \(name)") }
+      for _ in 0 ..< 20 where !(number(after).map(done) ?? false) {
+        try await Timing.sleep(for: .milliseconds(100))
+        after = try await inspect(tab.id, ref)
+      }
+
+      guard var value = number(after) else { throw Failure(.notActionable, "slider ref \(ref) stopped showing a numeric value after \(name)") }
+
+      // A page may apply presses late (YouTube batches seeks for about half a second), so a value that was not there at once counts only after it holds for 300 ms.
+      for _ in 0 ..< 5 where !prompt {
+        try await Timing.sleep(for: .milliseconds(300))
+
+        guard let next = number(try await inspect(tab.id, ref)) else { throw Failure(.notActionable, "slider ref \(ref) stopped showing a numeric value after \(name)") }
+
+        if next == value { break }
+
+        value = next
+      }
 
       current = value
     }
@@ -204,6 +222,7 @@ extension Commands {
     if wanted == control.min || wanted == control.max { try await press(wanted == control.min ? "Home" : "End", 1) { $0 == wanted } }
 
     var step = 0.0
+    var stale: (moved: Double, presses: Int)?
 
     if current != wanted {
       let before = current
@@ -217,13 +236,21 @@ extension Commands {
       let raise = step > 0 ? first : other
       let lower = step > 0 ? other : first
 
-      for _ in 0 ..< 2 where abs(wanted - current) > abs(step) / 2 {
+      for _ in 0 ..< 3 where abs(wanted - current) > abs(step) / 2 {
         let count = Int((abs(wanted - current) / abs(step)).rounded())
 
         guard count <= 500 else { throw Failure(.invalidArgument, "slider ref \(ref) moves \(shown(abs(step))) per arrow press, so \(shown(wanted)) is \(count) presses away; pick a value within 500 steps") }
 
+        let from = current
         let expected = current + Double(count) * abs(step) * (wanted > current ? 1 : -1)
         try await press(wanted > current ? raise : lower, count) { abs($0 - expected) < abs(step) / 2 }
+
+        // A page in a background window may not redraw where its slider went (YouTube updates aria-valuenow on animation frames, which stall there),
+        // so a run that barely moved the value stops here rather than pressing on from a stale read and overshooting.
+        if count > 1, abs(current - from) < Double(count) * abs(step) / 2 {
+          stale = (abs(current - from), count)
+          break
+        }
       }
     }
 
@@ -232,6 +259,7 @@ extension Commands {
     data["readBack"] = .number(current)
     data["pressed"] = .array(pressed.map { .string($0) })
     let lines = ["moved slider ref \(ref) from \(shown(start)) by pressing \(pressed.joined(separator: ", "))", "read back: \(shown(current)) \(note)"]
+      + (stale.map { ["the slider moved \(shown($0.moved)) for \($0.presses) presses of \(shown(abs(step))), so the page may not be showing where it went (a page in a background window can redraw late); check what the slider controls before pressing more"] } ?? [])
     return await withOutcome(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: .object(data), code: matched ? nil : .inputUnconfirmed), tab, since: acted, watch)
   }
 
