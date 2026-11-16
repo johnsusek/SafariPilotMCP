@@ -33,24 +33,39 @@ export function replBody(code: string) {
 }
 
 // Injected into the page's main world, so it is serialized from its source: it must reference nothing outside itself.
+// A page that requires Trusted Types (YouTube) refuses eval of a plain string, so the source goes through a policy of ours wherever the API exists.
 export async function evaluate(body: string) {
   let describe = (error: unknown) =>
     error instanceof Error ? `${error.name}: ${error.message}` : String(error);
-  let AsyncFunction = (async () => {}).constructor as FunctionConstructor;
-  let run;
+  let source = `(async function () {\n${body}\n})`;
+  let run: () => Promise<unknown>;
 
   try {
-    run = new AsyncFunction(body);
+    // TypeScript's DOM library has no Trusted Types yet.
+    let { trustedTypes } = globalThis as {
+      trustedTypes?: {
+        createPolicy: (
+          name: string,
+          rules: { createScript: (text: string) => string },
+        ) => { createScript: (text: string) => string };
+      };
+    };
+    let policy = trustedTypes?.createPolicy("safaripilot", {
+      createScript: (text) => text,
+    });
+    // Running the agent's code is this tool's job, and only eval takes a TrustedScript.
+    // oxlint-disable-next-line no-eval
+    run = (0, eval)(policy ? policy.createScript(source) : source);
   } catch (error) {
-    let blocked = error instanceof EvalError;
+    let invalid = error instanceof SyntaxError;
     return {
       ok: false as const,
-      error: blocked
-        ? `the page's Content-Security-Policy blocks running code here (no 'unsafe-eval'): ${describe(error)}`
-        : `the page could not compile the code: ${describe(error)}`,
-      code: blocked
-        ? ("not_actionable" as const)
-        : ("invalid_argument" as const),
+      error: invalid
+        ? `the page could not compile the code: ${describe(error)}`
+        : `the page's Content-Security-Policy blocks running code here: ${describe(error)}`,
+      code: invalid
+        ? ("invalid_argument" as const)
+        : ("not_actionable" as const),
     };
   }
 

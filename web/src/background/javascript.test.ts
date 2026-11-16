@@ -126,6 +126,47 @@ describe("evaluate", () => {
       error: expect.stringMatching(/^the result is not JSON-serializable: /),
     });
   });
+
+  test("a trailing line comment does not swallow the closing brace", async () => {
+    expect(await evaluate("return (1); // done")).toEqual({
+      ok: true,
+      json: "1",
+    });
+  });
+
+  describe("on a page with Trusted Types", () => {
+    afterEach(() => vi.unstubAllGlobals());
+
+    test("compiles the code through a policy of its own", async () => {
+      let createScript = vi.fn((text: string) => text);
+      let createPolicy = vi.fn(() => ({ createScript }));
+      vi.stubGlobal("trustedTypes", { createPolicy });
+      expect(await evaluate("return (2 * 3);")).toEqual({
+        ok: true,
+        json: "6",
+      });
+      expect(createPolicy).toHaveBeenCalledWith("safaripilot", {
+        createScript: expect.any(Function),
+      });
+      expect(createScript).toHaveBeenCalledWith(
+        "(async function () {\nreturn (2 * 3);\n})",
+      );
+    });
+
+    test("a policy the page's CSP refuses fails as blocked", async () => {
+      vi.stubGlobal("trustedTypes", {
+        createPolicy: () => {
+          throw new TypeError("Policy safaripilot disallowed.");
+        },
+      });
+      expect(await evaluate("return 1;")).toEqual({
+        ok: false,
+        error:
+          "the page's Content-Security-Policy blocks running code here: TypeError: Policy safaripilot disallowed.",
+        code: "not_actionable",
+      });
+    });
+  });
 });
 
 describe("runJavascript", () => {
