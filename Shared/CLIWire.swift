@@ -123,6 +123,9 @@ enum AppCommand: Codable, Sendable, Equatable {
   static let scrollStep = 100.0
   static let maxKeyPresses = 100
   static let scaleRange = 0.1...1.0
+  /// Screenshots fit within these, the size every Claude model takes without resizing.
+  static let screenshotMaxEdge = 1568.0
+  static let screenshotMaxPixels = 1_150_000.0
   static let consoleLimits = 1...200
   static let defaultConsoleLimit = 50
   static let networkLimits = 1...200

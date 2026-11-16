@@ -3,7 +3,7 @@ import Foundation
 import ImageIO
 import UniformTypeIdentifiers
 
-/// Crops a PNG to a region of its pixels and shrinks it by scale, returning the new PNG with its size and the original's.
+/// Fits a capture to the image budget every Claude model takes without resizing; region is in the fitted frame's pixels and crops the native capture, so a zoom keeps detail.
 enum ScreenshotImage {
   struct Output: Equatable {
     let png: Data
@@ -13,25 +13,34 @@ enum ScreenshotImage {
     let frameHeight: Int
   }
 
+  /// The factor, at most 1, that brings width x height within the screenshot limits.
+  static func fit(_ width: Int, _ height: Int) -> Double {
+    min(1, AppCommand.screenshotMaxEdge / Double(max(width, height)), (AppCommand.screenshotMaxPixels / Double(width * height)).squareRoot())
+  }
+
   static func process(_ png: Data, region: PixelRect?, scale: Double) throws -> Output {
     guard let source = CGImageSourceCreateWithData(png as CFData, nil), let image = CGImageSourceCreateImageAtIndex(source, 0, nil) else { throw Failure(.failed, "screenshot is not a decodable PNG") }
 
-    let frame = CGRect(x: 0, y: 0, width: image.width, height: image.height)
+    let frameFit = fit(image.width, image.height)
+    let frameWidth = max(1, Int((Double(image.width) * frameFit).rounded(.down)))
+    let frameHeight = max(1, Int((Double(image.height) * frameFit).rounded(.down)))
 
-    guard region != nil || scale != 1 else { return Output(png: png, width: image.width, height: image.height, frameWidth: image.width, frameHeight: image.height) }
+    guard region != nil || frameFit * scale != 1 else { return Output(png: png, width: image.width, height: image.height, frameWidth: frameWidth, frameHeight: frameHeight) }
 
     var cropped = image
 
     if let region {
-      let rect = CGRect(x: region.x0, y: region.y0, width: region.x1 - region.x0, height: region.y1 - region.y0).intersection(frame)
+      let native = CGRect(x: Double(region.x0) / frameFit, y: Double(region.y0) / frameFit, width: Double(region.x1 - region.x0) / frameFit, height: Double(region.y1 - region.y0) / frameFit)
+      let rect = native.integral.intersection(CGRect(x: 0, y: 0, width: image.width, height: image.height))
 
-      guard !rect.isEmpty, let crop = image.cropping(to: rect) else { throw Failure(.invalidArgument, "region \([region.x0, region.y0, region.x1, region.y1]) lies outside the \(image.width) x \(image.height) px screenshot") }
+      guard !rect.isEmpty, let crop = image.cropping(to: rect) else { throw Failure(.invalidArgument, "region \([region.x0, region.y0, region.x1, region.y1]) lies outside the \(frameWidth) x \(frameHeight) px screenshot") }
 
       cropped = crop
     }
 
-    let width = max(1, Int((Double(cropped.width) * scale).rounded()))
-    let height = max(1, Int((Double(cropped.height) * scale).rounded()))
+    let factor = fit(cropped.width, cropped.height) * scale
+    let width = max(1, Int((Double(cropped.width) * factor).rounded(.down)))
+    let height = max(1, Int((Double(cropped.height) * factor).rounded(.down)))
     let space = CGColorSpace(name: CGColorSpace.sRGB)!
 
     guard let context = CGContext(data: nil, width: width, height: height, bitsPerComponent: 8, bytesPerRow: 0, space: space, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { throw Failure(.failed, "could not create a \(width) x \(height) image context") }
@@ -47,6 +56,6 @@ enum ScreenshotImage {
 
     guard CGImageDestinationFinalize(destination) else { throw Failure(.failed, "could not encode the screenshot") }
 
-    return Output(png: data as Data, width: width, height: height, frameWidth: image.width, frameHeight: image.height)
+    return Output(png: data as Data, width: width, height: height, frameWidth: frameWidth, frameHeight: frameHeight)
   }
 }
