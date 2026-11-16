@@ -18,9 +18,9 @@ enum CommandLineParsing {
     click TARGET                    locate TARGET, then AXPress it
       [--action double_click|triple_click|right_click] [--modifiers ctrl+shift+alt+cmd]  synthetic DOM events instead
     drag REF TO                     drag from REF to TO in one frame as synthetic DOM events
-    form-input TARGET VALUE         set a text field, checkbox or radio (true|false), select option or color (#rrggbb)
-    key KEYS [--ref REF] [--repeat N]  press space-separated keys in the page, focusing REF first
-    key [--ref REF] --text TEXT     type TEXT one key per character
+    form-input [--compat] TARGET VALUE  set a text field, checkbox or radio (true|false), select option, date, time, slider or color (#rrggbb)
+    key KEYS [--ref REF] [--repeat N] [--compat]  press space-separated keys in the page, focusing REF first
+    key [--ref REF] [--compat] --text TEXT  type TEXT one key per character
     events [--clear]                events the page logged since its first events read
     tabs                            all Safari tabs
     tab-create [URL]                open a tab in a new window
@@ -154,12 +154,16 @@ enum CommandLineParsing {
 
       invocation = Invocation(command: .debugCG(tabId: tabId, probe: probe, windowFields: windowFields))
     case "form-input":
+      let compat = rest.first == "--compat"
+
+      if compat { rest.removeFirst() }
+
       let target = try leadingTarget(&rest)
 
       guard !rest.isEmpty else { throw Failure(.invalidArgument, "form-input needs TARGET and VALUE") }
 
       // Free text is taken verbatim, so it skips the stray option check below.
-      return Invocation(command: .formInput(tabId: tabId, target: target, value: .text(rest.joined(separator: " "))))
+      return Invocation(command: .formInput(tabId: tabId, target: target, value: .text(rest.joined(separator: " ")), compat: compat))
     case "javascript":
       let frame = try rest.first == "--frame" ? option("--frame", &rest).map { try Self.ref($0, "--frame") } : nil
 
@@ -210,8 +214,9 @@ enum CommandLineParsing {
 
       let target = try optionalTarget(&rest)
       let times = try option("--repeat", &rest).map { try integer($0, "--repeat") } ?? 1
+      let compat = flag("--compat", &rest)
       let keys = text != nil && rest.isEmpty ? nil : rest.joined(separator: " ")
-      invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, target: target, times: times))
+      invocation = try Invocation(command: .key(tabId: tabId, keys: keys, text: text, target: target, times: times, compat: compat))
     case "scroll":
       let target = try optionalTarget(&rest)
 

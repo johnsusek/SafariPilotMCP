@@ -1,9 +1,10 @@
 import ApplicationServices
 import Foundation
 
-/// form_input: sets a text field, checkbox, radio, popup select or date/time input by ref through AX, a slider with real key presses, or a color input from the page script, then reads the control back from the page.
+/// form_input: sets a text field, checkbox or radio by ref through AX, and a popup select, date/time, slider or color input from the page script, then reads the control back from the page.
+/// compat sets selects, date/time inputs and sliders through Safari's native menu and real keys instead, which brings the tab's window in front of the person's other Safari windows.
 extension Commands {
-  func formInput(_ tabId: Int?, _ ref: PageRef, _ value: FormValue) async throws -> CLIReply {
+  func formInput(_ tabId: Int?, _ ref: PageRef, _ value: FormValue, compat: Bool) async throws -> CLIReply {
     let tab = try await frontTab(tabId)
     let control = try await inspect(tab.id, ref)
 
@@ -13,19 +14,21 @@ extension Commands {
 
       return try await setText(tab, ref, control.secure, text)
     case .checkbox, .radio: return try await setChecked(tab, ref, control, value)
-    case .select: return try await select(tab, ref, control, value)
+    case .select: return try await select(tab, ref, control, value, compat: compat)
     case .date, .time, .dateTimeLocal:
       guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a \(control.kind.rawValue) input, so value must be a string") }
 
-      return try await setDateTime(tab, ref, control.kind, text)
+      let parts = try dateTimeParts(control.kind, text, ref)
+
+      return compat ? try await setDateTime(tab, ref, control.kind, text, parts) : try await setPageValue(tab, ref, control.kind, text)
     case .color:
       guard case let .text(text) = value else { throw Failure(.invalidArgument, "ref \(ref) is a color input, so value must be a string such as #00ff00") }
 
-      return try await setColor(tab, ref, text)
+      return try await setPageValue(tab, ref, .color, text)
     case .slider:
       guard case let .text(text) = value, let wanted = Double(text) else { throw Failure(.invalidArgument, "ref \(ref) is a slider, so value must be a number") }
 
-      return try await setSlider(tab, ref, control, wanted)
+      return try await setSlider(tab, ref, control, wanted, compat: compat)
     case .listbox: throw Failure(.invalidArgument, "ref \(ref) is a multiple or list box select, which form_input does not support; click its options instead")
     case .other: throw Failure(.invalidArgument, "ref \(ref) is not a text field, slider, checkbox, radio, select or color input; use click or key")
     }
@@ -117,7 +120,7 @@ extension Commands {
     return await withOutcome(CLIReply(ok: true, text: "\(state(wanted)) \(kind) ref \(ref) by pressing \(pressed.summary)", data: .object(data)), tab, since: acted, watch)
   }
 
-  private func select(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue) async throws -> CLIReply {
+  private func select(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ value: FormValue, compat: Bool) async throws -> CLIReply {
     guard case let .text(wanted) = value else { throw Failure(.invalidArgument, "ref \(ref) is a select, so value must be an option's value or label") }
 
     let options = control.options ?? []
@@ -133,6 +136,15 @@ extension Commands {
     if control.selectedIndex == index { return CLIReply(ok: true, text: "select ref \(ref) already shows \"\(option.label)\"; nothing changed", data: .object(data)) }
 
     guard !option.disabled else { throw Failure(.notActionable, "option \"\(option.label)\" of select ref \(ref) is disabled") }
+
+    if !compat {
+      let watch = await watchChanges(tab.id, ref)
+      let after = try await content(tab.id, .selectOption(ref: ref, index: index)).decode(InspectResult.self)
+      let acted = ContinuousClock.now
+      let picked = after.selectedIndex == index
+      let text = picked ? "selected \"\(option.label)\" in select ref \(ref) from the page script; its input and change events are untrusted" : "set select ref \(ref) to \"\(option.label)\" from the page script but it shows option \(after.selectedIndex.map(String.init) ?? "none"); compat true picks it from Safari's menu"
+      return await withOutcome(CLIReply(ok: picked, text: text, data: .object(data), code: picked ? nil : .inputUnconfirmed), tab, since: acted, watch)
+    }
 
     let located = try await locateHittable(tab.id, ref)
     let match = try await AXEngine.resolve(located, tab: tab)
@@ -152,24 +164,37 @@ extension Commands {
     return await withOutcome(CLIReply(ok: true, text: "selected \"\(option.label)\" in select ref \(ref) by pressing \(item.summary) in its menu", data: .object(data)), tab, since: acted, watch)
   }
 
-  /// The AXColorWell ignores AXValue and opens a popover of unnamed swatches, so the page script sets the value; its input and change events are untrusted.
-  private func setColor(_ tab: TabInfo, _ ref: PageRef, _ value: String) async throws -> CLIReply {
+  /// Sets a color, date or time input from the page script, which needs no window made main: the AXColorWell ignores AXValue, and date and time fields take only real keys. Its input and change events are untrusted.
+  private func setPageValue(_ tab: TabInfo, _ ref: PageRef, _ kind: ControlKind, _ value: String) async throws -> CLIReply {
     let watch = await watchChanges(tab.id, ref)
-    let after = try await content(tab.id, .setColor(ref: ref, value: value)).decode(InspectResult.self)
+    let after = try await content(tab.id, .setValue(ref: ref, value: value)).decode(InspectResult.self)
     let acted = ContinuousClock.now
     let shown = after.value ?? ""
+    let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string(kind.rawValue), "readBack": .string(shown)])
+
+    if kind == .color {
+      let lines = [
+        "set color ref \(ref) from the page script; its input and change events are untrusted",
+        "read back: \"\(shown)\" \(shown.lowercased() == value.lowercased() ? "(matches)" : "(the input's serialization)")",
+      ]
+      return await withOutcome(CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data), tab, since: acted, watch)
+    }
+
+    let matched = Self.trimmedTime(shown) == Self.trimmedTime(value)
     let lines = [
-      "set color ref \(ref) from the page script; its input and change events are untrusted",
-      "read back: \"\(shown)\" \(shown.lowercased() == value.lowercased() ? "(matches)" : "(the input's serialization)")",
+      "set \(kind.rawValue) ref \(ref) from the page script; its input and change events are untrusted",
+      "read back: \"\(shown)\" \(matched ? "(matches)" : "(DIFFERS)")",
     ]
-    let data: JSONValue = .object(["tabId": .number(Double(tab.id)), "ref": .string(ref.description), "kind": .string("color"), "readBack": .string(shown)])
-    return await withOutcome(CLIReply(ok: true, text: lines.joined(separator: "\n"), data: data), tab, since: acted, watch)
+    return await withOutcome(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: data, code: matched ? nil : .inputUnconfirmed), tab, since: acted, watch)
   }
+
+  /// A zero seconds or milliseconds part may or may not appear in a time value, so both sides drop it before comparing.
+  static func trimmedTime(_ text: String?) -> String { (text ?? "").replacing(/(:\d{2})\.0+$/) { $0.1 }.replacing(/(\d{2}:\d{2}):00$/) { $0.1 } }
 
   /// An ARIA slider ignores AXValue, so real keys move every slider: Home or End reach a known end, one arrow press measures the step and which arrow raises the value,
   /// then the presses that remain go in one run and up to two more correct a page that skipped some or moved on its own, unless a run barely moved the value, which reads as stale.
   /// A value between steps ends on the nearest step.
-  private func setSlider(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ wanted: Double) async throws -> CLIReply {
+  private func setSlider(_ tab: TabInfo, _ ref: PageRef, _ control: InspectResult, _ wanted: Double, compat: Bool) async throws -> CLIReply {
     let shown = { (number: Double) in number.formatted(.number.grouping(.never)) }
     let number = { (control: InspectResult) in control.value.flatMap(Double.init) }
 
@@ -189,7 +214,7 @@ extension Commands {
     var acted = ContinuousClock.now
 
     func press(_ name: String, _ times: Int, until done: @escaping (Double) -> Bool) async throws {
-      let reply = try await key(tab.id, [KeyChord.parse(name)], ref, times, showChanges: false)
+      let reply = try await key(tab.id, [KeyChord.parse(name)], ref, times, compat: compat, showChanges: false)
 
       guard reply.ok else { throw Failure(reply.code ?? .inputUnconfirmed, "pressing \(name) on slider ref \(ref) failed: \(reply.text)") }
 
@@ -263,9 +288,8 @@ extension Commands {
     return await withOutcome(CLIReply(ok: matched, text: lines.joined(separator: "\n"), data: .object(data), code: matched ? nil : .inputUnconfirmed), tab, since: acted, watch)
   }
 
-  /// WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.
-  private func setDateTime(_ tab: TabInfo, _ ref: PageRef, _ kind: ControlKind, _ value: String) async throws -> CLIReply {
-    let parts = try dateTimeParts(kind, value, ref)
+  /// compat: WebKit draws these inputs as separate AXIncrementor fields whose AXValue does not stick, so each field is focused and its digits typed as real keys; change fires when focus leaves, as after a person types.
+  private func setDateTime(_ tab: TabInfo, _ ref: PageRef, _ kind: ControlKind, _ value: String, _ parts: [String: String]) async throws -> CLIReply {
     let located = try await locateHittable(tab.id, ref, coveredOK: true)
     let match = try await AXEngine.resolve(located, tab: tab)
     let fields = try AXEngine.dateTimeFields(in: match)
@@ -309,10 +333,8 @@ extension Commands {
 
     let acted = ContinuousClock.now
 
-    // A zero seconds or milliseconds part may or may not appear in the value, so both sides drop it before comparing.
-    let trimmed = { (text: String?) in (text ?? "").replacing(/(:\d{2})\.0+$/) { $0.1 }.replacing(/(\d{2}:\d{2}):00$/) { $0.1 } }
-    let after = try await settled(tab.id, ref) { trimmed($0.value) == trimmed(value) }
-    let matched = trimmed(after.value) == trimmed(value)
+    let after = try await settled(tab.id, ref) { Self.trimmedTime($0.value) == Self.trimmedTime(value) }
+    let matched = Self.trimmedTime(after.value) == Self.trimmedTime(value)
     let lines = [
       "typed \(typed.joined(separator: ", ")) into \(kind.rawValue) ref \(ref)",
       "read back: \"\(after.value ?? "")\" \(matched ? "(matches)" : "(DIFFERS)")",

@@ -9,6 +9,7 @@ import type {
   ElementInfo,
   Failure,
   FocusResult,
+  KeyPress,
   FrameEntry,
   InspectResult,
   LocateResult,
@@ -33,7 +34,10 @@ export type PageRequest =
   // watch is the ref an action targets: its frame is always read, and its events carry onTarget.
   | { op: "events"; clear: boolean; arm: boolean; watch: RefPath | null }
   | { op: "inspect"; ref: RefPath }
-  | { op: "setColor"; ref: RefPath; value: string }
+  | { op: "setValue"; ref: RefPath; value: string }
+  | { op: "selectOption"; ref: RefPath; index: number }
+  // ref null presses at whatever has focus in the top frame.
+  | { op: "keys"; ref: RefPath | null; presses: KeyPress[] }
   | { op: "focus"; ref: RefPath }
   | {
       op: "syntheticClick";

@@ -870,9 +870,9 @@ describe("runPage reads", () => {
     });
   });
 
-  test("inspect, setColor, scroll, syntheticClick, drag and upload route to the owning frame", async () => {
+  test("inspect, setValue, scroll, syntheticClick, drag and upload route to the owning frame", async () => {
     documents[200].answer = (request) =>
-      request.op === "inspect" || request.op === "setColor"
+      request.op === "inspect" || request.op === "setValue"
         ? {
             ok: true,
             ref: request.ref,
@@ -895,11 +895,11 @@ describe("runPage reads", () => {
       value: "v",
     });
     expect(
-      await runPage(send, { op: "setColor", ref: "5:3:4", value: "#00ff00" }),
+      await runPage(send, { op: "setValue", ref: "5:3:4", value: "#00ff00" }),
     ).toMatchObject({ ok: true, ref: "5:3:4" });
     expect(calls.at(-1)).toEqual([
       200,
-      { op: "setColor", ref: 4, value: "#00ff00" },
+      { op: "setValue", ref: 4, value: "#00ff00" },
     ]);
     expect(
       await runPage(send, { op: "scroll", ref: "5:3:4", left: 0, top: 100 }),

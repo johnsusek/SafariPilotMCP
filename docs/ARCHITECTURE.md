@@ -14,7 +14,7 @@ How SafariPilot works inside. For what it does and how to use it, see the [READM
 ```
 Client ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ SafariPilot.app ◀──native messaging──▶ extension background ──▶ content scripts
                                                                 │
-                                                                └── Accessibility (AXPress, AXValue) and pid-targeted key events ──▶ Safari
+                                                                └── Accessibility (AXPress, AXValue), and pid-targeted key events in compat mode ──▶ Safari
 ```
 
 ## Transport
@@ -28,10 +28,11 @@ Client ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 ## Input
 
 - Plain clicks are `AXPress` on the Accessibility element whose frame best matches the content script's element rect (intersection over union of at least 0.7). They produce trusted `mousedown`, `mouseup` and `click`, with Safari in the background.
-- Text is set with `AXValue` after a page-side `focus()`. Keys are `CGEvent`s posted to Safari's pid only, never the global HID tap, so they never reach another app. `cmd` chords are refused because Safari acts on them before the page.
-- Double, triple, right and modifier clicks, drags, color inputs and file uploads are synthetic, untrusted page events, and replies say so.
-- Nothing moves the real cursor or asks Safari to come forward. If Safari activates during a command, the activity log records it. Among Safari's own windows some tools do move focus; the README's Windows and focus section lists them.
-- Every action is verified: click counts trusted clicks in the target frame, key counts trusted keydowns, form_input reads the value back. A miss fails with `input_unconfirmed`.
+- Text is set with `AXValue` after a page-side `focus()`.
+- By default no tool reorders Safari's windows. Keys, selects, date, time, color and range inputs, double, triple, right and modifier clicks, drags and file uploads are synthetic, untrusted page events, and replies say so. Synthetic keys run the browser default of each press the page did not cancel (typing through `execCommand`, Tab focus moves, Enter submitting a form). Code: `web/src/content/keys.ts`.
+- `compat: true` on key and form_input uses real input instead: keys are `CGEvent`s posted to Safari's pid only, never the global HID tap, and a select is picked from its native menu. Pid-targeted keys reach only Safari's main window, so compat makes the pilot window main, which brings it in front of the user's other Safari windows. `cmd` chords are refused because Safari acts on them before the page.
+- Nothing moves the real cursor or asks Safari to come forward. If Safari activates during a command, the activity log records it.
+- Every action is verified: click counts trusted clicks in the target frame, compat key counts trusted keydowns, synthetic key reports which presses the page canceled and which defaults ran, form_input reads the value back. A miss fails with `input_unconfirmed`.
 - After an action, a settle step waits up to 15 s for a page load the action started and reports where the tab landed.
 
 ## Page diffs

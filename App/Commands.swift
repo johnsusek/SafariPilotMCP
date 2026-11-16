@@ -15,7 +15,7 @@ struct Commands {
     case let .snapshot(tabId): try await snapshot(tabId)
     case .click(let tabId, let target, .left, []): try await resolving(tabId, target) { try await click(tabId, $0) }
     case let .click(tabId, target, action, modifiers): try await resolving(tabId, target) { try await syntheticClick(tabId, $0, action, modifiers) }
-    case let .formInput(tabId, target, value): try await resolving(tabId, target) { try await formInput(tabId, $0, value) }
+    case let .formInput(tabId, target, value, compat): try await resolving(tabId, target) { try await formInput(tabId, $0, value, compat: compat) }
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
     case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url, safariFrontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Safari")))
@@ -39,8 +39,8 @@ struct Commands {
     case let .networkRequest(tabId, requestId): try await networkRequest(tabId, requestId)
     case let .pageFetch(tabId, request): try await pageFetch(tabId, request)
     case let .dialog(tabId, accept, promptText): try await answerDialog(tabId, accept, promptText)
-    case let .key(tabId, chords, target?, times): try await resolving(tabId, target) { try await key(tabId, chords, $0, times) }
-    case let .key(tabId, chords, nil, times): try await key(tabId, chords, nil, times)
+    case let .key(tabId, chords, target?, times, compat): try await resolving(tabId, target) { try await key(tabId, chords, $0, times, compat: compat) }
+    case let .key(tabId, chords, nil, times, compat): try await key(tabId, chords, nil, times, compat: compat)
     case let .screenshot(tabId, region, scale): try await screenshot(tabId, region, scale)
     case let .debugAX(tabId, ref): try await debugAX(tabId, ref)
     case let .debugFrames(tabId): try await debugFrames(tabId)
@@ -429,9 +429,9 @@ struct Commands {
     try refuseSandboxed(located, "a click")
     let match = try await AXEngine.resolve(located, tab: tab)
 
-    // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter, as from the keyboard.
+    // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter from the page script, as from the keyboard.
     if match.node.role == "AXDisclosureTriangle" {
-      let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1)
+      let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1, compat: false)
       return CLIReply(ok: reply.ok, text: "toggled summary ref \(ref) with Enter: \(reply.text)", data: reply.data, code: reply.code)
     }
 

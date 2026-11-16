@@ -6,7 +6,8 @@ import { drag } from "./drag";
 import { find, target } from "./find";
 import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
-import { inspect, setColor } from "./inspect";
+import { inspect, selectOption, setValue } from "./inspect";
+import { syntheticKeys } from "./keys";
 import { locate } from "./locate";
 import { installNetworkReader, takeBody } from "./network";
 import { syntheticClick } from "./mouse";
@@ -33,7 +34,11 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "events")
       return takeEvents(request.clear, request.arm, request.watch);
     if (request.op === "inspect") return inspect(request.ref);
-    if (request.op === "setColor") return setColor(request.ref, request.value);
+    if (request.op === "setValue") return setValue(request.ref, request.value);
+    if (request.op === "selectOption")
+      return selectOption(request.ref, request.index);
+    if (request.op === "keys")
+      return syntheticKeys(request.ref, request.presses);
     if (request.op === "focus") return focusRef(request.ref);
     if (request.op === "syntheticClick")
       return syntheticClick(request.ref, request.action, request.modifiers);

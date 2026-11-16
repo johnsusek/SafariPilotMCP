@@ -191,7 +191,7 @@ struct ContractTests {
     let click = AppCommand.click(tabId: 2, target: .named(name: "Sign in", role: "button"))
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(click)) == click)
     #expect(click.logLabel.contains(#"button "Sign in""#))
-    #expect(AppCommand.formInput(tabId: 2, target: .named(name: "Email", role: ""), value: .text("secret")).logLabel == #"formInput(tabId: Optional(2), target: "Email", value: text of 6 characters)"#)
+    #expect(AppCommand.formInput(tabId: 2, target: .named(name: "Email", role: ""), value: .text("secret")).logLabel == #"formInput(tabId: Optional(2), target: "Email", value: text of 6 characters, compat: false)"#)
   }
 
   @Test func waitForEncodesAndDecodes() throws {
@@ -203,7 +203,7 @@ struct ContractTests {
     #expect(pending.pending == "navigating" && pending.match == nil && pending.url == nil)
   }
 
-  @Test func commandsEncodeTheContractShapes() {
+  @Test func commandsEncodeTheContractShapes() throws {
     #expect(BackgroundCommand.tab(tabId: nil).json == ["type": "tab", "tabId": .null])
     #expect(BackgroundCommand.tabCreate(url: nil, safariFrontmost: true).json == ["type": "tabCreate", "url": .null, "safariFrontmost": .bool(true)])
     #expect(BackgroundCommand.history(tabId: 4, direction: .back).json == ["type": "history", "tabId": .number(4), "direction": "back"])
@@ -214,7 +214,12 @@ struct ContractTests {
     #expect(ContentRequest.events(clear: true, arm: true, watch: nil).json == ["op": "events", "clear": .bool(true), "arm": .bool(true), "watch": .null])
     #expect(ContentRequest.events(clear: true, arm: false, watch: PageRef(frames: [5], local: 7)).json == ["op": "events", "clear": .bool(true), "arm": .bool(false), "watch": "5:7"])
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
-    #expect(ContentRequest.setColor(ref: PageRef(frames: [5], local: 3), value: "#00ff00").json == ["op": "setColor", "ref": "5:3", "value": "#00ff00"])
+    #expect(ContentRequest.setValue(ref: PageRef(frames: [5], local: 3), value: "#00ff00").json == ["op": "setValue", "ref": "5:3", "value": "#00ff00"])
+    #expect(ContentRequest.selectOption(ref: PageRef(frames: [], local: 3), index: 2).json == ["op": "selectOption", "ref": "3", "index": .number(2)])
+    #expect(try ContentRequest.keys(ref: nil, presses: [KeyChord.parse("shift+Tab"), KeyChord.parse("a")]).json == [
+      "op": "keys", "ref": .null,
+      "presses": .array([.object(["key": "Tab", "character": .null, "modifiers": .array(["shift"])]), .object(["key": "a", "character": "a", "modifiers": .array([])])]),
+    ])
     #expect(ContentRequest.locate(ref: PageRef(frames: [5, 3], local: 12)).json == ["op": "locate", "ref": "5:3:12"])
     #expect(ContentRequest.readPage(filter: .interactive, maxChars: 100, ref: nil, depth: 3, viewport: true).json == ["op": "readPage", "filter": "interactive", "maxChars": .number(100), "ref": .null, "depth": .number(3), "viewport": .bool(true)])
     #expect(ContentRequest.pageText(maxChars: 100, format: .markdown, ref: PageRef(frames: [5], local: 2)).json == ["op": "pageText", "maxChars": .number(100), "format": "markdown", "ref": "5:2"])
@@ -240,7 +245,7 @@ struct ContractTests {
     #expect(decoded.kind == "cli")
     let probe = AppCommand.debugCG(tabId: 2, probe: .key(try KeyChord.parse("cmd+a"), ref: 4), windowFields: true)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(probe)) == probe)
-    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", text: nil, target: .ref(7), times: 3)
+    let key = try AppCommand.key(tabId: 5, keys: "Backspace shift+Tab A", text: nil, target: .ref(7), times: 3, compat: true)
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(key)) == key)
     let form = AppCommand.formInput(tabId: nil, target: .ref(2), value: .checked(false))
     #expect(try JSONDecoder().decode(AppCommand.self, from: JSONEncoder().encode(form)) == form)

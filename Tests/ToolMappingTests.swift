@@ -47,6 +47,8 @@ struct ToolMappingTests {
     #expect(try map("form_input", ["role": "searchbox", "value": "cats"]) == .formInput(tabId: 20, target: .named(name: "", role: "searchbox"), value: .text("cats")))
     #expect(try map("scroll_to", ["name": "Footer links"]) == .scrollTo(tabId: 20, target: .named(name: "Footer links", role: "")))
     #expect(try map("key", ["keys": "Enter", "name": "Search", "role": "searchbox"]) == .key(tabId: 20, chords: [enter], target: .named(name: "Search", role: "searchbox"), times: 1))
+    #expect(try map("key", ["keys": "Enter", "compat": .bool(true)]) == .key(tabId: 20, chords: [enter], target: nil, times: 1, compat: true))
+    #expect(try map("form_input", ["ref": .number(5), "value": "Two", "compat": .bool(true)]) == .formInput(tabId: 20, target: .ref(5), value: .text("Two"), compat: true))
     #expect(try map("scroll", ["direction": "down", "role": "listbox"]) == .scroll(tabId: 20, target: .named(name: "", role: "listbox"), left: 0, top: 300))
     // Blank text counts as not given, so it neither targets nor clashes with a ref.
     #expect(try map("key", ["keys": "Enter", "name": " ", "role": ""]) == .key(tabId: 20, chords: [enter], target: nil, times: 1))
@@ -434,8 +436,8 @@ struct ToolMappingTests {
   }
 
   @Test func logLabelsLeaveOutTypedText() throws {
-    #expect(try map("key", ["text": "hunter2\n"]).logLabel == "key(tabId: Optional(20), keys: 7 characters Enter, target: nil, times: 1)")
-    #expect(try map("form_input", ["ref": .number(4), "value": "hunter2"]).logLabel == "formInput(tabId: Optional(20), target: ref 4, value: text of 7 characters)")
+    #expect(try map("key", ["text": "hunter2\n"]).logLabel == "key(tabId: Optional(20), keys: 7 characters Enter, target: nil, times: 1, compat: false)")
+    #expect(try map("form_input", ["ref": .number(4), "value": "hunter2"]).logLabel == "formInput(tabId: Optional(20), target: ref 4, value: text of 7 characters, compat: false)")
     #expect(try map("handle_dialog", ["action": "accept", "prompt_text": "hunter2"]).logLabel == "dialog(tabId: Optional(20), accept: true, promptText: 7 characters)")
     #expect(try map("form_input", ["ref": .number(4), "value": .bool(true)]).logLabel.contains("checked(true)"))
     #expect(try map("navigate", ["url": "https://a.test/"]).logLabel.contains("https://a.test/"))

@@ -77,6 +77,14 @@ struct DragResult: Codable, Sendable {
 }
 /// focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
 struct FocusResult: Codable, Sendable { let ref: PageRef; let focused: String; let taken: Bool }
+/// target had focus when the first press went out and focused has it after; per press, canceled when a listener called preventDefault, and action the browser default that ran, nil when none applies.
+struct KeysResult: Codable, Sendable {
+  struct Press: Codable, Sendable { let key: String; let canceled: Bool; let action: String? }
+
+  let target: String
+  let presses: [Press]
+  let focused: String
+}
 /// via says whether a file input took the files or they were dropped on target; files are read back from the page; dispatched lists the events in order, canceled when a listener called preventDefault.
 struct UploadResult: Codable, Sendable {
   enum Via: String, Codable, Sendable { case input, drop }
@@ -264,8 +272,12 @@ enum ContentRequest: Equatable, Sendable {
   /// watch is the ref an action targets: its frame is always read and its events carry onTarget.
   case events(clear: Bool, arm: Bool, watch: PageRef?)
   case inspect(ref: PageRef)
-  /// Sets a color input from the page script, firing untrusted input and change events; answers with inspect's read-back.
-  case setColor(ref: PageRef, value: String)
+  /// Sets a color, range, date, time or datetime-local input from the page script, firing untrusted input and change events; answers with inspect's read-back.
+  case setValue(ref: PageRef, value: String)
+  /// Picks a select's option by index from the page script instead of its native menu, firing untrusted input and change events; answers with inspect's read-back.
+  case selectOption(ref: PageRef, index: Int)
+  /// Presses keys as untrusted events at the focused element (after focusing ref when given) and runs each press's browser default unless a listener canceled it.
+  case keys(ref: PageRef?, presses: [KeyChord])
   /// Focuses ref, or its nearest ancestor that takes focus, with element.focus(); AXFocused would make a background Safari ask to come forward.
   case focus(ref: PageRef)
   /// Dispatches untrusted pointer and mouse events for the click at the element's center and focuses as a press would.
@@ -298,7 +310,13 @@ enum ContentRequest: Equatable, Sendable {
     case let .locate(ref): ["op": "locate", "ref": .string(ref.description)]
     case let .events(clear, arm, watch): ["op": "events", "clear": .bool(clear), "arm": .bool(arm), "watch": watch.map { .string($0.description) } ?? .null]
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
-    case let .setColor(ref, value): ["op": "setColor", "ref": .string(ref.description), "value": .string(value)]
+    case let .setValue(ref, value): ["op": "setValue", "ref": .string(ref.description), "value": .string(value)]
+    case let .selectOption(ref, index): ["op": "selectOption", "ref": .string(ref.description), "index": .number(Double(index))]
+    case let .keys(ref, presses):
+      [
+        "op": "keys", "ref": ref.map { .string($0.description) } ?? .null,
+        "presses": .array(presses.map { .object(["key": .string($0.key), "character": $0.character.map { .string($0) } ?? .null, "modifiers": .array($0.modifiers.map { .string($0.rawValue) })]) }),
+      ]
     case let .focus(ref): ["op": "focus", "ref": .string(ref.description)]
     case let .syntheticClick(ref, action, modifiers): ["op": "syntheticClick", "ref": .string(ref.description), "action": .string(action.rawValue), "modifiers": .array(modifiers.map { .string($0.rawValue) })]
     case let .drag(ref, to): ["op": "drag", "ref": .string(ref.description), "to": .string(to.description)]

@@ -326,6 +326,47 @@ site_mcp() {
   rm $log
 }
 
+# Opens its own Safari window and puts it in front, with Safari the front app, then checks that key and form_input leave it there by default.
+# Closes that window and gives the front back to the app that had it. Serves testpage on port 8765.
+site_windows() {
+  curl -s -o /dev/null http://127.0.0.1:8765/ || { npm --prefix ${0:A:h:h}/web run --silent testpage >/dev/null 2>&1 &; sleep 1 }
+  open_tab "http://127.0.0.1:8765/index.html"
+  local title="SafariPilot test main"
+  local previous=$(osascript -e 'tell application "System Events" to get name of first process whose frontmost is true')
+  local main=$(osascript -e "tell application \"Safari\" to make new document with properties {URL:\"data:text/html,<title>${title// /%20}</title>\"}" -e 'tell application "Safari" to get id of window 1')
+  sleep 1
+  osascript -e "tell application \"System Events\" to tell process \"Safari\"" -e 'set frontmost to true' -e "perform action \"AXRaise\" of (first window whose name is \"$title\")" -e 'end tell' >/dev/null
+  sleep 0.5
+  front_window() { osascript -e 'tell application "System Events" to tell process "Safari" to get {frontmost, name of window 1}' 2>/dev/null }
+  local front="true, $title"
+
+  if [[ $(front_window) == $front ]]; then
+    local page=$(safaripilot --tab $tab read-page --max-chars 3000)
+    field() { print -r -- "$page" | grep -E "$1" | sed -n "${2:-1}p" | sed -E 's/.*ref=([0-9]+).*/\1/' }
+    kept() { [[ $(front_window) == $front ]] && print "PASS windows: $1 left the test window in front" || { print "FAIL windows: $1 changed the front window to $(front_window)"; failures=$((failures + 1)) } }
+
+    check "windows: key types" 'as untrusted key events, then inserted text x3' key --ref $(field 'textbox "Text"') --text abc
+    kept "key"
+    check "windows: key Tab moves focus" 'moved focus|focused ' key Tab
+    kept "key Tab"
+    check "windows: select" 'selected "Two" .* from the page script' form-input $(field '^combobox') Two
+    kept "select form_input"
+    check "windows: time" '\(matches\)' form-input $(field '^textbox \[') 14:30
+    kept "time form_input"
+    check "windows: date" '\(matches\)' form-input $(field '^textbox \[' 2) 2026-11-20
+    kept "date form_input"
+    check "windows: slider" '\(matches\)' form-input $(field '^slider') 35
+    kept "slider form_input"
+  else
+    print "FAIL windows: could not put the test window in front (Safari frontmost, front window: $(front_window))"
+    failures=$((failures + 1))
+  fi
+
+  close_tab
+  osascript -e "tell application \"Safari\" to close (every window whose id is $main)" >/dev/null
+  osascript -e "tell application \"System Events\" to set frontmost of process \"$previous\" to true" >/dev/null
+}
+
 # install.sh relaunches the app just before a run, so wait up to 30 s for its listener.
 for attempt in {1..30}; do
   safaripilot status >/dev/null 2>&1 && break
@@ -333,7 +374,7 @@ for attempt in {1..30}; do
 done
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet windows mcp)
 
 for site in $sites; do
   site_$site

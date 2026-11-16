@@ -1,10 +1,16 @@
 import ApplicationServices
 import Foundation
 
-/// key: posts pid-targeted key presses at a tab's focused element without activating Safari, then counts the keydowns the page logged.
+/// key: dispatches untrusted key events from the page script, which leaves every window where it is; compat posts pid-targeted key presses at the tab's focused element and counts the keydowns the page logged,
+/// which needs the tab's window made main and so brings it in front of the person's other Safari windows.
 extension Commands {
   /// showChanges false leaves the page diff to a caller that presses keys as part of its own action, as form_input on a slider does.
-  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: PageRef?, _ times: Int, showChanges: Bool = true) async throws -> CLIReply {
+  func key(_ tabId: Int?, _ chords: [KeyChord], _ ref: PageRef?, _ times: Int, compat: Bool, showChanges: Bool = true) async throws -> CLIReply {
+    let presses = Array(Array(repeating: chords, count: times).joined())
+    let pressed = KeyChord.summary(chords) + (times > 1 ? " x\(times)" : "")
+
+    if !compat { return try await pageKeys(tabId, presses, pressed, ref, showChanges: showChanges) }
+
     let tab = try await frontTab(tabId)
     let target: AXEngine.Target
     let focusNode: AXNode
@@ -30,7 +36,6 @@ extension Commands {
 
     let watch = showChanges ? await watchChanges(tab.id, ref) : nil
     var poster = EventPoster(pid: pid, windowID: nil)
-    let presses = Array(repeating: chords, count: times).joined()
 
     try await Timing.measure("keys") {
       for (index, chord) in presses.enumerated() {
@@ -43,7 +48,6 @@ extension Commands {
       }
     }
 
-    let pressed = KeyChord.summary(chords) + (times > 1 ? " x\(times)" : "")
     let expected = times * chords.reduce(0) { $0 + $1.modifiers.count + 1 }
     var data: [String: JSONValue] = [
       "tabId": .number(Double(tab.id)),
@@ -127,6 +131,37 @@ extension Commands {
     let last = keydowns.last.map { event in "\(event.ref.map { "[\($0)] " } ?? "")\(event.target)" } ?? "?"
     let text = "pressed \(pressed) in tab \(tab.id); \(keydowns.count) of \(expected) keydowns reached the page\(extra), last on \(last)"
     return CLIReply(ok: true, text: ([text] + landed.lines + changed).joined(separator: "\n"), data: .object(data))
+  }
+
+  private func pageKeys(_ tabId: Int?, _ presses: [KeyChord], _ pressed: String, _ ref: PageRef?, showChanges: Bool) async throws -> CLIReply {
+    let tab = try await call(.tab(tabId: tabId)).decode(TabResult.self).tab
+    let watch = showChanges ? await watchChanges(tab.id, ref) : nil
+    let response: JSONValue
+
+    // A listener that opens a dialog stops the presses mid-sequence; the rest run once handle_dialog answers it.
+    do { response = try await content(tab.id, .keys(ref: ref, presses: presses)) } catch {
+      guard let open = try AXEngine.dialog(for: tab) else { throw error }
+
+      let text = "pressed \(pressed) in tab \(tab.id) as untrusted key events, which opened \(open.dialog.line); the rest run after handle_dialog accepts or dismisses it"
+      return try CLIReply(ok: true, text: text, data: .object(["tabId": .number(Double(tab.id)), "dialog": JSONValue(encoding: open.dialog)]))
+    }
+
+    let acted = ContinuousClock.now
+    let result = try response.decode(KeysResult.self)
+    var runs: [(action: String, count: Int)] = []
+
+    for action in result.presses.compactMap(\.action) {
+      if runs.last?.action == action { runs[runs.count - 1].count += 1 } else { runs.append((action, 1)) }
+    }
+
+    let canceled = result.presses.filter(\.canceled).count
+    let defaults = runs.isEmpty ? "no browser default applied, so only the page's own key listeners could act; if nothing changed, repeat with compat true" : "then \(runs.map { $0.count > 1 ? "\($0.action) x\($0.count)" : $0.action }.joined(separator: ", "))"
+    let text = "pressed \(pressed) in tab \(tab.id) on \(result.target) as untrusted key events, \(defaults)\(canceled > 0 ? "; the page canceled \(canceled) of \(result.presses.count)" : ""); focus is on \(result.focused)"
+    let reply = CLIReply(ok: true, text: text, data: response)
+
+    guard let watch else { return reply }
+
+    return await withOutcome(reply, tab, since: acted, watch)
   }
 
   private func focused(in target: AXEngine.Target) -> AXNode? {

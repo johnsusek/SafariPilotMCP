@@ -69,8 +69,12 @@ export type ContentRequest =
   // arm turns on move and drag-over logging until the next events request; watch is a ref whose element sets each event's onTarget.
   | { op: "events"; clear: boolean; arm: boolean; watch: number | null }
   | { op: "inspect"; ref: number }
-  // Sets a color input's value and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
-  | { op: "setColor"; ref: number; value: string }
+  // Sets a color, range, date, time or datetime-local input's value and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
+  | { op: "setValue"; ref: number; value: string }
+  // Picks a select's option by index and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
+  | { op: "selectOption"; ref: number; index: number }
+  // Presses keys as untrusted keyboard events at the focused element, after focusing ref when given, running each press's browser default unless a listener canceled it.
+  | { op: "keys"; ref: number | null; presses: KeyPress[] }
   // Focuses ref, or its nearest ancestor that takes focus, with element.focus().
   | { op: "focus"; ref: number }
   // Dispatches untrusted pointer and mouse events at the element's center and focuses as a press would, with no other default actions.
@@ -226,6 +230,20 @@ export type DragResult = {
   html5: boolean;
   dropped: boolean;
   dispatched: { type: string; canceled: boolean; count: number }[];
+};
+// One key press: key is a named key such as Enter or the printable character, character is set for printable keys.
+export type KeyPress = {
+  key: string;
+  character: string | null;
+  modifiers: Modifier[];
+};
+// keys: target is what had focus when the first press went out, focused what has it after; per press, canceled when a keydown or keypress listener
+// called preventDefault, and action is the browser default that ran instead (inserted text, moved focus, submitted a form), null when none applies.
+export type KeysResult = {
+  ok: true;
+  target: string;
+  presses: { key: string; canceled: boolean; action: string | null }[];
+  focused: string;
 };
 // focus: focused is the active element; taken says ref or an ancestor below body took focus, which Safari refuses in a cross-origin frame that has had no real click.
 export type FocusResult = {
@@ -431,6 +449,7 @@ export type ContentResponse =
   | ClickResult
   | DragResult
   | FocusResult
+  | KeysResult
   | UploadResult
   | ReadPageResult
   | FindResult

@@ -73,7 +73,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   case snapshot(tabId: Int?)
   /// A plain left click is an AXPress; any other action or any modifier dispatches synthetic DOM events.
   case click(tabId: Int?, target: ElementTarget, action: ClickAction = .left, modifiers: [KeyChord.Modifier] = [])
-  case formInput(tabId: Int?, target: ElementTarget, value: FormValue)
+  /// compat sets selects, date and time inputs and sliders through Safari's native controls and real keys, which brings the tab's window in front of the person's other Safari windows; otherwise the page script sets them.
+  case formInput(tabId: Int?, target: ElementTarget, value: FormValue, compat: Bool = false)
   /// Presses ref and drags to the center of to, both in one frame, as untrusted events the page script dispatches.
   case drag(tabId: Int?, ref: PageRef, to: PageRef)
   case events(tabId: Int?, clear: Bool)
@@ -92,8 +93,9 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// Scrolls the container around target, or the page when nil.
   case scroll(tabId: Int?, target: ElementTarget?, left: Double, top: Double)
   case scrollTo(tabId: Int?, target: ElementTarget)
-  /// Presses chords in order, the whole sequence `times` times, after focusing target when given.
-  case key(tabId: Int?, chords: [KeyChord], target: ElementTarget?, times: Int)
+  /// Presses chords in order, the whole sequence `times` times, after focusing target when given: as untrusted events from the page script,
+  /// or with compat as real key presses, which go to Safari's main window and so bring the tab's window in front of the person's other Safari windows.
+  case key(tabId: Int?, chords: [KeyChord], target: ElementTarget?, times: Int, compat: Bool = false)
   /// region is in the full screenshot's pixels; scale shrinks the result.
   case screenshot(tabId: Int?, region: PixelRect?, scale: Double)
   case resizeWindow(tabId: Int?, width: Int, height: Int)
@@ -165,8 +167,8 @@ enum AppCommand: Codable, Sendable, Equatable {
   /// The command as the activity log shows it: what a client typed into a field, pressed as text or answered a prompt with is given by its size, since the log is on screen.
   var logLabel: String {
     switch self {
-    case let .formInput(tabId, target, .text(text)): "formInput(tabId: \(String(describing: tabId)), target: \(target), value: text of \(text.count) characters)"
-    case let .key(tabId, chords, target, times): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), target: \(String(describing: target)), times: \(times))"
+    case let .formInput(tabId, target, .text(text), compat): "formInput(tabId: \(String(describing: tabId)), target: \(target), value: text of \(text.count) characters, compat: \(compat))"
+    case let .key(tabId, chords, target, times, compat): "key(tabId: \(String(describing: tabId)), keys: \(KeyChord.summary(chords)), target: \(String(describing: target)), times: \(times), compat: \(compat))"
     case let .dialog(tabId, accept, promptText?): "dialog(tabId: \(String(describing: tabId)), accept: \(accept), promptText: \(promptText.count) characters)"
     case let .navigate(tabId, url): "navigate(tabId: \(String(describing: tabId)), url: \(Redaction.url(url)))"
     case let .tabCreate(url?): "tabCreate(url: \(Redaction.url(url)))"
@@ -189,7 +191,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     case .status, .tabs, .tabCreate: nil
     case let .pageFetch(tabId, _): tabId
     case let .tabSelect(tabId), let .tabClose(tabId): tabId
-    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _, _, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
+    case let .ping(tabId), let .snapshot(tabId), let .click(tabId, _, _, _), let .formInput(tabId, _, _, _), let .drag(tabId, _, _), let .events(tabId, _), let .navigate(tabId, _), let .history(tabId, _), let .readPage(tabId, _, _, _, _, _), let .find(tabId, _, _), let .pageText(tabId, _, _, _), let .scroll(tabId, _, _, _), let .scrollTo(tabId, _), let .resizeWindow(tabId, _, _), let .javascript(tabId, _, _), let .fileUpload(tabId, _, _), let .consoleMessages(tabId, _, _, _, _), let .networkRequests(tabId, _, _, _), let .networkRequest(tabId, _), let .dialog(tabId, _, _), let .waitCheck(tabId, _), let .key(tabId, _, _, _, _), let .screenshot(tabId, _, _), let .debugAX(tabId, _), let .debugFrames(tabId), let .debugCG(tabId, _, _): tabId
     }
   }
 
@@ -270,7 +272,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   }
 
   /// Chords come from keys split on whitespace or from text one character each; cmd chords are refused because Safari acts on its own shortcuts before the page sees them.
-  static func key(tabId: Int?, keys: String?, text: String?, target: ElementTarget?, times: Int) throws -> AppCommand {
+  static func key(tabId: Int?, keys: String?, text: String?, target: ElementTarget?, times: Int, compat: Bool) throws -> AppCommand {
     let chords: [KeyChord]
 
     switch (keys, text) {
@@ -289,7 +291,7 @@ enum AppCommand: Codable, Sendable, Equatable {
     // Divided rather than multiplied, so a huge repeat cannot overflow.
     guard times <= maxKeyPresses / chords.count else { throw Failure(.invalidArgument, "\(chords.count) keys x \(times) repeats is more than the limit of \(maxKeyPresses) presses") }
 
-    return .key(tabId: tabId, chords: chords, target: target, times: times)
+    return .key(tabId: tabId, chords: chords, target: target, times: times, compat: compat)
   }
 }
 

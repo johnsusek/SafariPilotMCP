@@ -10,7 +10,7 @@ your existing Safari session while you continue using your Mac.
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
 - **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Windows and focus](#windows-and-focus) lists what changes while you work in Safari itself.
-- **Real clicks and typing.** Plain clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
+- **Real clicks.** Plain clicks and text fields go through macOS Accessibility, so pages get trusted input. Keys, selects, dates and sliders use page events, and `compat: true` switches them to real input for pages that ignore those.
 - **Fewer page reads.** Each action returns what it changed on the page, so the agent doesn't read the page again.
 
 <p align="center"><img src="docs/screenshots/general.webp" width="49%" alt="SafariPilot General pane"> <img src="docs/screenshots/clients.webp" width="49%" alt="SafariPilot Clients pane"></p>
@@ -96,14 +96,13 @@ While you work in another app, nothing here takes focus from it, apart from the 
 | --- | --- |
 | `tab_create` with no pilot window open | Safari shows the new window in front. SafariPilot focuses your window again at once, so the pilot window flashes. |
 | `tab_create` with the pilot window open | None. The tab opens in the background of the pilot window. |
-| `key`, and `form_input` on date, time and slider inputs | Takes keyboard focus. These are real key presses, which Safari sends to its main window, so the pilot window is made the main window. |
-| `form_input` on a `select` | Safari's menu for the select opens on screen until the option is picked. |
+| `key` and `form_input` with `compat: true` | Brings the pilot window in front. Real key presses only reach Safari's main window, and a select's native menu opens on screen. |
 | A page that opens its own tab or window | Safari opens it as it would for you, which can bring the pilot window in front. |
-| `click`, `screenshot`, `tab_select` and other `form_input` | None. They switch the pilot window to the agent's tab where it sits. |
+| `click`, `form_input`, `screenshot`, `tab_select` | None. They switch the pilot window to the agent's tab where it sits. |
 | `resize_window` | None. The pilot window changes size where it sits. |
-| Reads, `navigate`, `scroll`, `scroll_to`, `javascript`, `file_upload`, `page_fetch`, `handle_dialog`, `drag` | None. |
+| Reads, `key`, `navigate`, `scroll`, `scroll_to`, `javascript`, `file_upload`, `page_fetch`, `handle_dialog`, `drag` | None. |
 
-- If you click into another Safari window while `key` is typing, it stops and reports how many keys it sent.
+- If you click into another Safari window while `key` with `compat: true` is typing, it stops and reports how many keys it sent.
 - A covered pilot window is hidden as far as its page can tell, so Safari slows the page's timers and pauses its animation frames. Pages that draw on animation frames can show stale values.
 - Rarely, Safari itself comes forward after focus moves into a field on a page. **Activity** logs it as "Safari came forward".
 - SafariPilot's approval dialog floats above every app until you answer it.
@@ -111,7 +110,7 @@ While you work in another app, nothing here takes focus from it, apart from the 
 ## Limits
 
 - No hover: the CSS `:hover` pseudo-class is never applied. 
-- Double, triple, right and modifier clicks and `drag` are synthetic events, which some pages ignore.
+- Double, triple, right and modifier clicks, `drag`, `key`, and `form_input` on selects, dates, times and sliders are synthetic events, which some pages ignore. `key` and `form_input` take `compat: true` for real input, which brings the pilot window in front of your Safari windows.
 - `key` refuses Cmd shortcuts, to prevent system interaction.
 
 ## Troubleshooting

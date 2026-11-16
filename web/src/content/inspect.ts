@@ -137,28 +137,38 @@ function numberOrNull(text: string | null) {
   return Number.isFinite(number) ? number : null;
 }
 
-// No AX path sets a color input: its AXColorWell ignores AXValue and opens a popover of unnamed swatches. The isolated world's
-// value setter is the native one, so frameworks tracking the value (React) still see the change in the events.
-export function setColor(ref: number, value: string): InspectResult | Failure {
+export function fire(element: Element, ...types: string[]) {
+  for (let type of types)
+    element.dispatchEvent(new Event(type, { bubbles: true }));
+}
+
+let settableInputs = new Set(["color", "range", ...dateTimeInputs]);
+
+// Sets a color, range, date, time or datetime-local input from the page script, which needs no window made main or native control opened.
+// The isolated world's value setter is the native one, so frameworks tracking the value (React) still see the change in the untrusted input and change events.
+export function setValue(ref: number, value: string): InspectResult | Failure {
   let element = resolveRef(ref);
   if (!(element instanceof Element)) return element;
 
-  if (!(element instanceof HTMLInputElement) || element.type !== "color")
+  if (
+    !(element instanceof HTMLInputElement) ||
+    !settableInputs.has(element.type)
+  )
     return {
       ok: false,
-      error: `ref ${ref} is not a color input`,
+      error: `ref ${ref} is not a color, range, date, time or datetime-local input`,
       code: "invalid_argument",
     };
 
-  if (element.disabled)
+  if (element.disabled || element.readOnly)
     return {
       ok: false,
-      error: `color input ref ${ref} is disabled`,
+      error: `${element.type} input ref ${ref} is ${element.disabled ? "disabled" : "read-only"}`,
       code: "not_actionable",
     };
 
   // WebKit takes any CSS color and stores its own serialization (green reads back #008000), but an unparsable one as #000000.
-  if (!CSS.supports("color", value))
+  if (element.type === "color" && !CSS.supports("color", value))
     return {
       ok: false,
       error: `"${value}" is not a CSS color`,
@@ -166,7 +176,26 @@ export function setColor(ref: number, value: string): InspectResult | Failure {
     };
 
   element.value = value;
-  element.dispatchEvent(new Event("input", { bubbles: true }));
-  element.dispatchEvent(new Event("change", { bubbles: true }));
+  fire(element, "input", "change");
+  return inspect(ref);
+}
+
+// Picks a select's option by index from the page script instead of the native menu, which brings its window forward; input and change are untrusted.
+export function selectOption(
+  ref: number,
+  index: number,
+): InspectResult | Failure {
+  let element = resolveRef(ref);
+  if (!(element instanceof Element)) return element;
+
+  if (!(element instanceof HTMLSelectElement) || !element.options[index])
+    return {
+      ok: false,
+      error: `ref ${ref} is not a select with an option ${index}`,
+      code: "invalid_argument",
+    };
+
+  element.selectedIndex = index;
+  fire(element, "input", "change");
   return inspect(ref);
 }

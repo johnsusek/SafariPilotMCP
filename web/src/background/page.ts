@@ -25,6 +25,7 @@ import type {
   Failure,
   FindResult,
   FocusResult,
+  KeysResult,
   FrameBoxResult,
   InspectResult,
   PageTextResult,
@@ -653,6 +654,9 @@ async function dispatch(
   if (request.op === "scroll" && request.ref === null)
     return await send(0, { ...request, ref: null });
 
+  if (request.op === "keys" && request.ref === null)
+    return await send(0, { ...request, ref: null });
+
   if (request.op === "scrollIntoView") {
     let path = parsePath(request.ref);
     let walk = path.frames.length
@@ -717,20 +721,21 @@ async function dispatch(
   if (
     request.op === "syntheticClick" ||
     request.op === "upload" ||
-    request.op === "focus"
+    request.op === "focus" ||
+    request.op === "keys"
   ) {
     let acted = await send(frameId, { ...request, ref: path.local });
     return acted.ok
       ? {
-          ...(acted as ClickResult | UploadResult | FocusResult),
-          ref: request.ref,
+          ...(acted as ClickResult | UploadResult | FocusResult | KeysResult),
+          ref: request.ref!,
         }
       : inFrame(acted, path);
   }
 
   let inspected = await send(
     frameId,
-    request.op === "setColor"
+    request.op === "setValue" || request.op === "selectOption"
       ? { ...request, ref: path.local }
       : { op: "inspect", ref: path.local },
   );
