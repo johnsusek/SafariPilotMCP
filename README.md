@@ -13,6 +13,8 @@ your existing Safari session while you continue using your Mac.
 - **Real clicks and typing.** Plain clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
 - **Fewer page reads.** Each action returns what it changed on the page, so the agent doesn't read the page again.
 
+<p align="center"><img src="docs/screenshots/general.webp" width="49%" alt="SafariPilot General pane"> <img src="docs/screenshots/clients.webp" width="49%" alt="SafariPilot Clients pane"></p>
+
 ## Requirements
 
 - macOS 26 or later
