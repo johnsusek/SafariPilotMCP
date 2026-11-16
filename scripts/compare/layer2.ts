@@ -147,6 +147,18 @@ let tasks: Record<string, Task> = {
       "Go to https://www.doordash.com, set the delivery address to 1 Market St, San Francisco, CA 94105, open the nearest Chipotle Mexican Grill and report the price of a Burrito (not the Burrito Bowl). Do not sign in or add anything to the cart.",
     check: (answer) => /\$\d+\.\d\d/.test(answer),
   },
+  // Apple's option prices load only as options are picked, so the total is pinned from a run by hand; a changed price fails every run loudly.
+  apple: {
+    prompt: () =>
+      "Go to https://www.apple.com/shop/buy-mac/macbook-pro and configure a 14-inch MacBook Pro in Space Black with the standard display, the M6 chip, 24GB of unified memory and 2TB of storage. Report the price the page shows for that configuration. Do not add it to the bag.",
+    check: (answer) => /\$2,?699/.test(answer),
+  },
+  // An archived post, so its comments and their order no longer change.
+  reddit: {
+    prompt: () =>
+      "Go to https://www.reddit.com/r/space/comments/frdd1d/?sort=top and report the username of whoever wrote the first top-level comment.",
+    check: (answer) => /lewri/i.test(answer),
+  },
 };
 
 let ending =
