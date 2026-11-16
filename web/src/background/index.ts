@@ -20,10 +20,16 @@ let lifecycle = (event: string) => {
   send({ kind: "lifecycle", instance, event, at: Date.now() }).catch(() => {});
 };
 
+// Commands wait for the pilot tabs, since tab_create trusts a pilot window only while every tab in it is one.
+let restored = restorePilotTabs().catch((error) =>
+  lifecycle(`pilot tabs not restored: ${error}`),
+);
+
 let pollLoop = async () => {
   if (polling) return;
 
   polling = true;
+  await restored;
 
   // A command's result rides on the next poll, so only one native request is ever in flight;
   // this stays correct even if Safari serializes sendNativeMessage calls.
@@ -94,7 +100,4 @@ let port: chrome.runtime.Port | null = connect();
 
 void browser.alarms.create("keepalive", { periodInMinutes: 1 });
 lifecycle("start");
-restorePilotTabs().catch((error) =>
-  lifecycle(`pilot tabs not restored: ${error}`),
-);
 void pollLoop();

@@ -72,9 +72,13 @@ let fakeBrowser = () => ({
     ]),
   },
   windows: {
-    get: vi.fn(async (id: number) =>
-      id === 1 ? { id, left: 10, top: 20, width: 800, height: 600 } : { id },
-    ),
+    get: vi.fn(async (id: number, options?: { populate?: boolean }) => ({
+      ...(id === 1 ? { left: 10, top: 20, width: 800, height: 600 } : {}),
+      id,
+      ...(options?.populate
+        ? { tabs: tabs.filter((tab) => tab.windowId === id) }
+        : {}),
+    })),
     getAll: vi.fn(async () => [
       { id: 1, left: 10, top: 20, width: 800, height: 600 },
       { id: 2 },
@@ -257,6 +261,7 @@ describe("runCommand", () => {
 
   test("tabCreate with a url opens in the pilot window and waits", async () => {
     stored.pilotWindow = 1;
+    tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       fireComplete(8);
@@ -277,6 +282,7 @@ describe("runCommand", () => {
   test("tabCreate answers with a tab still loading after the timeout, so its caller can own it", async () => {
     vi.useFakeTimers();
     stored.pilotWindow = 1;
+    tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       return tabs.at(-1);
@@ -313,6 +319,17 @@ describe("runCommand", () => {
     });
     expect(first).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
     expect(second).toMatchObject({ ok: true, tab: { id: 10, windowId: 3 } });
+  });
+
+  test("tabCreate never reuses a stored window holding the user's tabs", async () => {
+    stored.pilotWindow = 1;
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 3, true));
+      return { id: 3, tabs: [tabs.at(-1)!] };
+    });
+    await run({ type: "tabCreate", url: null });
+    expect(fake.tabs.create).not.toHaveBeenCalled();
+    expect(stored.pilotWindow).toBe(3);
   });
 
   test("tabCreate replaces a closed pilot window", async () => {
@@ -559,6 +576,7 @@ describe("site access", () => {
   test("tabCreate keeps its tab when Safari holds it behind the prompt", async () => {
     vi.useFakeTimers();
     stored.pilotWindow = 1;
+    tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       fake.tabs.get.mockReturnValue(new Promise(() => {}));
       setTimeout(() => fireComplete(8), 0);

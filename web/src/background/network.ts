@@ -190,6 +190,8 @@ let pilot = (tabId: number) => {
   updateListening();
 };
 
+export let isPilot = (tabId: number) => pilotTabs.has(tabId);
+
 export let forget = (tabId: number) => {
   pending.delete(tabId);
 

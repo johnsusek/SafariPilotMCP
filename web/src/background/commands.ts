@@ -18,7 +18,7 @@ import {
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
-import { listRequests, piloting, requestDetail } from "./network";
+import { isPilot, listRequests, piloting, requestDetail } from "./network";
 import { runPageFetch } from "./pageFetch";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
@@ -187,13 +187,16 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };
 
   if (command.type === "tabCreate") {
-    // Every session shares one pilot window; session storage forgets it when Safari quits or the extension reloads, which renumber windows.
+    // Every session shares one pilot window. A stored id is trusted only while every tab in its window is a pilot tab, since a renumbered id can name the user's window.
     let url = command.url ?? undefined;
     let { pilotWindow } = await browser.storage.session.get("pilotWindow");
-    let window =
+    let found =
       typeof pilotWindow === "number"
-        ? await browser.windows.get(pilotWindow).catch(() => null)
+        ? await browser.windows
+            .get(pilotWindow, { populate: true })
+            .catch(() => null)
         : null;
+    let window = found?.tabs?.every((tab) => isPilot(tab.id!)) ? found : null;
     let create = () =>
       piloting(async () => {
         if (window)
