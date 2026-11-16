@@ -3,8 +3,8 @@
 <p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a></p>
 
 # SafariPilot
-
-**SafariPilot is an MCP server for Safari on macOS. It lets agents work in your Safari while you keep using your Mac.**
+SafariPilot is a local MCP server for Safari on macOS. It lets agents work in
+your existing Safari session while you continue using your Mac.
 
 ## Features
 
@@ -19,8 +19,8 @@
 - Safari 27 (earlier versions are untested)
 - A user logged in to the Mac's desktop. The app and Safari need a GUI session.
   
-> **Local macOS software required:** SafariPilot controls Safari on the same
-> Mac as the MCP client. It is not a standalone remote or cloud browser.
+> [!NOTE]
+> **Local macOS software required:** SafariPilot controls Safari on the same Mac as the MCP client. It is not a standalone remote or cloud browser.
 
 ## Install
 
@@ -39,6 +39,7 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**.
 2. In SafariPilot's **General** pane, grant **Accessibility**.
 3. In the **Clients** pane, set up a client: Claude Desktop, Claude Code, ChatGPT and Codex, Cursor, VS Code or LM Studio. **Other Clients** copies a standard `mcpServers` entry.
+4. Ask your agent to open a page in Safari and click a link. Approve the client when SafariPilot asks.
 
 ### Manual configuration
 
@@ -88,18 +89,18 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 
 The **Tools** pane in the app shows each tool's full description.
 
-> **Agent permissions:** These tools can read page content, interact with
-> authenticated websites, submit forms, upload files, execute JavaScript,
-> inspect network requests, and navigate tabs. Review client approvals and
-> use care with sensitive accounts.
-
+> [!WARNING]
+> **Agent permissions:** These tools can read page content, interact with authenticated websites, submit forms, upload files, execute JavaScript, inspect network requests, and navigate tabs. Review client approvals and use care with sensitive accounts.
 
 ## Security and trust
 
 - **Approve every client.** Each new client needs approval first. Disconnect one in **Clients** and it must be approved again.
 - **Tab isolation.** An agent sees only the tabs it opened and the popups they open.
+- **Secure local connection.** The Safari extension, the app and the agent talk only over loopback, and every connection needs a secret token that changes each launch.
 - **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from agents' page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
-- **Secure local connection.** The Safari extension, the app and the agent talk locally, and every connection needs a secret token that changes each launch.
+
+> [!CAUTION]
+> Normal page reads, URLs, and network logs redact or omit supported password fields, card numbers, tokens, and cookies. This is not a complete data-loss-prevention guarantee: screenshots, JavaScript results, page fetches, and other tool responses may contain sensitive information.
 
 ## Limits
 
