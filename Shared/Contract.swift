@@ -323,7 +323,7 @@ enum BackgroundCommand: Equatable, Sendable {
   case content(tabId: Int?, request: ContentRequest)
   case tabs
   case tab(tabId: Int?)
-  case tabCreate(url: String?)
+  case tabCreate(url: String?, safariFrontmost: Bool)
   case tabSelect(tabId: Int)
   case tabClose(tabId: Int)
   case navigate(tabId: Int?, url: String)
@@ -344,7 +344,7 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .content(tabId, request): return ["type": "content", "tabId": id(tabId), "request": .object(request.json)]
     case .tabs: return ["type": "tabs"]
     case let .tab(tabId): return ["type": "tab", "tabId": id(tabId)]
-    case let .tabCreate(url): return ["type": "tabCreate", "url": url.map { .string($0) } ?? .null]
+    case let .tabCreate(url, safariFrontmost): return ["type": "tabCreate", "url": url.map { .string($0) } ?? .null, "safariFrontmost": .bool(safariFrontmost)]
     case let .tabSelect(tabId): return ["type": "tabSelect", "tabId": id(tabId)]
     case let .tabClose(tabId): return ["type": "tabClose", "tabId": id(tabId)]
     case let .navigate(tabId, url): return ["type": "navigate", "tabId": id(tabId), "url": .string(url)]

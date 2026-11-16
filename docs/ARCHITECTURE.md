@@ -30,7 +30,7 @@ Client ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 - Plain clicks are `AXPress` on the Accessibility element whose frame best matches the content script's element rect (intersection over union of at least 0.7). They produce trusted `mousedown`, `mouseup` and `click`, with Safari in the background.
 - Text is set with `AXValue` after a page-side `focus()`. Keys are `CGEvent`s posted to Safari's pid only, never the global HID tap, so they never reach another app. `cmd` chords are refused because Safari acts on them before the page.
 - Double, triple, right and modifier clicks, drags, color inputs and file uploads are synthetic, untrusted page events, and replies say so.
-- Nothing moves the real cursor or brings Safari forward. If Safari activates during a command, the activity log records it.
+- Nothing moves the real cursor or asks Safari to come forward. If Safari activates during a command, the activity log records it. Among Safari's own windows some tools do move focus; the README's Windows and focus section lists them.
 - Every action is verified: click counts trusted clicks in the target frame, key counts trusted keydowns, form_input reads the value back. A miss fails with `input_unconfirmed`.
 - After an action, a settle step waits up to 15 s for a page load the action started and reports where the tab landed.
 

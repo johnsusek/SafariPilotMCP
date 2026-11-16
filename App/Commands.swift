@@ -18,7 +18,7 @@ struct Commands {
     case let .formInput(tabId, target, value): try await resolving(tabId, target) { try await formInput(tabId, $0, value) }
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
-    case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url)))
+    case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url, safariFrontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Safari")))
     case let .tabSelect(tabId): try await tabReply("selected", call(.tabSelect(tabId: tabId)))
     case let .tabClose(tabId): try await tabClose(tabId)
     case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))

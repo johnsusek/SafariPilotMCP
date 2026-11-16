@@ -89,6 +89,8 @@ let fakeBrowser = () => ({
         tabs: [],
       }),
     ),
+    getLastFocused: vi.fn(async () => ({ id: 1 })),
+    update: vi.fn(async () => ({})),
   },
 });
 
@@ -271,6 +273,7 @@ describe("runCommand", () => {
     expect(fake.tabs.create).toHaveBeenCalledWith({
       windowId: 1,
       url: "https://new",
+      active: false,
     });
     expect(result).toMatchObject({
       ok: true,
@@ -316,9 +319,35 @@ describe("runCommand", () => {
     expect(fake.tabs.create).toHaveBeenCalledWith({
       windowId: 3,
       url: undefined,
+      active: false,
     });
     expect(first).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
     expect(second).toMatchObject({ ok: true, tab: { id: 10, windowId: 3 } });
+  });
+
+  test("tabCreate puts the user's window back in front of a new pilot window when Safari is the front app", async () => {
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 3, true));
+      return { id: 3, tabs: [tabs.at(-1)!] };
+    });
+    await run({ type: "tabCreate", url: null, safariFrontmost: true });
+    expect(fake.windows.update).toHaveBeenCalledWith(1, { focused: true });
+    expect(fake.windows.update.mock.invocationCallOrder[0]).toBeGreaterThan(
+      fake.windows.create.mock.invocationCallOrder[0],
+    );
+  });
+
+  test("tabCreate focuses no window while Safari is behind another app, or has no window to put back", async () => {
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 3, true));
+      return { id: 3, tabs: [tabs.at(-1)!] };
+    });
+    await run({ type: "tabCreate", url: null, safariFrontmost: false });
+    stored = {};
+    fake.windows.getLastFocused.mockRejectedValueOnce(new Error("no windows"));
+    await run({ type: "tabCreate", url: null, safariFrontmost: true });
+    expect(fake.windows.create).toHaveBeenCalledTimes(2);
+    expect(fake.windows.update).not.toHaveBeenCalled();
   });
 
   test("tabCreate never reuses a stored window holding the user's tabs", async () => {

@@ -9,7 +9,7 @@ your existing Safari session while you continue using your Mac.
 ## Features
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
-- **No cursor takeover.** Safari can stay in the background, your cursor doesn't move, and keystrokes go only to Safari.
+- **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Windows and focus](#windows-and-focus) lists what changes while you work in Safari itself.
 - **Real clicks and typing.** Plain clicks go through macOS Accessibility and keys are real key presses, so pages get trusted input. Forms and editors that ignore scripted events still work.
 - **Fewer page reads.** Each action returns what it changed on the page, so the agent doesn't read the page again.
 
@@ -78,7 +78,7 @@ The **Tools** pane in the app shows each tool's full description.
 
 ## Security and trust
 
-- **Approve every client.** Each new client needs approval first. Disconnect one in **Clients** and it must be approved again.
+- **Approve every client.** Each new client needs approval first. Uses a token to bypass approvals, so other software on your system can't impersonate your AI agent.
 - **Tab isolation.** An agent sees only the tabs it opened and the popups they open.
 - **Secure local connection.** The Safari extension, the app and the agent talk only over loopback, and every connection needs a secret token that changes each launch.
 - **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from agents' page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
@@ -86,10 +86,33 @@ The **Tools** pane in the app shows each tool's full description.
 > [!CAUTION]
 > Normal page reads, URLs, and network logs redact or omit supported password fields, card numbers, tokens, and cookies. This is not a complete data-loss-prevention guarantee: screenshots, JavaScript results, page fetches, and other tool responses may contain sensitive information.
 
+## Windows and focus
+
+Agents share one Safari window of their own, the pilot window. `tab_create` opens it when none is open, and it closes with its last tab. It can sit behind other windows, but it can't be minimized and Safari can't be hidden.
+
+While you work in another app, nothing here takes focus from it, apart from the last two notes below. While you work in another Safari window, some tools do:
+
+| Tool or event | Effect on the Safari window you are in |
+| --- | --- |
+| `tab_create` with no pilot window open | Safari shows the new window in front. SafariPilot focuses your window again at once, so the pilot window flashes. |
+| `tab_create` with the pilot window open | None. The tab opens in the background of the pilot window. |
+| `key`, and `form_input` on date, time and slider inputs | Takes keyboard focus. These are real key presses, which Safari sends to its main window, so the pilot window is made the main window. |
+| `form_input` on a `select` | Safari's menu for the select opens on screen until the option is picked. |
+| A page that opens its own tab or window | Safari opens it as it would for you, which can bring the pilot window in front. |
+| `click`, `screenshot`, `tab_select` and other `form_input` | None. They switch the pilot window to the agent's tab where it sits. |
+| `resize_window` | None. The pilot window changes size where it sits. |
+| Reads, `navigate`, `scroll`, `scroll_to`, `javascript`, `file_upload`, `page_fetch`, `handle_dialog`, `drag` | None. |
+
+- If you click into another Safari window while `key` is typing, it stops and reports how many keys it sent.
+- A covered pilot window is hidden as far as its page can tell, so Safari slows the page's timers and pauses its animation frames. Pages that draw on animation frames can show stale values.
+- Rarely, Safari itself comes forward after focus moves into a field on a page. **Activity** logs it as "Safari came forward".
+- SafariPilot's approval dialog floats above every app until you answer it.
+
 ## Limits
 
-- No hover: the CSS `:hover` pseudo-class is never applied. Double, triple, right and modifier clicks and `drag` are synthetic events, which some pages ignore.
-- `key` refuses Cmd shortcuts, since Safari takes them as its own.
+- No hover: the CSS `:hover` pseudo-class is never applied. 
+- Double, triple, right and modifier clicks and `drag` are synthetic events, which some pages ignore.
+- `key` refuses Cmd shortcuts, to prevent system interaction.
 
 ## Troubleshooting
 
@@ -104,6 +127,14 @@ In SafariPilot's window, **General > Status** shows Accessibility, the Safari ex
 | `safari_unavailable` | Open Safari. |
 | `build_mismatch` | Safari is running the extension from another copy of SafariPilot. Remove the other copy, or run `scripts/install.sh` when building from source. |
 | `app_unavailable` | Open SafariPilot from `/Applications`. |
+
+## Benchmark
+
+SafariPilot against Claude in Chrome, both driven by Claude Code (Sonnet) with the same prompts. Over 11 tasks run 5 times each, all 110 runs passed, and SafariPilot took 601 s in total against 1,304 s with 36% fewer input tokens. [scripts/compare](scripts/compare) runs it.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tools-dark.webp"><img src="docs/benchmark/tools-light.webp" alt="Median time per tool call, SafariPilot against Claude in Chrome"></picture>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tasks-dark.webp"><img src="docs/benchmark/tasks-light.webp" alt="Median time per task, SafariPilot against Claude in Chrome"></picture>
 
 ## Why SafariPilot
 

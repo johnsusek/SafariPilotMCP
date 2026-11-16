@@ -205,7 +205,7 @@ struct ContractTests {
 
   @Test func commandsEncodeTheContractShapes() {
     #expect(BackgroundCommand.tab(tabId: nil).json == ["type": "tab", "tabId": .null])
-    #expect(BackgroundCommand.tabCreate(url: nil).json == ["type": "tabCreate", "url": .null])
+    #expect(BackgroundCommand.tabCreate(url: nil, safariFrontmost: true).json == ["type": "tabCreate", "url": .null, "safariFrontmost": .bool(true)])
     #expect(BackgroundCommand.history(tabId: 4, direction: .back).json == ["type": "history", "tabId": .number(4), "direction": "back"])
     #expect(BackgroundCommand.screenshot(tabId: 9).json == ["type": "screenshot", "tabId": .number(9)])
     #expect(BackgroundCommand.content(tabId: 2, request: .scroll(ref: nil, left: 0, top: 300)).json == [

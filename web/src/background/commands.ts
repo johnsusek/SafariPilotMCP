@@ -199,13 +199,23 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     let window = found?.tabs?.every((tab) => isPilot(tab.id!)) ? found : null;
     let create = () =>
       piloting(async () => {
+        // Opened as a background tab: Safari brings a window in front of its others when an active tab opens in it. Input selects the tab when it needs to.
         if (window)
           return (await browser.tabs.create({
             windowId: window.id,
             url,
+            active: false,
           })) as KnownTab;
 
+        // As the front app Safari shows a new window over its others despite focused: false, so the window that was in front is focused again.
+        // Never while Safari is behind another app, where focusing a window could bring Safari forward.
+        let front = command.safariFrontmost
+          ? await browser.windows.getLastFocused().catch(() => null)
+          : null;
         let created = await browser.windows.create({ url, focused: false });
+
+        if (front) await browser.windows.update(front.id!, { focused: true });
+
         await browser.storage.session.set({ pilotWindow: created!.id });
         return created!.tabs![0] as KnownTab;
       });
