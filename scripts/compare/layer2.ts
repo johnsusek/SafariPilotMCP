@@ -28,15 +28,17 @@ import {
   toolCalls,
 } from "./agent.ts";
 
-type Expected = { hnUser: string; jqTag: string };
+type Expected = { hnUser: string; jqTag: string; ytSpotify: string };
 type Task = {
   prompt: (fixture: string) => string;
-  check: (answer: string, expected: Expected) => boolean;
+  // pageText is the tool results' text from every saved run of the task, for answers no fixed value can grade.
+  check: (answer: string, expected: Expected, pageText: string) => boolean;
   // The run may read the fixture's folder, which Claude in Chrome needs to upload it.
   readsFixture?: boolean;
 };
 
 let site = "http://127.0.0.1:8765/bench";
+let video = "https://www.youtube.com/watch?v=dQw4w9WgXcQ";
 let fixtureText = "SafariPilot benchmark fixture\n";
 
 let tasks: Record<string, Task> = {
@@ -106,6 +108,45 @@ let tasks: Record<string, Task> = {
         answer.toLowerCase().includes(word),
       ),
   },
+  ytsearch: {
+    prompt: () =>
+      'Go to https://www.youtube.com, search for "never gonna give you up official", open the top result and report its channel and the year it was uploaded.',
+    check: (answer) => /rick astley/i.test(answer) && answer.includes("2009"),
+  },
+  ytplayer: {
+    prompt: () =>
+      `Go to ${video}, pause the video, then use the player's controls to move it to 2:00 without reloading the page or changing its URL. Report the time the player then shows.`,
+    check: (answer) =>
+      [...answer.matchAll(/(\d+):(\d\d)/g)].some(
+        ([, minutes, seconds]) =>
+          Math.abs(Number(minutes) * 60 + Number(seconds) - 120) <= 5,
+      ),
+  },
+  // No fixed value grades the first comment, so the handle only has to be one some run's tools read as text, since an agent reading a screenshot leaves none.
+  ytcomments: {
+    prompt: () =>
+      `Go to ${video}, scroll down to the comments and report the handle (starting with @) of whoever wrote the first comment listed.`,
+    check: (answer, _, pageText) => {
+      let handle = answer.match(/@[\w.-]+/)?.[0];
+      return (
+        !!handle &&
+        !/rickastley/i.test(handle) &&
+        pageText.toLowerCase().includes(handle.toLowerCase())
+      );
+    },
+  },
+  ytdesc: {
+    prompt: () =>
+      `Go to ${video}, expand the video's description and report the link it gives for listening to Rick Astley on Spotify.`,
+    check: (answer, expected) =>
+      answer.toLowerCase().includes(expected.ytSpotify.toLowerCase()),
+  },
+  // Logged out, so the address is set again each run (it persists in each browser's cookies after the first); prices change, so any price passes.
+  doordash: {
+    prompt: () =>
+      "Go to https://www.doordash.com, set the delivery address to 1 Market St, San Francisco, CA 94105, open the nearest Chipotle Mexican Grill and report the price of a Burrito (not the Burrito Bowl). Do not sign in or add anything to the cart.",
+    check: (answer) => /\$\d+\.\d\d/.test(answer),
+  },
 };
 
 let ending =
@@ -125,11 +166,21 @@ let expectedFor = async (out: string): Promise<Expected> => {
   let release = await (
     await fetch("https://api.github.com/repos/jqlang/jq/releases/latest")
   ).json();
+  let watch = await (
+    await fetch(video, { headers: { "accept-language": "en-US" } })
+  ).text();
+  let description = JSON.parse(
+    `"${watch.match(/"shortDescription":"((?:[^"\\]|\\.)*)"/)?.[1] ?? ""}"`,
+  );
   let expected = {
     hnUser: (await item(story.kids[0])).by,
     jqTag: release.tag_name,
+    // Without the scheme, since an agent may report the link as the page shows it.
+    ytSpotify:
+      description.match(/Spotify:\s*(\S+)/)?.[1]?.replace(/^https?:\/\//, "") ??
+      "",
   };
-  if (!expected.hnUser || !expected.jqTag)
+  if (!expected.hnUser || !expected.jqTag || !expected.ytSpotify)
     throw new Error(
       `could not fetch the public answers: ${JSON.stringify(expected)}`,
     );
@@ -138,7 +189,12 @@ let expectedFor = async (out: string): Promise<Expected> => {
   return expected;
 };
 
-let grade = (task: string, events: Timed[], expected: Expected) => {
+let grade = (
+  task: string,
+  events: Timed[],
+  expected: Expected,
+  pageText: string,
+) => {
   let result = events.find((each) => each.event.type == "result")?.event;
   let answer =
     String(result?.result ?? "")
@@ -159,7 +215,7 @@ let grade = (task: string, events: Timed[], expected: Expected) => {
   let wallMs = result?.duration_ms ?? events.at(-1)?.ms ?? 0;
 
   return {
-    ok: !!answer && tasks[task].check(answer, expected),
+    ok: !!answer && tasks[task].check(answer, expected, pageText),
     timedOut: events.some((each) => each.event.type == "timeout"),
     answer,
     wallMs,
@@ -199,6 +255,21 @@ if (unknown.length) throw new Error(`unknown tasks: ${unknown.join(", ")}`);
 await mkdir(out, { recursive: true });
 let expected = await expectedFor(out);
 
+let pageText = async (task: string) =>
+  (
+    await Promise.all(
+      (await readdir(out))
+        .filter(
+          (name) => name.startsWith(`${task}-`) && name.endsWith(".jsonl"),
+        )
+        .map(async (name) =>
+          toolCalls(await loadEvents(join(out, name)))
+            .map((call) => call.text)
+            .join("\n"),
+        ),
+    )
+  ).join("\n");
+
 if (!values.analyze) {
   await requireTestPage(`${site}/form.html`);
   // The real path, since /var is a symlink to /private/var and Claude in Chrome checks a file against the session's folders by real path.
@@ -231,7 +302,7 @@ if (!values.analyze) {
           });
 
         await saveEvents(path, events);
-        let graded = grade(task, events, expected);
+        let graded = grade(task, events, expected, await pageText(task));
         console.log(
           `${task} ${browser} ${run}: ${graded.ok ? "pass" : "FAIL"} ${(graded.wallMs / 1000).toFixed(1)} s, ${graded.calls} calls${timedOut ? ", timed out" : ""}, answer ${JSON.stringify(graded.answer.slice(0, 80))}`,
         );
@@ -253,7 +324,12 @@ for (let file of (await readdir(out))
     task,
     browser,
     run: Number(run),
-    ...grade(task, await loadEvents(join(out, file)), expected),
+    ...grade(
+      task,
+      await loadEvents(join(out, file)),
+      expected,
+      await pageText(task),
+    ),
   });
 }
 

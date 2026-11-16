@@ -14,6 +14,8 @@ export type ToolCall = {
   toolMs: number;
   isError: boolean;
   resultChars: number;
+  // The result's text parts joined, so a checker can tell an answer was read from the page rather than made up.
+  text: string;
   images: number;
   resultTokens: number | null;
 };
@@ -202,17 +204,18 @@ export let toolCalls = (events: Timed[]) => {
     let parts = Array.isArray(result.block.content)
       ? result.block.content
       : [{ type: "text", text: String(result.block.content ?? "") }];
-    let resultChars = parts.reduce(
-      (sum: number, part: any) => sum + (part.text?.length ?? 0),
-      0,
-    );
+    let text = parts.map((part: any) => part.text ?? "").join("\n");
     let images = parts.filter((part: any) => part.type == "image").length;
     return [
       {
         ...use,
         toolMs: result.ms - use.ms,
         isError: !!result.block.is_error,
-        resultChars,
+        resultChars: parts.reduce(
+          (sum: number, part: any) => sum + (part.text?.length ?? 0),
+          0,
+        ),
+        text,
         images,
         resultTokens: resultTokens.get(id) ?? null,
       },
