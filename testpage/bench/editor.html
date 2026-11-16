@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Notes</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script type="module">
+      import { code } from "./code.js";
+      window.code = code;
+
+      // Like ProseMirror or Lexical, the editor keeps its own text and changes it only on trusted beforeinput, so writing to the DOM from a
+      // script shows text the editor never saw.
+      window.edit = (event, state) => {
+        event.preventDefault();
+        if (!event.isTrusted) return;
+
+        if (event.inputType == "insertText" || event.inputType == "insertReplacementText") {
+          state.text += event.data ?? event.dataTransfer?.getData("text/plain") ?? "";
+        }
+
+        if (event.inputType == "deleteContentBackward") state.text = state.text.slice(0, -1);
+        event.target.textContent = state.text;
+        getSelection().collapse(event.target, event.target.childNodes.length);
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ text: '', result: '' }">
+    <h1>Notes</h1>
+    <div class="editor" contenteditable="true" role="textbox" aria-label="Note" aria-multiline="true" @beforeinput="edit($event, $data)"></div>
+    <button type="button" @click="result = `Note code: ${code(text)}`">Submit</button>
+    <output x-text="result"></output>
+  </body>
+</html>

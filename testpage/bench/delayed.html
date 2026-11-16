@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Reports</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ status: '' }">
+    <h1>Reports</h1>
+    <button type="button" @click="status = 'Loading…'; setTimeout(() => (status = 'Quarterly total: 48,213'), 2000)">Load report</button>
+    <output x-text="status"></output>
+  </body>
+</html>

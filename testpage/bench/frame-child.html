@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Profile</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script type="module">
+      import { code } from "./code.js";
+      window.code = code;
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ nickname: '', result: '' }">
+    <label for="nickname">Nickname</label>
+    <input id="nickname" x-model="nickname" />
+    <button type="button" @click="result = `Saved. Code: ${code(nickname)}`">Save</button>
+    <output x-text="result"></output>
+  </body>
+</html>

@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sign up</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script type="module">
+      import { code } from "./code.js";
+      window.code = code;
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ name: '', plan: 'Basic', seats: '1', newsletter: false, billing: 'monthly', result: '' }">
+    <h1>Sign up</h1>
+    <form @submit.prevent="result = `Confirmation code: ${code(JSON.stringify([name, plan, seats, newsletter, billing]))}`">
+      <label for="name">Full name</label>
+      <input id="name" x-model="name" />
+      <label for="plan">Plan</label>
+      <select id="plan" x-model="plan">
+        <option>Basic</option>
+        <option>Pro</option>
+        <option>Team</option>
+      </select>
+      <label for="seats">Seats</label>
+      <input id="seats" type="number" min="1" max="50" x-model="seats" />
+      <label><input type="checkbox" x-model="newsletter" /> Newsletter</label>
+      <fieldset>
+        <legend>Billing</legend>
+        <label><input type="radio" name="billing" value="monthly" x-model="billing" /> Monthly</label>
+        <label><input type="radio" name="billing" value="yearly" x-model="billing" /> Yearly</label>
+      </fieldset>
+      <button type="submit">Create account</button>
+    </form>
+    <output x-text="result"></output>
+  </body>
+</html>

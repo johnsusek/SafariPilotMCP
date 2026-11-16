@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Drafts</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ result: '' }">
+    <h1>Drafts</h1>
+    <p>Quarterly plan (draft)</p>
+    <button type="button" @click="result = confirm('Delete the draft?') ? 'Draft deleted. Receipt: R-5531' : 'Draft kept.'">Delete draft</button>
+    <output x-text="result"></output>
+  </body>
+</html>

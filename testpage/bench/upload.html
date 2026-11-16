@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Attachments</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script type="module">
+      import { code } from "./code.js";
+      window.code = code;
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ result: '' }">
+    <h1>Attachments</h1>
+    <label for="attachment">Attachment</label>
+    <input id="attachment" type="file" @change="let file = $event.target.files[0]; result = `Received ${file.name}, checksum ${code(await file.text())}`" />
+    <output x-text="result"></output>
+  </body>
+</html>

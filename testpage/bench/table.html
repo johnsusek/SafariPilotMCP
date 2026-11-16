@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Directory</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script type="module">
+      import { rows } from "./data.js";
+      window.people = rows();
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <body x-data="{ people: window.people }">
+    <h1>Directory</h1>
+    <table>
+      <thead>
+        <tr>
+          <th>ID</th>
+          <th>Name</th>
+          <th>Email</th>
+          <th>City</th>
+        </tr>
+      </thead>
+      <tbody>
+        <template x-for="person in people" :key="person.id">
+          <tr>
+            <td x-text="person.id"></td>
+            <td x-text="person.name"></td>
+            <td x-text="person.email"></td>
+            <td x-text="person.city"></td>
+          </tr>
+        </template>
+      </tbody>
+    </table>
+  </body>
+</html>
