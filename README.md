@@ -9,9 +9,9 @@ your existing Safari session while you continue using your Mac.
 ## Features
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
-- **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Windows and focus](#windows-and-focus) lists what changes while you work in Safari itself.
-- **Real clicks.** Plain clicks and text fields go through macOS Accessibility, so pages get trusted input. Keys, selects, dates and sliders use page events, and `compat: true` switches them to real input for pages that ignore those.
-- **Fewer page reads.** Each action returns what it changed on the page, so the agent doesn't read the page again.
+- **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Synthetic vs Trusted Input](#synthetic-vs-trusted-input) explains the trade-off.
+- **Real clicks.** Plain clicks and text input goes through macOS Accessibility, so pages get trusted input. Caveats apply for other events like keypresses and double-click, see below.
+- **Blazing fast.** Each action returns what it changed on the page, so the agent doesn't read the page again.
 
 <p align="center"><img src="docs/screenshots/general.webp" width="49%" alt="SafariPilot General pane"> <img src="docs/screenshots/clients.webp" width="49%" alt="SafariPilot Clients pane"></p>
 
@@ -86,31 +86,16 @@ The **Tools** pane in the app shows each tool's full description.
 > [!CAUTION]
 > Normal page reads, URLs, and network logs redact or omit supported password fields, card numbers, tokens, and cookies. This is not a complete data-loss-prevention guarantee: screenshots, JavaScript results, page fetches, and other tool responses may contain sensitive information.
 
-## Windows and focus
+## Synthetic vs Trusted Input
 
-Agents share one Safari window of their own, the pilot window. `tab_create` opens it when none is open, and it closes with its last tab. It can sit behind other windows, but it can't be minimized and Safari can't be hidden.
+Pages can tell real user input ("trusted") from events created in JavaScript ("synthetic"), and some sites reject synthetic events. Nearly all of SafariPilot's input is trusted. The deliberate exceptions:
 
-While you work in another app, nothing here takes focus from it, apart from the last two notes below. While you work in another Safari window, some tools do:
-
-| Tool or event | Effect on the Safari window you are in |
-| --- | --- |
-| `tab_create` with no pilot window open | Safari shows the new window in front. SafariPilot focuses your window again at once, so the pilot window flashes. |
-| `tab_create` with the pilot window open | None. The tab opens in the background of the pilot window. |
-| `key` and `form_input` with `compat: true` | Brings the pilot window in front. Real key presses only reach Safari's main window, and a select's native menu opens on screen. |
-| A page that opens its own tab or window | Safari opens it as it would for you, which can bring the pilot window in front. |
-| `click`, `form_input`, `screenshot`, `tab_select` | None. They switch the pilot window to the agent's tab where it sits. |
-| `resize_window` | None. The pilot window changes size where it sits. |
-| Reads, `key`, `navigate`, `scroll`, `scroll_to`, `javascript`, `file_upload`, `page_fetch`, `handle_dialog`, `drag` | None. |
-
-- If you click into another Safari window while `key` with `compat: true` is typing, it stops and reports how many keys it sent.
-- A covered pilot window is hidden as far as its page can tell, so Safari slows the page's timers and pauses its animation frames. Pages that draw on animation frames can show stale values.
-- Rarely, Safari itself comes forward after focus moves into a field on a page. **Activity** logs it as "Safari came forward".
-- SafariPilot's approval dialog floats above every app until you answer it.
+- **Always synthetic:** color inputs, `drag`, and double, triple, right and modifier clicks. No trusted path exists for these without taking your cursor or making Safari the active app.
+- **Synthetic by default:** `key` presses (not `form_input` text entry) and `form_input` on dates, times, selects and sliders. `compat: true` makes them trusted but brings the pilot window in front of your other Safari windows, because Safari delivers real key presses and native menus only to its frontmost window. Safari itself can stay behind other apps.
 
 ## Limits
 
 - No hover: the CSS `:hover` pseudo-class is never applied. 
-- Double, triple, right and modifier clicks, `drag`, `key`, and `form_input` on selects, dates, times and sliders are synthetic events, which some pages ignore. `key` and `form_input` take `compat: true` for real input, which brings the pilot window in front of your Safari windows.
 - `key` refuses Cmd shortcuts, to prevent system interaction.
 
 ## Troubleshooting
