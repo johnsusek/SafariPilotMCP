@@ -42,22 +42,21 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 
 ### Manual configuration
 
-The **Other Clients** configuration includes a
-`SAFARIPILOT_CREDENTIAL` that identifies the client across restarts.
-A client using this credential needs approval only once.
-If the credential is removed, the connection still works, but the client
-must be approved again each time it starts.
+For a client the **Clients** pane doesn't list, **Other Clients** copies this entry with a new `SAFARIPILOT_CREDENTIAL`, which identifies the client across restarts so it needs approval only once:
 
 ```json
 {
   "mcpServers": {
     "safaripilot": {
       "command": "/Applications/SafariPilot.app/Contents/SharedSupport/safaripilot",
-      "args": ["mcp"]
+      "args": ["mcp"],
+      "env": { "SAFARIPILOT_CREDENTIAL": "sp_..." }
     }
   }
 }
 ```
+
+Without the `env` line the entry still works, but the client must be approved each time it starts.
 
 ### Updates
 
