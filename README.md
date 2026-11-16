@@ -38,26 +38,8 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**.
 2. In SafariPilot's **General** pane, grant **Accessibility**.
-3. In the **Clients** pane, set up a client: Claude Desktop, Claude Code, ChatGPT and Codex, Cursor, VS Code or LM Studio. **Other Clients** copies a standard `mcpServers` entry.
+3. In the **Clients** pane, set up your client: Claude Desktop, Claude Code, ChatGPT and Codex, Cursor, VS Code or LM Studio. For any other client, use **Other Clients**.
 4. Ask your agent to open a page in Safari and click a link. Approve the client when SafariPilot asks.
-
-### Manual configuration
-
-For a client the **Clients** pane doesn't list, **Other Clients** copies this entry with a new `SAFARIPILOT_CREDENTIAL`, which identifies the client across restarts so it needs approval only once:
-
-```json
-{
-  "mcpServers": {
-    "safaripilot": {
-      "command": "/Applications/SafariPilot.app/Contents/SharedSupport/safaripilot",
-      "args": ["mcp"],
-      "env": { "SAFARIPILOT_CREDENTIAL": "sp_..." }
-    }
-  }
-}
-```
-
-Without the `env` line the entry still works, but the client must be approved each time it starts.
 
 ### Updates
 
