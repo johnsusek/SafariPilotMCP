@@ -88,6 +88,12 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 
 The **Tools** pane in the app shows each tool's full description.
 
+> **Agent permissions:** These tools can read page content, interact with
+> authenticated websites, submit forms, upload files, execute JavaScript,
+> inspect network requests, and navigate tabs. Review client approvals and
+> use care with sensitive accounts.
+
+
 ## Security and trust
 
 - **Approve every client.** Each new client needs approval first. Disconnect one in **Clients** and it must be approved again.
