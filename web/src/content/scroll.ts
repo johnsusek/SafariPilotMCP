@@ -5,6 +5,20 @@ import { resolveRef } from "./refs";
 
 let scrollableOverflow = new Set(["auto", "scroll", "overlay"]);
 
+// Whether node's own content scrolls along an axis asked for, one whose left or top is nonzero.
+export function canScroll(node: Element, left: number, top: number) {
+  let style = getComputedStyle(node);
+  let across =
+    left !== 0 &&
+    scrollableOverflow.has(style.overflowX) &&
+    node.scrollWidth > node.clientWidth;
+  let down =
+    top !== 0 &&
+    scrollableOverflow.has(style.overflowY) &&
+    node.scrollHeight > node.clientHeight;
+  return across || down;
+}
+
 // The nearest flat-tree ancestor (or the element itself) that can scroll along a requested axis, else the document.
 export function scrollTarget(
   element: Element | null,
@@ -14,17 +28,7 @@ export function scrollTarget(
   let page = document.scrollingElement ?? document.documentElement;
 
   for (let node = element; node && node !== page; node = flatParent(node)) {
-    let style = getComputedStyle(node);
-    let canLeft =
-      left !== 0 &&
-      scrollableOverflow.has(style.overflowX) &&
-      node.scrollWidth > node.clientWidth;
-    let canTop =
-      top !== 0 &&
-      scrollableOverflow.has(style.overflowY) &&
-      node.scrollHeight > node.clientHeight;
-
-    if (canLeft || canTop) return node;
+    if (canScroll(node, left, top)) return node;
   }
 
   return page;
@@ -43,7 +47,12 @@ export function scroll(
   let before = [target.scrollLeft, target.scrollTop];
   target.scrollBy({ left, top, behavior: "instant" });
   let moved = target.scrollLeft !== before[0] || target.scrollTop !== before[1];
-  return { ok: true, moved, viewport: readViewport() };
+  let page = document.scrollingElement ?? document.documentElement;
+
+  if (target === page) return { ok: true, moved, viewport: readViewport() };
+
+  let container = { left: target.scrollLeft, top: target.scrollTop };
+  return { ok: true, moved, viewport: readViewport(), container };
 }
 
 // Centers ref in the view, scrolling every container around it; moved is false when it was already there.

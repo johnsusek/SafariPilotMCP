@@ -396,7 +396,7 @@ struct Commands {
   private func scroll(_ tabId: Int?, _ ref: PageRef?, _ left: Double, _ top: Double) async throws -> CLIReply {
     let response = try await content(tabId, .scroll(ref: ref, left: left, top: top))
     let result = try response.decode(ScrollResult.self)
-    let position = "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
+    let position = result.container.map { "container scroll position (\(Int($0.left)), \(Int($0.top)))" } ?? "scroll position (\(Int(result.viewport.scrollX)), \(Int(result.viewport.scrollY)))"
     let text = result.moved ? "scrolled by (\(Int(left)), \(Int(top))); \(position)" : "nothing moved: already at the edge or not scrollable; \(position)"
     return CLIReply(ok: true, text: text, data: response)
   }

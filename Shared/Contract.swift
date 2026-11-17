@@ -177,7 +177,9 @@ struct WaitResult: Codable, Sendable {
   let pending: String?
 }
 struct PageTextResult: Codable, Sendable { let url: String; let title: String; let text: String; let truncated: Bool }
-struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport }
+/// container is the scrolled box's own offset when it is not the page.
+struct ScrollResult: Codable, Sendable { let moved: Bool; let viewport: Viewport; var container: ScrollOffset? }
+struct ScrollOffset: Codable, Sendable { let left: Double; let top: Double }
 struct TabsResult: Codable, Sendable { let tabs: [TabInfo] }
 /// A background or content failure as it comes over the wire: error is the text, code what the caller does about it.
 struct PageFailure: Codable, Sendable, Equatable {

@@ -9,6 +9,7 @@ import {
   visibleArea,
 } from "./geometry";
 import { pruneRefs, refFor } from "./refs";
+import { canScroll } from "./scroll";
 
 let interactiveTags = new Set(["button", "select", "textarea", "summary"]);
 
@@ -65,6 +66,8 @@ export function isInteractive(element: Element) {
 
   if (control && isShown(control)) return false;
 
+  if (isScroller(element)) return true;
+
   // Listeners added with addEventListener are invisible, so treat the outermost cursor:pointer element as clickable, unless a widget around it already is.
   if (getComputedStyle(element).cursor !== "pointer") return false;
   let parent = flatParent(element);
@@ -77,6 +80,12 @@ export function isInteractive(element: Element) {
 
   return true;
 }
+
+// A box whose content scrolls inside it, such as a virtualized list, so scroll can take it by ref; the page's own scroller is scrolled without one.
+export let isScroller = (element: Element) =>
+  element !== document.scrollingElement &&
+  element !== document.body &&
+  canScroll(element, 1, 1);
 
 function isWidget(element: Element) {
   let tag = element.localName;

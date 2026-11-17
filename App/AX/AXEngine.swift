@@ -59,10 +59,20 @@ enum AXEngine {
     let app = try safari()
 
     // WebKit builds a page's AX tree lazily and a just-selected tab takes a moment to appear, so a miss is retried for 1 s.
+    // A window list holding something other than windows is retried too: seen once live as [AXScrollArea, AXWindow], gone on the next call.
     var attempt = 0
 
     while true {
-      let windows = try windows(of: app)
+      let windows: [AXNode]
+
+      do {
+        windows = try self.windows(of: app)
+      } catch where attempt < 9 {
+        attempt += 1
+        try await Task.sleep(for: .milliseconds(100))
+        continue
+      }
+
       let webAreas = windows.map { findWebAreas(in: $0) }
       let candidates = zip(windows, webAreas).map { window, areas in candidate(window, urls: areas.map { $0.string("AXURL") ?? "?" }) }
 

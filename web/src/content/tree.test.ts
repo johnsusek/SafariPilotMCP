@@ -113,6 +113,17 @@ describe("treeText", () => {
     expect(text).not.toContain("hunter2");
   });
 
+  test("a box whose content scrolls inside it is interactive and says so", () => {
+    document.body.innerHTML =
+      '<div id="list" style="overflow-y: auto; height: 50px"><div>Row 0</div><div>Row 1</div></div><div id="fits" style="overflow-y: auto">Fits</div>';
+    let list = document.getElementById("list")!;
+    Object.defineProperty(list, "scrollHeight", { value: 4000 });
+    Object.defineProperty(list, "clientHeight", { value: 50 });
+    expect(withoutRefs(treeText(document.body, "all", 10000).text)).toBe(
+      ['generic "Row 0 Row 1" scrollable', '"Fits"'].join("\n"),
+    );
+  });
+
   test("a sorted column header says which way", () => {
     let { text } = render(
       '<table><tr><th aria-sort="descending">Name</th><th aria-sort="none">Age</th></tr></table>',

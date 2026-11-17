@@ -37,7 +37,7 @@ import {
 import { pruneRefs, refFor, resolveRef } from "./refs";
 import { hidden, redactUrl } from "../shared/redact";
 import { isSensitive } from "./sensitive";
-import { isInteractive } from "./snapshot";
+import { isInteractive, isScroller } from "./snapshot";
 
 export type Item =
   | { text: string }
@@ -424,6 +424,8 @@ export function statesOf(element: Element, role: string) {
   if (aria("pressed") === "true") states.push("pressed");
 
   if (aria("current") && aria("current") !== "false") states.push("current");
+
+  if (role !== "textbox" && isScroller(element)) states.push("scrollable");
 
   let sort = aria("sort");
 

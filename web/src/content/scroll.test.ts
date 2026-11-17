@@ -56,6 +56,13 @@ describe("scroll", () => {
     expect(document.getElementById("outer")!.scrollTop).toBe(40);
   });
 
+  test("a box other than the page reports its own offset", () => {
+    let inBox = scroll(refFor(document.querySelector("button")!), 0, 40);
+    let onPage = scroll(null, 0, 40);
+    expect(inBox.ok && inBox.container).toEqual({ left: 0, top: 40 });
+    expect(onPage.ok && onPage.container).toBeUndefined();
+  });
+
   test("unknown ref fails", () => {
     expect(scroll(99999, 0, 40)).toEqual({
       ok: false,

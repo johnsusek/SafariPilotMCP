@@ -362,7 +362,13 @@ export type PageTextResult = {
 
 // scroll: scrolls by (left, top) CSS px the nearest scrollable ancestor of ref, or the document
 // when ref is null. moved is false when nothing could scroll. scrollIntoView answers the same way.
-export type ScrollResult = { ok: true; moved: boolean; viewport: Viewport };
+// container is the scrolled box's own offset when it is not the page.
+export type ScrollResult = {
+  ok: true;
+  moved: boolean;
+  viewport: Viewport;
+  container?: { left: number; top: number };
+};
 
 // exception is an uncaught error or an unhandled promise rejection.
 export type ConsoleLevel =
