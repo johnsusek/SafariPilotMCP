@@ -113,6 +113,20 @@ describe("treeText", () => {
     expect(text).not.toContain("hunter2");
   });
 
+  test("a sorted column header says which way", () => {
+    let { text } = render(
+      '<table><tr><th aria-sort="descending">Name</th><th aria-sort="none">Age</th></tr></table>',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        "table",
+        "  row",
+        '    columnheader "Name" sort=descending',
+        '    columnheader "Age"',
+      ].join("\n"),
+    );
+  });
+
   test("secret fields show that they hold a value, never the value", () => {
     let { text } = render(
       '<input autocomplete="one-time-code" aria-label="Code" value="482913"><label>Card number <input value="4111111111111111"></label><textarea name="api_token">sk-live-abc</textarea><div contenteditable="true" aria-label="Recovery passphrase">correct horse</div><input name="cvv" value=""><input aria-label="City" value="Lisbon">',

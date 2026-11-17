@@ -425,6 +425,10 @@ export function statesOf(element: Element, role: string) {
 
   if (aria("current") && aria("current") !== "false") states.push("current");
 
+  let sort = aria("sort");
+
+  if (sort && sort !== "none") states.push(`sort=${sort}`);
+
   if (html.required === true || aria("required") === "true")
     states.push("required");
 

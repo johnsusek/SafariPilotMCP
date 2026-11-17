@@ -314,6 +314,30 @@ function movedCount(order: number[]) {
   return order.length - tails.length;
 }
 
+let wordsOf = (line: Line): string[] => [
+  line.name,
+  ...line.texts,
+  ...line.children.flatMap(wordsOf),
+];
+
+// Unnamed elements stand in for each other only when at least half their names and texts match, so a table showing other rows reads as rows removed and added.
+function sharesHalf(before: Line, after: Line) {
+  let left = wordsOf(before).filter(Boolean);
+  let right = wordsOf(after).filter(Boolean);
+  let shared = 0;
+
+  for (let word of right) {
+    let at = left.indexOf(word);
+
+    if (at < 0) continue;
+
+    left.splice(at, 1);
+    shared++;
+  }
+
+  return shared * 2 >= Math.max(left.length + shared, right.length);
+}
+
 // after and before are one element (or the root) in the two trees. Added elements show whole with refs, removed ones only where their parent survived.
 function compare(
   after: Line,
@@ -333,19 +357,28 @@ function compare(
     if (trees.before.nodes.has(child.element!)) continue;
 
     let index = gone.findIndex(
-      (old) => old.role === child.role && old.name === child.name,
+      (old) =>
+        old.role === child.role &&
+        old.name === child.name &&
+        (old.name !== "" || sharesHalf(old, child)),
     );
 
     if (index >= 0) standIns.set(child, gone.splice(index, 1)[0]);
   }
 
-  for (let child of gone)
-    emit(
-      out,
-      "removed",
-      after,
-      `- ${headOf(child.role, child.name)}${statesText(child)}`,
-    );
+  // Equal removed lines, such as a table's unnamed rows, are counted on one.
+  let removed = new Map<string, number>();
+
+  for (let child of gone) {
+    let line = `${headOf(child.role, child.name)}${statesText(child)}`;
+    removed.set(line, (removed.get(line) ?? 0) + 1);
+  }
+
+  for (let [line, count] of removed) {
+    let times = count > 1 ? ` (${count} times)` : "";
+    emit(out, "removed", after, `- ${line}${times}`);
+    out.removed += count - 1;
+  }
 
   let priorOf = (child: Line) =>
     trees.before.nodes.get(child.element!) ?? standIns.get(child);

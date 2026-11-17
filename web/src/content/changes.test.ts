@@ -159,6 +159,40 @@ describe("diff lines", () => {
     ]);
   });
 
+  test("unnamed elements with other content are removed and added, not compared", async () => {
+    let row = (cells: string[]) =>
+      `<tr>${cells.map((cell) => `<td>${cell}</td>`).join("")}</tr>`;
+    let result = await diffAfter(
+      `<main><table><tbody>${row(["Airi", "Tokyo", "33"])}${row(["Bo", "Oslo", "41"])}</tbody></table></main>`,
+      () =>
+        (document.querySelector("tbody")!.innerHTML =
+          row(["Zed", "Lima", "56"]) + row(["Bo", "Oslo", "42"])),
+    );
+    expect(refless(result.lines)).toEqual([
+      "in table:",
+      "- row",
+      "+ row",
+      '+   cell "Zed"',
+      '+   cell "Lima"',
+      '+   cell "56"',
+      "in row:",
+      '- cell "41"',
+      '+ cell "42"',
+    ]);
+  });
+
+  test("equal removed lines are counted on one", async () => {
+    let result = await diffAfter(
+      "<main><table><tr><td>K</td></tr><tr><td>A</td></tr><tr><td>B</td></tr><tr><td>C</td></tr></table></main>",
+      () =>
+        document
+          .querySelectorAll("tr:not(:first-child)")
+          .forEach((row) => row.remove()),
+    );
+    expect(refless(result.lines)).toEqual(["in table:", "- row (3 times)"]);
+    expect(result.removed).toBe(3);
+  });
+
   test("reordered children say how many moved, the fewest that explain the new order", async () => {
     let result = await diffAfter(
       "<main><ul><li>A</li><li>B</li><li>C</li><li>D</li></ul></main>",
