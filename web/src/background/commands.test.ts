@@ -361,6 +361,36 @@ describe("runCommand", () => {
     expect(stored.pilotWindow).toBe(3);
   });
 
+  test("tabCreate moves a tab Safari put among the user's tabs into its own window", async () => {
+    fake.windows.create
+      .mockImplementationOnce(async () => {
+        tabs.push(tab(9, 1, false));
+        return { id: 1, tabs: [tabs.at(-1)!] };
+      })
+      .mockImplementationOnce(async () => {
+        tabs.at(-1)!.windowId = 3;
+        return { id: 3, tabs: [tabs.at(-1)!] };
+      });
+    let result = await run({ type: "tabCreate", url: null });
+    expect(fake.windows.create).toHaveBeenLastCalledWith({
+      tabId: 9,
+      focused: false,
+    });
+    expect(result).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
+    expect(stored.pilotWindow).toBe(3);
+  });
+
+  test("tabCreate closes a tab it cannot get out of the user's window", async () => {
+    fake.windows.create.mockImplementation(async () => {
+      tabs.push(tab(9, 1, false));
+      return { id: 1, tabs: [tabs.at(-1)!] };
+    });
+    let result = await run({ type: "tabCreate", url: null });
+    expect(result).toMatchObject({ ok: false, code: "failed" });
+    expect(fake.tabs.remove).toHaveBeenCalledWith(9);
+    expect(stored.pilotWindow).toBeUndefined();
+  });
+
   test("tabCreate replaces a closed pilot window", async () => {
     stored.pilotWindow = 4;
     fake.windows.get.mockRejectedValueOnce(new Error("No window with id: 4"));

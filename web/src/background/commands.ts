@@ -187,37 +187,60 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };
 
   if (command.type === "tabCreate") {
-    // Every session shares one pilot window. A stored id is trusted only while every tab in its window is a pilot tab, since a renumbered id can name the user's window.
+    // Every session shares one pilot window, which never holds a tab of the user's. A window is trusted only while every tab in it is a pilot tab (or the one being made),
+    // since a renumbered id can name the user's window and Safari can put a new window's tab into an existing window.
     let url = command.url ?? undefined;
-    let { pilotWindow } = await browser.storage.session.get("pilotWindow");
-    let found =
-      typeof pilotWindow === "number"
-        ? await browser.windows
-            .get(pilotWindow, { populate: true })
-            .catch(() => null)
+    let pilotOnly = async (windowId: unknown, newTab?: number) => {
+      if (typeof windowId !== "number") return null;
+
+      let found = await browser.windows
+        .get(windowId, { populate: true })
+        .catch(() => null);
+      let only = found?.tabs?.every(
+        (tab) => tab.id === newTab || isPilot(tab.id!),
+      );
+      return only ? found : null;
+    };
+    // As the front app Safari shows a new window over its others despite focused: false, so the window that was in front is focused again.
+    // Never while Safari is behind another app, where focusing a window could bring Safari forward.
+    let newWindow = async (data: { url?: string; tabId?: number }) => {
+      let front = command.safariFrontmost
+        ? await browser.windows.getLastFocused().catch(() => null)
         : null;
-    let window = found?.tabs?.every((tab) => isPilot(tab.id!)) ? found : null;
+      let created = await browser.windows.create({ ...data, focused: false });
+
+      if (front) await browser.windows.update(front.id!, { focused: true });
+
+      return created!.tabs![0] as KnownTab;
+    };
+    let { pilotWindow } = await browser.storage.session.get("pilotWindow");
+    let window = await pilotOnly(pilotWindow);
     let create = () =>
       piloting(async () => {
         // Opened as a background tab: Safari brings a window in front of its others when an active tab opens in it. Input selects the tab when it needs to.
-        if (window)
-          return (await browser.tabs.create({
-            windowId: window.id,
-            url,
-            active: false,
-          })) as KnownTab;
+        let tab = window
+          ? ((await browser.tabs.create({
+              windowId: window.id,
+              url,
+              active: false,
+            })) as KnownTab)
+          : await newWindow({ url });
 
-        // As the front app Safari shows a new window over its others despite focused: false, so the window that was in front is focused again.
-        // Never while Safari is behind another app, where focusing a window could bring Safari forward.
-        let front = command.safariFrontmost
-          ? await browser.windows.getLastFocused().catch(() => null)
-          : null;
-        let created = await browser.windows.create({ url, focused: false });
+        if (!(await pilotOnly(tab.windowId, tab.id)))
+          tab = await newWindow({ tabId: tab.id });
 
-        if (front) await browser.windows.update(front.id!, { focused: true });
+        if (!(await pilotOnly(tab.windowId, tab.id))) {
+          await browser.tabs.remove(tab.id).catch(() => {});
+          throw thrown({
+            ok: false,
+            error:
+              "Safari put the new tab in a window with the user's tabs and would not move it to its own window, so it was closed",
+            code: "failed",
+          });
+        }
 
-        await browser.storage.session.set({ pilotWindow: created!.id });
-        return created!.tabs![0] as KnownTab;
+        await browser.storage.session.set({ pilotWindow: tab.windowId });
+        return tab;
       });
 
     if (command.url !== null)
