@@ -52,7 +52,7 @@ let watch: Watch | null = null;
 function adopt(items: Item[], parent: Line, nodes: Map<Element, Line>) {
   for (let item of items) {
     if ("text" in item) {
-      parent.texts.push(item.text);
+      parent.texts.push(item.text.trim());
       continue;
     }
 

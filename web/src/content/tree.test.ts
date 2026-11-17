@@ -34,6 +34,19 @@ describe("treeText", () => {
     );
   });
 
+  test("inline markup inside a word keeps it whole, while blocks and line breaks separate words", () => {
+    let { text } = render(
+      '<p><span class="hl">Ab</span>ort<b>C</b>ontroller</p><p><span>One</span><div>Two</div><span>Three</span> Four<br>Five</p>',
+    );
+    expect(withoutRefs(text)).toBe(
+      [
+        'paragraph "AbortController"',
+        'paragraph "One"',
+        '"Two Three Four Five"',
+      ].join("\n"),
+    );
+  });
+
   test("refs resolve to the rendered elements", () => {
     let { text } = render('<button id="go">Go</button>');
     let ref = Number(text.match(/\[ref=(\d+)\]/)![1]);

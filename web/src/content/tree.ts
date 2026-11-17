@@ -12,7 +12,7 @@ import {
   nameOf,
   roleOf,
 } from "./describe";
-import { flatChildren, isInvisible, isPruned, isShown } from "./flat";
+import { flatChildren, isBlock, isInvisible, isPruned, isShown } from "./flat";
 import { blocksScripts, contentBox, frameIdOf, sourceOf } from "./frames";
 import {
   boxOf,
@@ -119,15 +119,37 @@ function clips(element: Element) {
   return clipping.test(style.overflowX) || clipping.test(style.overflowY);
 }
 
+// Text runs join as the page draws them, with a space only where whitespace, a block box or a line break separates them, so a word split by inline markup
+// (a highlighted search match) stays whole. A run keeps one space at an edge that had whitespace; readers trim it.
 function pushText(items: Item[], text: string) {
   let last = items.at(-1);
 
   if (last && "text" in last) {
-    last.text = `${last.text} ${text}`;
+    last.text = `${last.text}${text}`.replace(/\s+/g, " ");
     return;
   }
 
   items.push({ text });
+}
+
+function gap(items: Item[]) {
+  let last = items.at(-1);
+
+  if (last && "text" in last && !last.text.endsWith(" ")) last.text += " ";
+}
+
+// Adds what a child that shows no line of its own holds to items, set off by spaces when it is a block box.
+function splice(items: Item[], child: Element, children: Item[]) {
+  let block = isBlock(child);
+
+  if (block) gap(items);
+
+  for (let item of children) {
+    if ("text" in item) pushText(items, item.text);
+    else items.push(item);
+  }
+
+  if (block) gap(items);
 }
 
 // Adds child to items: text joins the previous run, and an element that is not shown gives its children up to the parent.
@@ -135,9 +157,14 @@ function add(items: Item[], child: Node, walk: Walk) {
   let interactiveOnly = walk.interactiveOnly;
 
   if (child.nodeType === Node.TEXT_NODE) {
-    let text = interactiveOnly ? "" : collapse(child.textContent, textMax);
+    let raw = child.textContent ?? "";
+    let text = interactiveOnly ? "" : collapse(raw, textMax);
 
-    if (!text) return;
+    if (!text) {
+      if (/\s/.test(raw)) gap(items);
+
+      return;
+    }
 
     if (walk.view) {
       range.selectNodeContents(child);
@@ -145,23 +172,27 @@ function add(items: Item[], child: Node, walk: Walk) {
       if (!inView(walk.view, range.getBoundingClientRect())) return;
     }
 
-    pushText(items, text);
+    pushText(
+      items,
+      `${/^\s/.test(raw) ? " " : ""}${text}${/\s$/.test(raw) ? " " : ""}`,
+    );
     walk.left -= text.length + 2;
     return;
   }
 
   if (!(child instanceof Element)) return;
 
+  if (child.localName === "br") {
+    gap(items);
+    return;
+  }
+
   walk.nodes -= 1;
 
   if (isPruned(child)) return;
 
   if (isInvisible(child)) {
-    for (let item of build(child, walk)) {
-      if ("text" in item) pushText(items, item.text);
-      else items.push(item);
-    }
-
+    splice(items, child, build(child, walk));
     return;
   }
 
@@ -231,11 +262,7 @@ function add(items: Item[], child: Node, walk: Walk) {
   if (named && child.parentElement?.localName === named) return;
 
   if (!shown) {
-    for (let item of children) {
-      if ("text" in item) pushText(items, item.text);
-      else items.push(item);
-    }
-
+    splice(items, child, children);
     return;
   }
 
@@ -385,7 +412,14 @@ export function statesOf(element: Element, role: string) {
     if (element.accept) states.push(`accept=${JSON.stringify(element.accept)}`);
   }
 
-  let value = collapse(valueOf(element), valueMax);
+  // Line breaks stay, shown as \n, so a change that only adds or removes a line reads as one.
+  let lines = valueOf(element)
+    .split("\n")
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .join("\n")
+    .replace(/^\n+/, "");
+  let value =
+    lines.length > valueMax ? `${lines.slice(0, valueMax - 3)}...` : lines;
 
   // Unquoted, so it cannot be read as a field holding the text [hidden].
   if (value)
