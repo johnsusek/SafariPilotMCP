@@ -422,6 +422,7 @@ function write(element: Element, sink: Sink) {
 
   if (!isBlock(element)) {
     flow(element, sink);
+
     return;
   }
 
@@ -449,5 +450,6 @@ export function markdownOf(root: Element, maxChars: number) {
   };
   write(root, sink);
   flush(sink);
-  return sink.blocks.join("\n\n");
+  // cut says the budget ran out, which can leave the text under maxChars, since later blocks (a table's remaining rows) still close.
+  return { text: sink.blocks.join("\n\n"), cut: sink.budget.left <= 0 };
 }

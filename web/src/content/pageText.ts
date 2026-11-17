@@ -48,8 +48,11 @@ export function pageText(
 
   if (!(root instanceof Element)) return root;
 
-  let text =
-    format === "markdown" ? markdownOf(root, maxChars) : innerTextOf(root);
+  let { text, cut } =
+    format === "markdown"
+      ? markdownOf(root, maxChars)
+      : { text: innerTextOf(root), cut: false };
+  let clipped = clip(text, maxChars);
   let frames =
     ref === null || isPruned(root)
       ? []
@@ -58,7 +61,8 @@ export function pageText(
     ok: true,
     url: location.href,
     title: document.title,
-    ...clip(text, maxChars),
+    text: clipped.text,
+    truncated: clipped.truncated || cut,
     frames,
   };
 }

@@ -7,7 +7,7 @@ import { refFor } from "./refs";
 
 let markdown = (html: string, maxChars = 10000) => {
   document.body.innerHTML = html;
-  return markdownOf(document.body, maxChars);
+  return markdownOf(document.body, maxChars).text;
 };
 
 let read = (element: Element, maxChars = 10000) =>
@@ -148,7 +148,7 @@ describe("markdownOf", () => {
     let host = document.querySelector("x-card")!;
     host.attachShadow({ mode: "open" }).innerHTML =
       '<h2><slot name="title"></slot></h2><p>From the shadow</p>';
-    expect(markdownOf(document.body, 10000)).toBe(
+    expect(markdownOf(document.body, 10000).text).toBe(
       "## Slotted\n\nFrom the shadow",
     );
   });
@@ -207,6 +207,17 @@ describe("pageText", () => {
       text: "| K | V |\n| --- | --- |\n| x | 1 |",
       truncated: true,
     });
+  });
+
+  test("a read the text budget cut short says so though it ends under max_chars", () => {
+    document.body.innerHTML = `<div role="grid">${Array.from(
+      { length: 30 },
+      (_, index) =>
+        `<div role="row"><span role="gridcell">Row ${index} with some longer text</span></div>`,
+    ).join("")}</div>`;
+    let result = read(document.body, 200);
+    expect(result.text.length).toBeLessThanOrEqual(200);
+    expect(result.truncated).toBe(true);
   });
 
   test("a ref names the frames inside it, itself included", () => {
