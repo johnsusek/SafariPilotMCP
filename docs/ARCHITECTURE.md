@@ -80,7 +80,7 @@ Medians of each command's time in the app, CLI wall time and each phase over RUN
 
 ## Errors
 
-Every failure ends with `error code=CODE retryable=BOOL next=STEP`, drawn from 18 codes and 8 next steps fixed in `web/src/shared/errorCodes.json` and checked on both sides by tests.
+Every failure ends with `error code=CODE retryable=BOOL next=STEP`, drawn from 19 codes and 9 next steps fixed in `web/src/shared/errorCodes.json` and checked on both sides by tests.
 
 ## Build and test
 

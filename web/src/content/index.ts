@@ -24,8 +24,22 @@ installReader();
 installNetworkReader();
 installPageFetchReader();
 
+// Safari shows a PDF in a plugin document whose DOM holds only an embed, so these reads would answer empty as if the page were blank.
+let reads = new Set(["readPage", "pageText", "find", "target", "waitFor"]);
+
 async function handle(request: ContentRequest): Promise<ContentResponse> {
   try {
+    if (
+      reads.has(request.op) &&
+      window === window.top &&
+      document.contentType === "application/pdf"
+    )
+      return {
+        ok: false,
+        error:
+          "this tab shows a PDF in Safari's PDF viewer, whose text page tools cannot read; screenshot shows it",
+        code: "not_a_web_page",
+      };
     if (request.op === "ping")
       return { ok: true, url: location.href, title: document.title };
     if (request.op === "snapshot") return snapshot();

@@ -7,7 +7,8 @@
     "tabs_list",
     "tab_create",
     "ask_user",
-    "read_message"
+    "read_message",
+    "screenshot"
   ],
   "codes": {
     "invalid_argument": { "retryable": false, "next": "fix_input" },
@@ -24,6 +25,7 @@
     "build_mismatch": { "retryable": false, "next": "ask_user" },
     "safari_unavailable": { "retryable": false, "next": "ask_user" },
     "input_unconfirmed": { "retryable": false, "next": "read_page" },
+    "not_a_web_page": { "retryable": false, "next": "screenshot" },
     "page_busy": { "retryable": true, "next": "retry" },
     "wait_timeout": { "retryable": true, "next": "read_page" },
     "timed_out": { "retryable": false, "next": "read_page" },

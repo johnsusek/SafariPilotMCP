@@ -15,13 +15,14 @@ enum ErrorCode: String, Codable, Sendable, CaseIterable {
   case buildMismatch = "build_mismatch"
   case safariUnavailable = "safari_unavailable"
   case inputUnconfirmed = "input_unconfirmed"
+  case notAWebPage = "not_a_web_page"
   case pageBusy = "page_busy"
   case waitTimeout = "wait_timeout"
   case timedOut = "timed_out"
   case failed
 
   enum Next: String, Codable, Sendable, CaseIterable {
-    case fixInput = "fix_input", retry, readPage = "read_page", handleDialog = "handle_dialog", tabsList = "tabs_list", tabCreate = "tab_create", askUser = "ask_user", readMessage = "read_message"
+    case fixInput = "fix_input", retry, readPage = "read_page", handleDialog = "handle_dialog", tabsList = "tabs_list", tabCreate = "tab_create", askUser = "ask_user", readMessage = "read_message", screenshot
   }
 
   /// Only a refusal made before anything reached the page, or a call that only reads, may be repeated as it was; anything that may already have acted is not.
@@ -36,6 +37,7 @@ enum ErrorCode: String, Codable, Sendable, CaseIterable {
     case .dialogOpen: .handleDialog
     case .tabUnavailable: .tabsList
     case .pageBusy: .retry
+    case .notAWebPage: .screenshot
     case .failed: .readMessage
     }
   }
