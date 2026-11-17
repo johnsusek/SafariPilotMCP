@@ -11,6 +11,28 @@ export function toRect(box: DOMRect): Rect {
   };
 }
 
+let hasArea = (box: DOMRect) => box.width > 0 && box.height > 0;
+
+// A checkbox or radio hidden at no size behind its label (a styled toggle) takes its label's box, which is what a person clicks and what its AX frame covers.
+export function boxOf(element: Element) {
+  let box = element.getBoundingClientRect();
+
+  if (
+    hasArea(box) ||
+    !(element instanceof HTMLInputElement) ||
+    !/^(checkbox|radio)$/.test(element.type)
+  )
+    return box;
+
+  for (let label of element.labels ?? []) {
+    let labelBox = label.getBoundingClientRect();
+
+    if (hasArea(labelBox)) return labelBox;
+  }
+
+  return box;
+}
+
 export function readViewport(): Viewport {
   let visual = window.visualViewport!;
   return {

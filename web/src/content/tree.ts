@@ -14,7 +14,13 @@ import {
 } from "./describe";
 import { flatChildren, isInvisible, isPruned, isShown } from "./flat";
 import { blocksScripts, contentBox, frameIdOf, sourceOf } from "./frames";
-import { intersect, readViewport, toRect, visibleArea } from "./geometry";
+import {
+  boxOf,
+  intersect,
+  readViewport,
+  toRect,
+  visibleArea,
+} from "./geometry";
 import { pruneRefs, refFor, resolveRef } from "./refs";
 import { hidden, redactUrl } from "../shared/redact";
 import { isSensitive } from "./sensitive";
@@ -160,7 +166,7 @@ function add(items: Item[], child: Node, walk: Walk) {
   }
 
   let view = walk.view;
-  let box = view ? child.getBoundingClientRect() : null;
+  let box = view ? boxOf(child) : null;
   // Out of view, an element shows only as the ancestor of something in view, without its own text.
   let outside = view ? !inView(view, box!) : false;
   let clip = view?.clip;

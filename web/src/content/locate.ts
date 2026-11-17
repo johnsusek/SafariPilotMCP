@@ -1,6 +1,7 @@
 import type { Failure, LocateResult, Point, Rect } from "../shared/protocol";
 import { describe } from "./describe";
 import {
+  boxOf,
   candidatePoints,
   intersect,
   pickPoint,
@@ -20,14 +21,14 @@ let sameRect = (first: Rect, second: Rect) =>
 
 // Waits for the rect to hold still across two frames; rAF stalls in hidden tabs, so each frame also has a timeout.
 async function settledRect(element: Element) {
-  let previous = toRect(element.getBoundingClientRect());
+  let previous = toRect(boxOf(element));
 
   for (let frame = 0; frame < 30; frame++) {
     await new Promise((resolve) => {
       requestAnimationFrame(resolve);
       setTimeout(resolve, 100);
     });
-    let current = toRect(element.getBoundingClientRect());
+    let current = toRect(boxOf(element));
     if (sameRect(previous, current)) return current;
     previous = current;
   }

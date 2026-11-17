@@ -36,6 +36,19 @@ describe("find", () => {
     expect(names("search")).toEqual(["Search the web", "Search Wikipedia"]);
   });
 
+  test("a radio hidden at no size behind its label is found with the label's box", () => {
+    document.body.innerHTML =
+      '<input type="radio" id="double" name="scale" data-empty="1"><label for="double" data-top="40">2x</label>';
+    let result = find("2x", "radio");
+    expect(result.ok && result.matches).toEqual([
+      expect.objectContaining({
+        role: "radio",
+        name: "2x",
+        rect: { left: 10, top: 40, width: 100, height: 20 },
+      }),
+    ]);
+  });
+
   test("role filters exactly and works without a name", () => {
     document.body.innerHTML =
       '<div role="search"><input type="search" aria-label="Query"></div><a href="#">Search help</a><textarea role="combobox" aria-label="Ask"></textarea>';

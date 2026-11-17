@@ -1,7 +1,13 @@
 import type { ElementInfo, Rect, SnapshotResult } from "../shared/protocol";
 import { isEditableRoot, nameOf, roleOf } from "./describe";
 import { flatElements, flatParent, isShown } from "./flat";
-import { intersect, readViewport, toRect, visibleArea } from "./geometry";
+import {
+  boxOf,
+  intersect,
+  readViewport,
+  toRect,
+  visibleArea,
+} from "./geometry";
 import { pruneRefs, refFor } from "./refs";
 
 let interactiveTags = new Set(["button", "select", "textarea", "summary"]);
@@ -65,7 +71,7 @@ function isWidget(element: Element) {
 
 // Rendered with a nonzero box; elements without one cannot be located.
 export function hasBox(element: Element) {
-  let box = element.getBoundingClientRect();
+  let box = boxOf(element);
   return box.width > 0 && box.height > 0;
 }
 
@@ -74,7 +80,7 @@ export function elementInfo(
   visible: Rect,
   name = nameOf(element),
 ): ElementInfo {
-  let rect = toRect(element.getBoundingClientRect());
+  let rect = toRect(boxOf(element));
   let info: ElementInfo = {
     ref: refFor(element),
     tag: element.localName,
