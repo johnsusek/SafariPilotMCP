@@ -2,7 +2,7 @@ import Foundation
 
 /// Connects MCP clients to the server bundled in this app, the way iMCP does.
 enum ClientSetup {
-  static let serverName = "safaripilot"
+  static let serverName = "SafariPilot"
   static let home = FileManager.default.homeDirectoryForCurrentUser
   static let codeConfigURL = home.appending(path: ".claude.json")
   static let codexConfigURL = home.appending(path: ".codex/config.toml")

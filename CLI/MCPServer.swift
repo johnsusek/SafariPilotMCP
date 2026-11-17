@@ -11,7 +11,7 @@ enum MCPServer {
   static let approval = Approval()
 
   static func run() async throws {
-    let server = Server(name: "safaripilot", version: "0.1", instructions: Tools.instructions, capabilities: .init(tools: .init(listChanged: false)))
+    let server = Server(name: "SafariPilot", version: "0.1", instructions: Tools.instructions, capabilities: .init(tools: .init(listChanged: false)))
     let tools = try Tools.definitions.map { try Tool(name: $0.name, description: $0.description, inputSchema: $0.inputSchema.decode(Value.self)) }
 
     await server.withMethodHandler(ListTools.self) { _ in .init(tools: tools) }

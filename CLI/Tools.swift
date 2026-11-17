@@ -105,7 +105,7 @@ enum Tools {
   ]
 
   static let instructions = """
-  SafariPilot drives the user's real Safari, with their logins and cookies, in its own window without taking their cursor or keyboard. Tool names here are short; call them by the full names your client lists, such as mcp__safaripilot__click.
+  SafariPilot drives the user's real Safari, with their logins and cookies, in its own window without taking their cursor or keyboard. Tool names here are short; call them by the full names your client lists, such as mcp__SafariPilot__click.
 
   Tabs: open your own with tab_create and work there; page tools default to it. You see only tabs this session opened and tabs they open (tabs_list). Close your tabs with tab_close when the task is done; any left open close when this session ends. The first call waits for the user to approve this client; if they deny it, ask before trying again.
 
@@ -158,7 +158,7 @@ enum Tools {
     return try items.enumerated().map { index, item in
       guard let listed = item["name"]?.string else { throw Failure(.invalidArgument, "action \(index + 1) needs a string name") }
 
-      // A step may carry the client's prefixed name, such as mcp__safaripilot__click; no tool's own name holds "__".
+      // A step may carry the client's prefixed name, such as mcp__SafariPilot__click; no tool's own name holds "__".
       let name = String(listed.split(separator: "__" as String).last ?? Substring(listed))
 
       guard name != "browser_batch" else { throw Failure(.invalidArgument, "action \(index + 1): browser_batch cannot be nested") }
