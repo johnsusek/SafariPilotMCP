@@ -313,7 +313,9 @@ struct Commands {
     let response = try await content(tabId, .pageText(maxChars: maxChars, format: format, ref: ref))
     let result = try response.decode(PageTextResult.self)
     let truncated = result.truncated ? "\n(truncated at \(maxChars) characters)" : ""
-    return CLIReply(ok: true, text: "\(result.title) | \(Redaction.url(result.url))\n\(result.text)\(truncated)", data: response)
+    // An app that renders after load (Discourse) has no text yet when navigate returns.
+    let body = result.text.isEmpty ? "(no readable text yet; if the page is still rendering, wait for its text or a selector)" : result.text
+    return CLIReply(ok: true, text: "\(result.title) | \(Redaction.url(result.url))\n\(body)\(truncated)", data: response)
   }
 
   private func scroll(_ tabId: Int?, _ ref: PageRef?, _ left: Double, _ top: Double) async throws -> CLIReply {

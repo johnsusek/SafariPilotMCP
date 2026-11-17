@@ -187,6 +187,7 @@ struct ToolMappingTests {
     let wait = { (arguments: [String: JSONValue]) in try Tools.wait(arguments, session: session) }
     #expect(try wait(["seconds": .number(2.5)]) == .sleep(seconds: 2.5))
     #expect(try Tools.wait(["seconds": "1"], session: TabSession()) == .sleep(seconds: 1))
+    #expect(try wait(["seconds": .number(1), "tabId": .number(7)]) == .sleep(seconds: 1))
     #expect(try wait(["text": "Results"]) == .condition(tabId: 20, condition: .text("Results"), timeout: Tools.defaultWaitTimeout))
     #expect(try wait(["selector": "#list li", "timeout": .number(0), "tabId": .number(7)]) == .condition(tabId: 7, condition: .selector("#list li"), timeout: 0))
     #expect(try wait(["text": "Done", "timeout": .number(30)]) == .condition(tabId: 20, condition: .text("Done"), timeout: 30))
@@ -197,7 +198,6 @@ struct ToolMappingTests {
       ["seconds": .number(-1)],
       ["seconds": .number(1), "text": "x"],
       ["seconds": .number(1), "timeout": .number(2)],
-      ["seconds": .number(1), "tabId": .number(7)],
       ["text": "x", "selector": "y"],
       ["text": "  "],
       ["selector": ""],

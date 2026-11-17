@@ -133,7 +133,8 @@ enum Tools {
 
     guard text != nil || selector != nil else {
       guard let seconds else { throw Failure(.invalidArgument, "wait needs seconds, text or selector") }
-      guard timeout == nil, tabId == nil else { throw Failure(.invalidArgument, "timeout and tabId apply only to a wait for text or selector") }
+      guard timeout == nil else { throw Failure(.invalidArgument, "timeout applies only to a wait for text or selector") }
+      // A sleep acts on no tab; a tabId agents pass along with it is ignored rather than refused.
       guard (0...maxWait).contains(seconds) else { throw Failure(.invalidArgument, "seconds must be from 0 to \(Int(maxWait)), not \(seconds)") }
 
       return .sleep(seconds: seconds)
