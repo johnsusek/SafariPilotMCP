@@ -185,10 +185,11 @@ let tasks: Record<string, Task> = {
       "Go to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at. In the page's interactive example, change the code so the first `index` is 4, run it with the example's Run button and report the first line of output it prints.",
     check: (answer) => /an index of 4 returns 44/i.test(answer),
   },
-  // A 2023 thread whose likes have settled; it opens with Bluesky's own continuation posts, which the prompt skips.
+  // A 2023 thread whose likes have settled; it opens with Bluesky's own continuation posts, which the prompt skips. "First shown" rather than "first to
+  // reply", since one agent took that as the earliest direct reply to the root post by timestamp.
   bluesky: {
     prompt: () =>
-      "Go to https://bsky.app/profile/bsky.app/post/3jymkky4cxf2u and report the handle (starting with @) of the first account other than Bluesky (@bsky.app) that replied to the post. Do not sign in.",
+      "Go to https://bsky.app/profile/bsky.app/post/3jymkky4cxf2u and report the handle (starting with @) of the author of the first reply the page shows under the post that is not by Bluesky (@bsky.app). Do not sign in.",
     check: (answer) => /oedipusnj/i.test(answer),
   },
   // Pinned from a run by hand, like apple; a changed recipe fails every run loudly.
