@@ -37,7 +37,8 @@ enum AXEngine {
   }
 
   static func windows(of app: AXNode) throws -> [AXNode] {
-    let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init)
+    // A window that is closing answers with no role for a moment (seen live as ["?", "AXWindow"] right after pilot windows closed), so it is skipped.
+    let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init).filter { $0.string(kAXRoleAttribute) != nil }
     let roles = windows.map(\.role)
 
     // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
