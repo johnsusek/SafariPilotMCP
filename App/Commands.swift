@@ -359,7 +359,9 @@ struct Commands {
 
     if result.text.isEmpty {
       let shown = filter == .interactive ? "no visible actionable elements" : "no visible elements"
-      return CLIReply(ok: true, text: "\(shown)\(viewport ? " in view" : "") on \(result.title) | \(Redaction.url(result.url))\(leftOut)", data: response)
+      // A script-rendered app (Excalidraw) can answer before its first render, as get_page_text says too.
+      let rendering = ref == nil ? "; if the page is still rendering, wait for its text or a selector" : ""
+      return CLIReply(ok: true, text: "\(shown)\(viewport ? " in view" : "") on \(result.title) | \(Redaction.url(result.url))\(rendering)\(leftOut)", data: response)
     }
 
     return CLIReply(ok: true, text: result.text + truncated + leftOut, data: response)
