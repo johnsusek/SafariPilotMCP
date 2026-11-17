@@ -60,26 +60,32 @@ export function shownText(root: Node) {
 
 let escape = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
-// The deepest shown element with a box whose text holds the first occurrence of text.
-function byText(text: string) {
+// The deepest shown element with a box around each occurrence of text, in page order and each once, with the text it shows; limit stops early.
+export function elementsShowing(text: string, limit = Infinity) {
   let { text: shown, spans } = shownText(document);
   let needle = text.replace(/\s+/g, " ").trim();
-  let found = new RegExp(escape(needle), "i").exec(shown);
+  let found: { element: Element; text: string }[] = [];
 
-  if (!found) return null;
+  if (!needle) return found;
 
-  let end = found.index + needle.length;
-  let span = spans.find(
-    (each) =>
-      each.start <= found.index && end <= each.end && hasBox(each.element),
-  );
+  for (let match of shown.matchAll(new RegExp(escape(needle), "gi"))) {
+    let end = match.index + needle.length;
+    let span = spans.find(
+      (each) =>
+        each.start <= match.index && end <= each.end && hasBox(each.element),
+    );
 
-  if (!span) return null;
+    if (!span || found.some((each) => each.element === span.element)) continue;
 
-  return {
-    element: span.element,
-    text: shown.slice(span.start, span.end),
-  };
+    found.push({
+      element: span.element,
+      text: shown.slice(span.start, span.end),
+    });
+
+    if (found.length >= limit) break;
+  }
+
+  return found;
 }
 
 // The first element in document order matching selector that is shown and has a box.
@@ -116,7 +122,10 @@ export function waitFor(
     }
   }
 
-  let found = text === null ? bySelector(selector!) : byText(text);
+  let found =
+    text === null
+      ? bySelector(selector!)
+      : (elementsShowing(text, 1)[0] ?? null);
   let match = found && {
     ...elementInfo(found.element, visibleArea(readViewport())),
     text: collapse(found.text),

@@ -206,3 +206,28 @@ describe("target", () => {
     expect(picked(" ", "")).toBe("target needs a name or a role");
   });
 });
+
+describe("text fallback", () => {
+  test("with no named match and no role, the deepest elements showing the text match", () => {
+    document.body.innerHTML =
+      '<div id="list"><div class="item">Item 1</div><div class="item">Item 2</div><div class="item">Item <b>10</b></div></div>';
+    expect(names("item 1")).toEqual(["Item 1", "Item 10"]);
+    let result = find("Item 2", "");
+    expect(result.ok && resolveRef(result.matches[0]!.ref)).toBe(
+      document.querySelectorAll(".item")[1],
+    );
+  });
+
+  test("a named match or a role keeps plain text out", () => {
+    document.body.innerHTML = "<button>Item 1</button><div>Item 1 notes</div>";
+    expect(names("item 1")).toEqual(["Item 1"]);
+    document.body.innerHTML = "<div>Item 1</div>";
+    expect(names("item 1", "button")).toEqual([]);
+  });
+
+  test("never matches a field's value", () => {
+    document.body.innerHTML =
+      '<textarea>draft text</textarea><input value="draft text">';
+    expect(names("draft text")).toEqual([]);
+  });
+});

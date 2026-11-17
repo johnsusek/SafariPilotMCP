@@ -4,10 +4,17 @@ import type {
   FindResult,
   TargetResult,
 } from "../shared/protocol";
-import { authorRoles, contentRoles, nameOf, roleOf } from "./describe";
+import {
+  authorRoles,
+  collapse,
+  contentRoles,
+  nameOf,
+  roleOf,
+} from "./describe";
 import { flatElements } from "./flat";
 import { readViewport, visibleArea } from "./geometry";
 import { elementInfo, hasBox, isInteractive } from "./snapshot";
+import { elementsShowing } from "./waitFor";
 
 export let findLimit = 20;
 
@@ -37,8 +44,10 @@ let noQuery = (op: string): Failure => ({
   code: "invalid_argument",
 });
 
-// Rendered elements whose accessible name contains needle and whose role is wantedRole, both lowercase and either empty, in document order.
+// Rendered elements whose accessible name contains needle and whose role is wantedRole, both lowercase and either empty, in document order, else by shown text.
 function* matching(needle: string, wantedRole: string) {
+  let named = false;
+
   for (let element of flatElements(document)) {
     if (!hasBox(element)) continue;
 
@@ -72,8 +81,15 @@ function* matching(needle: string, wantedRole: string) {
 
     if (needle && !name.toLowerCase().includes(needle)) continue;
 
+    named = true;
     yield { element, name };
   }
+
+  // Text in a plain box (a sortable list's items) is no accessible name, so with no role and no named match, the deepest elements showing needle match.
+  if (named || !needle || wantedRole) return;
+
+  for (let { element, text } of elementsShowing(needle))
+    yield { element, name: collapse(text) };
 }
 
 export function find(name: string, role: string): FindResult | Failure {
