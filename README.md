@@ -3,15 +3,15 @@
 <p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a></p>
 
 # SafariPilot
-SafariPilot is a local MCP server for Safari on macOS. It lets agents work in
-your existing Safari session while you continue using your Mac.
+SafariPilot is a local MCP server for Safari on macOS. Agents work in the Safari
+you're already signed in to, and you keep using your Mac.
 
 ## Features
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
 - **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Synthetic vs Trusted Input](#synthetic-vs-trusted-input) explains the trade-off.
-- **Real clicks.** Plain clicks and text input goes through macOS Accessibility, so pages get trusted input. Caveats apply for other events like keypresses and double-click, see below.
-- **Blazing fast.** Each action returns what it changed on the page, so the agent doesn't read the page again.
+- **Real clicks.** Plain clicks and text input go through macOS Accessibility, so pages get trusted input. Key presses and double-clicks have caveats (see below).
+- **Fewer round trips.** Each action returns what it changed on the page, so the agent doesn't have to read the page again.
 
 <p align="center"><img src="docs/screenshots/general.webp" width="49%" alt="SafariPilot General pane"> <img src="docs/screenshots/clients.webp" width="49%" alt="SafariPilot Clients pane"></p>
 
@@ -22,7 +22,7 @@ your existing Safari session while you continue using your Mac.
 - A user logged in to the Mac's desktop. The app and Safari need a GUI session.
   
 > [!NOTE]
-> **Local macOS software required:** SafariPilot controls Safari on the same Mac as the MCP client. It is not a standalone remote or cloud browser.
+> **Local only:** SafariPilot controls Safari on the same Mac as the MCP client. It can't drive a remote or cloud browser.
 
 ## Install
 
@@ -45,7 +45,7 @@ Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see 
 
 ### Updates
 
-SafariPilot checks for updates itself and offers to install them. **Check for Updates…** in its menu checks now, and the **General** pane turns automatic checks off. Homebrew installs can also update with:
+SafariPilot checks for updates and offers to install them. **Check for Updates…** in its menu checks now, and the **General** pane turns automatic checks off. Homebrew installs can also update with:
 
 ```bash
 brew upgrade --cask safaripilot
@@ -74,29 +74,29 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 The **Tools** pane in the app shows each tool's full description.
 
 > [!WARNING]
-> **Agent permissions:** These tools can read page content, interact with authenticated websites, submit forms, upload files, execute JavaScript, inspect network requests, and navigate tabs. Review client approvals and use care with sensitive accounts.
+> **Agent permissions:** An agent acts as you on every site you're signed in to. It can read pages, submit forms and upload files there, as well as run JavaScript and read network requests. Review which clients you approve, and take care with sensitive accounts.
 
 ## Security and trust
 
-- **Approve every client.** Each new client needs approval first. Uses a token to bypass approvals, so other software on your system can't impersonate your AI agent.
+- **Approve every client.** Each new client needs your approval. A client you always trust gets a credential in its MCP settings, so other software on your Mac can't pass itself off as that client.
 - **Tab isolation.** An agent sees only the tabs it opened and the popups they open.
 - **Secure local connection.** The Safari extension, the app and the agent talk only over loopback, and every connection needs a secret token that changes each launch.
-- **Secrets stay hidden.** Passwords, card numbers, tokens and cookies stay hidden from agents' page reads, URLs and network logs. Screenshots and `javascript` results are not filtered.
+- **Secrets stay hidden.** Page reads, URLs and network logs redact password fields, card numbers, tokens and cookies.
 
 > [!CAUTION]
-> Normal page reads, URLs, and network logs redact or omit supported password fields, card numbers, tokens, and cookies. This is not a complete data-loss-prevention guarantee: screenshots, JavaScript results, page fetches, and other tool responses may contain sensitive information.
+> Redaction isn't data-loss prevention. Screenshots, `javascript` results, `page_fetch` and other tool responses can still contain sensitive information.
 
 ## Synthetic vs Trusted Input
 
-Pages can tell real user input ("trusted") from events created in JavaScript ("synthetic"), and some sites reject synthetic events. Nearly all of SafariPilot's input is trusted. The deliberate exceptions:
+Pages can tell real user input ("trusted") from events created in JavaScript ("synthetic"), and some sites reject synthetic events. Nearly all of SafariPilot's input is trusted. The exceptions:
 
-- **Always synthetic:** color inputs, `drag`, and double, triple, right and modifier clicks. No trusted path exists for these without taking your cursor or making Safari the active app.
-- **Synthetic by default:** `key` presses (not `form_input` text entry) and `form_input` on dates, times, selects and sliders. `compat: true` makes them trusted but brings the pilot window in front of your other Safari windows, because Safari delivers real key presses and native menus only to its frontmost window. Safari itself can stay behind other apps.
+- **Always synthetic:** color inputs, `drag`, and double, triple, right and modifier clicks. SafariPilot can't send these as trusted input without taking your cursor or making Safari the active app.
+- **Synthetic by default:** `key` presses (not `form_input` text entry) and `form_input` on dates, times, selects and sliders. `compat: true` makes them trusted but brings the pilot window in front of your other Safari windows, because Safari sends real key presses and native menus only to its frontmost window. Safari as a whole can still stay behind other apps.
 
 ## Limits
 
-- No hover: the CSS `:hover` pseudo-class is never applied. 
-- `key` refuses Cmd shortcuts, to prevent system interaction.
+- No hover: the CSS `:hover` pseudo-class is never applied.
+- `key` refuses Cmd shortcuts so an agent can't trigger app or system commands with them.
 
 ## Troubleshooting
 
@@ -114,7 +114,7 @@ In SafariPilot's window, **General > Status** shows Accessibility, the Safari ex
 
 ## Benchmark
 
-SafariPilot against Claude in Chrome, both driven by Claude Code (Sonnet) with the same prompts. Over 11 tasks run 5 times each, all 110 runs passed, and SafariPilot took 601 s in total against 1,304 s with 36% fewer input tokens. [scripts/compare](scripts/compare) runs it.
+SafariPilot against Claude in Chrome, both driven by Claude Code (Sonnet) with the same prompts. Each ran 11 tasks 5 times, and all 110 runs passed. SafariPilot took 601 s in total to Chrome's 1,304 s, and used 36% fewer input tokens. [scripts/compare](scripts/compare) runs it.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tools-dark.webp"><img src="docs/benchmark/tools-light.webp" alt="Median time per tool call, SafariPilot against Claude in Chrome"></picture>
 
