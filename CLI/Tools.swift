@@ -105,6 +105,7 @@ enum Tools {
   ]
 
   static let instructions = """
+  Tools are named here and in replies by short names such as click; call them by the full names your client lists, such as mcp__safaripilot__click, except inside browser_batch, whose steps take the short names.
   The first call that touches Safari waits until the user approves this client in SafariPilot; if they deny it, ask them before trying again.
   Start by opening your own tab with tab_create and work there; page tools default to that tab.
   You can see and act only on tabs this session opened and tabs they open, such as popups; tabs_list shows them.
