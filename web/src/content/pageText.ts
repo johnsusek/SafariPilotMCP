@@ -1,3 +1,4 @@
+import { isFrameHost } from "./frames";
 import type { Failure, PageTextResult, TextFormat } from "../shared/protocol";
 import { flatElements, isPruned } from "./flat";
 import { markdownOf } from "./markdown";
@@ -52,9 +53,7 @@ export function pageText(
   let frames =
     ref === null || isPruned(root)
       ? []
-      : [root, ...flatElements(root)]
-          .filter((element) => element instanceof HTMLIFrameElement)
-          .map(refFor);
+      : [root, ...flatElements(root)].filter(isFrameHost).map(refFor);
   return {
     ok: true,
     url: location.href,

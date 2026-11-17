@@ -13,7 +13,14 @@ import {
   roleOf,
 } from "./describe";
 import { flatChildren, isBlock, isInvisible, isPruned, isShown } from "./flat";
-import { blocksScripts, contentBox, frameIdOf, sourceOf } from "./frames";
+import {
+  blocksScripts,
+  contentBox,
+  type FrameHost,
+  frameIdOf,
+  isFrameHost,
+  sourceOf,
+} from "./frames";
 import {
   boxOf,
   intersect,
@@ -41,7 +48,7 @@ type View = {
 
 // left is a lower bound on output characters still wanted; building stops once it runs out, since a large page would otherwise be walked whole for a short answer.
 // nodes is how many more elements may be looked at, which bounds the walk's time on a huge page.
-type Walk = {
+export type Walk = {
   interactiveOnly: boolean;
   left: number;
   nodes: number;
@@ -65,6 +72,7 @@ let leafTags = new Set([
   "img",
   "svg",
   "iframe",
+  "frame",
   "video",
   "audio",
   "canvas",
@@ -232,11 +240,11 @@ function add(items: Item[], child: Node, walk: Walk) {
   let role = roleOf(child);
   let interactive = isInteractive(child);
   // An iframe whose frame can be read stays as the line its document hangs under.
-  let hostsFrame = child instanceof HTMLIFrameElement && frameIdOf(child) >= 0;
+  let hostsFrame = isFrameHost(child) && frameIdOf(child) >= 0;
 
   // Its frame is read within the part of it in view, in the frame's own coordinates.
   if (hostsFrame && view) {
-    let content = contentBox(child as HTMLIFrameElement, box!);
+    let content = contentBox(child as FrameHost, box!);
     let visible = intersect(content, view.clip);
     view.frames.set(
       child,
@@ -315,6 +323,17 @@ function add(items: Item[], child: Node, walk: Walk) {
 
   items.push({ element: child, role, name, children });
   walk.left -= role.length + name.length + 8;
+}
+
+// The page's items; a body that is itself the editor (TinyMCE's and CKEditor's frames, designMode) is one textbox.
+export function rootItems(walk: Walk) {
+  let root = document.body ?? document.documentElement;
+
+  if (!isEditableRoot(root)) return build(root, walk);
+
+  let items: Item[] = [];
+  add(items, root, walk);
+  return items;
 }
 
 // outside says node is out of a viewport read's view, so its own text is left out.
@@ -445,7 +464,7 @@ export function statesOf(element: Element, role: string) {
   if (element instanceof HTMLAnchorElement && element.hasAttribute("href"))
     states.push(`href=${shortHref(element)}`);
 
-  if (element instanceof HTMLIFrameElement) {
+  if (isFrameHost(element)) {
     let source = sourceOf(element);
     let host = URL.canParse(source) ? new URL(source).host : "";
     if (host) states.push(`host=${host}`);
@@ -492,8 +511,7 @@ function render(items: Item[], depth: number, output: Output): boolean {
 
     if (!emit(output, line)) return false;
 
-    let frameId =
-      element instanceof HTMLIFrameElement ? frameIdOf(element) : -1;
+    let frameId = isFrameHost(element) ? frameIdOf(element) : -1;
 
     if (frameId >= 0)
       output.frames.push({
@@ -588,8 +606,7 @@ export function readPage(
       frames: new Map(),
     };
 
-  if (ref === null)
-    items = build(document.body ?? document.documentElement, walk);
+  if (ref === null) items = rootItems(walk);
 
   if (ref !== null) {
     let element = resolveRef(ref);

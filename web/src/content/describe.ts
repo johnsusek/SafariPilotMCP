@@ -59,6 +59,7 @@ let tagRoles: Record<string, string> = {
   progress: "progressbar",
   meter: "meter",
   iframe: "iframe",
+  frame: "iframe",
   blockquote: "blockquote",
   pre: "code",
   code: "code",
@@ -209,6 +210,14 @@ export function roleOf(element: Element) {
       (element as HTMLSelectElement).size > 1
       ? "listbox"
       : "combobox";
+  // A header or footer is the page's banner or contentinfo only outside sectioning content and main.
+  if (
+    (tag === "header" || tag === "footer") &&
+    element.parentElement?.closest(
+      "article, aside, main, nav, section, [role=article], [role=complementary], [role=main], [role=navigation], [role=region]",
+    )
+  )
+    return "generic";
   if (tagRoles[tag]) return tagRoles[tag];
   if (isEditableRoot(element)) return "textbox";
   return "generic";

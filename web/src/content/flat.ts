@@ -32,8 +32,25 @@ export function isPruned(element: Element) {
   if (skippedTags.has(element.localName)) return true;
   if (element.getAttribute("aria-hidden") === "true") return true;
   if ((element as HTMLElement).hidden === true) return true;
-  if (element.checkVisibility()) return false;
-  return getComputedStyle(element).display !== "contents";
+  if (!element.checkVisibility())
+    return getComputedStyle(element).display !== "contents";
+  return isFlattened(getComputedStyle(element));
+}
+
+// A closed modal or menu is often scaled to nothing rather than hidden, which leaves it rendered but drawn at zero size.
+function isFlattened(style: CSSStyleDeclaration) {
+  if (style.scale.split(/\s+/).some((token) => parseFloat(token) === 0))
+    return true;
+
+  let matrix = style.transform.match(/^matrix(3d)?\(([^)]+)\)$/);
+
+  if (!matrix) return false;
+
+  let values = matrix[2].split(",").map(Number);
+  let [a, b, c, d] = matrix[1]
+    ? [values[0], values[1], values[4], values[5]]
+    : values;
+  return a * d - b * c === 0;
 }
 
 // visibility:hidden hides an element's own box and text but not a descendant that sets visibility:visible (Reddit's open menus), so the subtree is still walked.

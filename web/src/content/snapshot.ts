@@ -32,15 +32,33 @@ let widgetRoles = new Set([
   "treeitem",
 ]);
 
+// Inline handlers for the inputs click and drag send; ones added with addEventListener cannot be seen.
+let clickHandlers = [
+  "onclick",
+  "ondblclick",
+  "oncontextmenu",
+  "onmousedown",
+  "onmouseup",
+  "onpointerdown",
+];
+
 export function isInteractive(element: Element) {
   let tag = element.localName;
   if (tag === "input") return (element as HTMLInputElement).type !== "hidden";
   if (isWidget(element)) return true;
   let tabIndex = element.getAttribute("tabindex");
   if (tabIndex !== null && tabIndex.trim() !== "-1") return true;
-  if (element.hasAttribute("onclick") || (element as HTMLElement).onclick)
+  if (
+    clickHandlers.some(
+      (handler) =>
+        element.hasAttribute(handler) ||
+        (element as unknown as Record<string, unknown>)[handler],
+    )
+  )
     return true;
   if (isEditableRoot(element)) return true;
+  // drag takes its source by ref; images and links are draggable by default, so only an explicit attribute counts.
+  if (element.getAttribute("draggable") === "true") return true;
 
   // A label is clicked through its control, which locate counts it as part of, unless the control is not rendered.
   let control = tag === "label" ? (element as HTMLLabelElement).control : null;

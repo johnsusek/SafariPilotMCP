@@ -1,3 +1,4 @@
+import { isFrameHost } from "./frames";
 import type { Failure, UploadFile, UploadResult } from "../shared/protocol";
 import { describe } from "./describe";
 import { flatChildren } from "./flat";
@@ -139,7 +140,7 @@ export function upload(
   let element = resolveRef(ref);
   if (!(element instanceof Element)) return element;
 
-  if (element instanceof HTMLIFrameElement)
+  if (isFrameHost(element))
     return {
       ok: false,
       error: `${describe(element)} is an iframe; pass the ref of the file input or drop zone inside its frame, such as ${ref}:12`,

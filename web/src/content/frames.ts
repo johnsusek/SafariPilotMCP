@@ -18,8 +18,15 @@ let identities = [
   "matrix3d(1,0,0,0,0,1,0,0,0,0,1,0,0,0,0,1)",
 ];
 
+// An element that hosts a document: an iframe, or a frameset's frame.
+export type FrameHost = HTMLIFrameElement | HTMLFrameElement;
+
+export let isFrameHost = (element: unknown): element is FrameHost =>
+  element instanceof HTMLIFrameElement ||
+  (element instanceof HTMLElement && element.localName === "frame");
+
 // -1 when the iframe has no frame yet.
-export function frameIdOf(iframe: HTMLIFrameElement) {
+export function frameIdOf(iframe: FrameHost) {
   try {
     return browser.runtime.getFrameId(iframe);
   } catch {
@@ -28,13 +35,15 @@ export function frameIdOf(iframe: HTMLIFrameElement) {
 }
 
 // A sandbox without allow-scripts stops the page's own listeners, so nothing there can confirm a click or key.
-export let blocksScripts = (iframe: HTMLIFrameElement) =>
-  iframe.hasAttribute("sandbox") && !iframe.sandbox.contains("allow-scripts");
+export let blocksScripts = (iframe: FrameHost) =>
+  iframe instanceof HTMLIFrameElement &&
+  iframe.hasAttribute("sandbox") &&
+  !iframe.sandbox.contains("allow-scripts");
 
 // Inline sources (data:, blob:, javascript:) are named by their scheme alone, since the URL can run to kilobytes.
 let inlineSchemes = ["data:", "blob:", "javascript:"];
 
-export function sourceOf(iframe: HTMLIFrameElement) {
+export function sourceOf(iframe: FrameHost) {
   if (iframe.hasAttribute("srcdoc")) return "srcdoc";
 
   if (!iframe.src) return "about:blank";
@@ -56,7 +65,7 @@ let stillValues: Record<string, (value: string) => boolean> = {
 
 // AX lays a frame out as if no transform applied, so any transform on the iframe or around it, or a box scaled by CSS zoom, breaks frame matching.
 // offsetWidth and offsetHeight are whole pixels, so a box differing by up to 1 px is not scaled.
-function isTransformed(iframe: HTMLIFrameElement, bounds: DOMRect) {
+function isTransformed(iframe: FrameHost, bounds: DOMRect) {
   let scaled = (shown: number, laidOut: number) =>
     laidOut > 0 && Math.abs(shown - laidOut) > Math.max(1, laidOut * 0.01);
 
@@ -80,7 +89,7 @@ function isTransformed(iframe: HTMLIFrameElement, bounds: DOMRect) {
 }
 
 // Where the iframe's document is drawn: its content box, inside border and padding, from its bounding box.
-export function contentBox(iframe: HTMLIFrameElement, bounds: DOMRect) {
+export function contentBox(iframe: FrameHost, bounds: DOMRect) {
   let style = getComputedStyle(iframe);
   let px = (value: string) => parseFloat(value) || 0;
   let left = px(style.paddingLeft);
@@ -95,7 +104,7 @@ export function contentBox(iframe: HTMLIFrameElement, bounds: DOMRect) {
   );
 }
 
-export function frameEntry(iframe: HTMLIFrameElement): FrameEntry {
+export function frameEntry(iframe: FrameHost): FrameEntry {
   let bounds = iframe.getBoundingClientRect();
   let box = contentBox(iframe, bounds);
   return {
@@ -110,9 +119,7 @@ export function frameEntry(iframe: HTMLIFrameElement): FrameEntry {
 }
 
 export function listFrames(): FramesResult {
-  let frames = [...flatElements(document)]
-    .filter((element) => element instanceof HTMLIFrameElement)
-    .map(frameEntry);
+  let frames = [...flatElements(document)].filter(isFrameHost).map(frameEntry);
   return {
     ok: true,
     url: location.href,
@@ -122,12 +129,12 @@ export function listFrames(): FramesResult {
   };
 }
 
-function iframeFor(ref: number): HTMLIFrameElement | Failure {
+function iframeFor(ref: number): FrameHost | Failure {
   let element = resolveRef(ref);
 
   if (!(element instanceof Element)) return element;
 
-  if (!(element instanceof HTMLIFrameElement))
+  if (!isFrameHost(element))
     return {
       ok: false,
       error: `ref ${ref} is a <${element.localName}>, not an iframe`,
@@ -149,7 +156,7 @@ export function frameBox(
 ): FrameBoxResult | Failure {
   let iframe = iframeFor(ref);
 
-  if (!(iframe instanceof HTMLIFrameElement)) return iframe;
+  if (!isFrameHost(iframe)) return iframe;
 
   let before = frameEntry(iframe);
 
@@ -185,7 +192,7 @@ export function hitFrame(
 ): HitFrameResult | Failure {
   let iframe = iframeFor(ref);
 
-  if (!(iframe instanceof HTMLIFrameElement)) return iframe;
+  if (!isFrameHost(iframe)) return iframe;
 
   let hits = points.map((point) => deepElementFromPoint(point) === iframe);
   let first = points[0] ? deepElementFromPoint(points[0]) : null;

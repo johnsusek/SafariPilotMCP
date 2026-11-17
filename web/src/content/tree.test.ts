@@ -48,6 +48,22 @@ describe("treeText", () => {
     );
   });
 
+  test("a header inside main is no banner, and an explicitly draggable box is actionable", () => {
+    let { text } = render(
+      '<header>Site</header><main><div draggable="true"><header>A</header></div></main><div role="main"><footer>Note</footer></div>',
+    );
+    expect(withoutRefs(text)).toBe(
+      ['banner "Site"', "main", '  generic "A"', 'main "Note"'].join("\n"),
+    );
+  });
+
+  test("a closed modal scaled to nothing is left out", () => {
+    let { text } = render(
+      '<div style="transform: matrix(0, 0, 0, 0, 0, 0)"><p>Ad</p></div><div style="scale: 1 0"><p>Menu</p></div><p style="transform: matrix(2, 0, 0, 2, 0, 0)">Shown</p>',
+    );
+    expect(withoutRefs(text)).toBe('paragraph "Shown"');
+  });
+
   test("a value keeps its line breaks", () => {
     let { text } = render("<textarea>One  two\n\nThree\n</textarea>");
     expect(withoutRefs(text)).toBe('textbox value="One two\\n\\nThree\\n"');
@@ -379,6 +395,20 @@ describe("readPage", () => {
     expect(result.ok && withoutRefs(result.text)).toBe(
       ["navigation", "  list", 'heading "Title" level=2'].join("\n"),
     );
+  });
+
+  test("a body that is itself the editor reads as one textbox", () => {
+    document.body.innerHTML = "<p>Your content goes here.</p>";
+    document.body.contentEditable = "true";
+
+    try {
+      let result = readPage("all", 10000, null, null, "", false, null);
+      expect(result.ok && withoutRefs(result.text)).toBe(
+        'textbox value="Your content goes here."',
+      );
+    } finally {
+      document.body.removeAttribute("contenteditable");
+    }
   });
 
   test("ref limits the tree to that element", () => {
