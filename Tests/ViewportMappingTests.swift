@@ -61,4 +61,11 @@ struct ViewportMappingTests {
     #expect(ViewportMapping.viewportFrame(webArea: webArea, scrollArea: frame) == frame)
     #expect(ViewportMapping.viewportFrame(webArea: webArea, scrollArea: nil) == webArea)
   }
+
+  @Test func centerOnAnEdgeDoesNotLand() {
+    let option = CGRect(x: 1202, y: 238, width: 197, height: 24)
+    #expect(!ViewportMapping.centerLands(CGRect(x: 1200, y: 237, width: 200, height: 50), in: option))
+    #expect(!ViewportMapping.centerLands(CGRect(x: 1200, y: 300, width: 200, height: 300), in: option))
+    #expect(ViewportMapping.centerLands(CGRect(x: 1190, y: 230, width: 220, height: 40), in: option))
+  }
 }

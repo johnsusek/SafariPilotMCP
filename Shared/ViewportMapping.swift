@@ -18,6 +18,9 @@ struct Viewport: Codable, Sendable, Equatable {
 
 /// Maps CSS px in the layout viewport to AX screen points (top-left origin, y down).
 enum ViewportMapping {
+  /// Whether frame's center falls inside rect clear of its edges, where a press at that center would hit rect's element rather than a neighbor.
+  static func centerLands(_ frame: CGRect, in rect: CGRect) -> Bool { rect.insetBy(dx: 1, dy: 1).contains(CGPoint(x: frame.midX, y: frame.midY)) }
+
   /// The AXWebArea frame can span the whole document, so the enclosing AXScrollArea is the visible viewport when present.
   static func viewportFrame(webArea: CGRect, scrollArea: CGRect?) -> CGRect { scrollArea ?? webArea }
 

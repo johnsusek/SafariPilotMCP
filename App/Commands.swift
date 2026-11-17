@@ -520,6 +520,12 @@ struct Commands {
       return CLIReply(ok: reply.ok, text: "clicked ref \(ref) from the page script, since Safari exposes it as text, which AXPress does not click\n\(reply.text)", data: reply.data, code: reply.code)
     }
 
+    // An element without AXPress whose nearest pressable ancestor is centered elsewhere (a jQuery UI autocomplete option) would get its neighbor clicked.
+    if let presser = AXEngine.presser(match), !AXEngine.pressLands(presser, in: match) {
+      let reply = try await syntheticClick(tab.id, ref, .left, [])
+      return CLIReply(ok: reply.ok, text: "clicked ref \(ref) from the page script, since the nearest element supporting AXPress, \(presser.node.summary) \(presser.depth) up, would click its center outside the ref\n\(reply.text)", data: reply.data, code: reply.code)
+    }
+
     // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter from the page script, as from the keyboard.
     if match.node.role == "AXDisclosureTriangle" {
       let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1, compat: false)
@@ -570,9 +576,10 @@ struct Commands {
       return await CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines + [changes(watch, since: acted)]).joined(separator: "\n"), data: .null)
     }
 
-    // WebKit can report a frame's elements at their old place for a while after it scrolls, so a press matched by frame can land on a neighbor.
-    if !frame.isEmpty, !navigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
-      lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
+    // A press can land on a neighbor: WebKit can report a frame's elements at their old place for a while after it scrolls, and a pressed ancestor clicks its own center.
+    if !navigated, !frameNavigated, clicks.allSatisfy({ $0.onTarget == false }) {
+      let hint = frame.isEmpty ? "a neighbor may now be selected, so read_page before going on" : "Accessibility had probably not caught up with the frame's layout, so read_page or find again and retry"
+      lines[0] += ", but the click landed on \(clicks.last.map { describe($0) } ?? "?"), not on ref \(ref); \(hint)"
       return await CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines + [changes(watch, since: acted)]).joined(separator: "\n"), data: .null)
     }
 

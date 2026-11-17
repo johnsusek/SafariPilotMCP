@@ -175,16 +175,29 @@ enum AXEngine {
     let depth: Int
   }
 
+  /// The nearest element from the match up that supports AXPress, and how far up it is.
+  static func presser(_ match: Match) -> (node: AXNode, depth: Int)? {
+    guard let depth = match.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else { return nil }
+
+    return (match.chain[depth], depth)
+  }
+
+  /// WebKit dispatches AXPress at the element's center, so a delegating ancestor (Booking's calendar month) clicks whatever sits there instead.
+  /// The center must clear the match's edges: jQuery UI's autocomplete list had its center on the border between two options and clicked the lower one.
+  static func pressLands(_ presser: (node: AXNode, depth: Int), in match: Match) -> Bool {
+    guard presser.depth > 0, let frame = presser.node.frame else { return true }
+
+    return ViewportMapping.centerLands(frame, in: match.screenRect)
+  }
+
   static func press(_ match: Match) throws -> Pressed {
-    guard let depth = match.chain.firstIndex(where: { $0.actions.contains(kAXPressAction) }) else {
+    guard let (node, depth) = presser(match) else {
       throw Failure(.notActionable, "no element from the match up to the web area supports AXPress:\n\(describe(match.chain))")
     }
 
-    let node = match.chain[depth]
     let pressed = Pressed(summary: node.summary, role: node.role, label: node.label, depth: depth)
 
-    // WebKit dispatches AXPress at the element's center, so a delegating ancestor (Booking's calendar month) would click whatever sits there instead.
-    if let frame = node.frame, !match.screenRect.insetBy(dx: -1, dy: -1).contains(CGPoint(x: frame.midX, y: frame.midY)) {
+    if !pressLands((node, depth), in: match), let frame = node.frame {
       throw Failure(.notActionable, "the nearest element supporting AXPress is \(pressed.summary) \(format(frame)), \(depth) up from the match, and pressing it would click its center, outside the element at \(format(match.screenRect)); key Enter or Space with this ref may reach it from the keyboard:\n\(describe(match.chain))")
     }
 
