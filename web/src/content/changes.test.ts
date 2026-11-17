@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { answerEvent, pendingEvent } from "../main/network";
 import {
   maxElements,
@@ -25,9 +25,27 @@ let pending = 0;
 
 installNetworkReader();
 
+// happy-dom has no Web Animations; each root answers what animations holds for it.
+let animations = new Map<Document | ShadowRoot, Animation[]>();
+
+for (let prototype of [
+  Object.getPrototypeOf(document),
+  Object.getPrototypeOf(
+    document.createElement("div").attachShadow({ mode: "open" }),
+  ),
+])
+  Object.defineProperty(prototype, "getAnimations", {
+    configurable: true,
+    value(this: Document | ShadowRoot) {
+      return animations.get(this) ?? [];
+    },
+  });
+
 beforeEach(() => {
   document.body.innerHTML = "";
   pending = 0;
+  animations.clear();
+  vi.restoreAllMocks();
 });
 
 describe("diff lines", () => {
@@ -296,6 +314,30 @@ describe("waiting for quiet", () => {
     let result = await takeDiff("", 2000, 2000);
     expect(Date.now() - begun).toBeGreaterThanOrEqual(120 + quietMs);
     expect(refless(result.lines)).toEqual(['~ paragraph "c" (was "a")']);
+  });
+
+  test("on a hidden page, finite animations the action starts are finished, others left alone", async () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    let animation = (endTime: number) =>
+      ({
+        playState: "running",
+        effect: { getComputedTiming: () => ({ endTime }) },
+        finish: vi.fn(),
+      }) as unknown as Animation;
+    document.body.innerHTML = "<div id=host></div>";
+    let shadow = document
+      .querySelector("#host")!
+      .attachShadow({ mode: "open" });
+    let before = animation(250);
+    animations.set(document, [before]);
+    startDiff();
+    let exit = animation(250);
+    let spinner = animation(Infinity);
+    animations.set(shadow, [exit, spinner]);
+    await takeDiff("", 0, 2000);
+    expect(exit.finish).toHaveBeenCalledOnce();
+    expect(before.finish).not.toHaveBeenCalled();
+    expect(spinner.finish).not.toHaveBeenCalled();
   });
 
   test("inline style changes alone do not restart the quiet clock", async () => {

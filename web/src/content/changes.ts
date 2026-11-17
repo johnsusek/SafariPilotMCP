@@ -3,11 +3,11 @@ import { collapse } from "./describe";
 import { pendingSince } from "./network";
 import { refFor } from "./refs";
 import {
-  build,
   headOf,
   type Item,
   linesOf,
   quoted,
+  rootItems,
   statesOf,
   valueOf,
 } from "./tree";
@@ -45,6 +45,8 @@ type Watch = {
   changed: number;
   before: Tree | null;
   observer: MutationObserver;
+  roots: Set<Document | ShadowRoot>;
+  animations: Set<Animation>;
 };
 
 let watch: Watch | null = null;
@@ -80,7 +82,7 @@ function adopt(items: Item[], parent: Line, nodes: Map<Element, Line>) {
 // The rendered tree, or null when the page has more than maxElements elements.
 function snapshot(): Tree | null {
   let walk = { interactiveOnly: false, left: Infinity, nodes: maxElements };
-  let items = build(document.body ?? document.documentElement, walk);
+  let items = rootItems(walk);
 
   if (walk.nodes <= 0) return null;
 
@@ -106,18 +108,39 @@ let observed = {
   characterData: true,
 };
 
-// A MutationObserver on the document does not see into shadow roots, so every open one under root is observed too.
-function observe(root: Node, observer: MutationObserver) {
-  if (root === document || root instanceof ShadowRoot)
-    observer.observe(root, observed);
+// A MutationObserver on the document does not see into shadow roots, so every open one under root is observed too, and kept for its animations.
+function observe(root: Node, state: Watch) {
+  if (root === document || root instanceof ShadowRoot) {
+    state.observer.observe(root, observed);
+    state.roots.add(root as Document | ShadowRoot);
+  }
 
   if (root instanceof Element && root.shadowRoot)
-    observe(root.shadowRoot, observer);
+    observe(root.shadowRoot, state);
 
   if (!("querySelectorAll" in root)) return;
 
   for (let element of (root as ParentNode).querySelectorAll("*")) {
-    if (element.shadowRoot) observe(element.shadowRoot, observer);
+    if (element.shadowRoot) observe(element.shadowRoot, state);
+  }
+}
+
+let animationsOf = (state: Watch) =>
+  [...state.roots].flatMap((root) => root.getAnimations());
+
+// A hidden page (the pilot window behind the user's windows) never advances its animation timeline, so an animation the action started, such as a
+// dialog's exit, would never end, and a page awaiting it would stay as it was; each finite one is finished, as a shown page finishes it within its duration.
+function finishStarted(state: Watch) {
+  if (document.visibilityState !== "hidden") return;
+
+  for (let animation of animationsOf(state)) {
+    if (state.animations.has(animation) || animation.playState === "finished")
+      continue;
+
+    if (animation.effect?.getComputedTiming().endTime === Infinity) continue;
+
+    state.animations.add(animation);
+    animation.finish();
   }
 }
 
@@ -139,12 +162,17 @@ export function startDiff(): DiffStartResult {
         state.changed = Date.now();
 
       for (let record of records) {
-        for (let node of record.addedNodes) observe(node, state.observer);
+        for (let node of record.addedNodes) observe(node, state);
       }
     }),
+    roots: new Set(),
+    animations: new Set(),
   };
 
-  if (state.before) observe(document, state.observer);
+  if (state.before) {
+    observe(document, state);
+    state.animations = new Set(animationsOf(state));
+  }
 
   watch = state;
   setTimeout(() => watch === state && stop(), abandonMs);
@@ -347,6 +375,7 @@ export async function takeDiff(
 
   while (true) {
     while (true) {
+      finishStarted(state);
       let pending = pendingSince(state.started);
       result.tracked = pending !== null;
       result.pending = pending ?? 0;
@@ -388,7 +417,9 @@ export async function takeDiff(
     // Settled with nothing to show: compare again once a later mutation settles, or when the watch ends.
     let seen = state.changed;
 
-    while (state.changed === seen && Date.now() < watchUntil)
+    while (state.changed === seen && Date.now() < watchUntil) {
       await sleep(watchUntil);
+      finishStarted(state);
+    }
   }
 }
