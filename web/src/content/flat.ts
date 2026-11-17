@@ -64,6 +64,33 @@ export let isShown = (element: Element) =>
 export let isBlock = (element: Element) =>
   !/^(inline|contents|$)/.test(getComputedStyle(element).display);
 
+let spacing = [
+  "margin-left",
+  "margin-right",
+  "padding-left",
+  "padding-right",
+  "border-left-width",
+  "border-right-width",
+];
+
+let spaced = (style: CSSStyleDeclaration) =>
+  spacing.some((property) => parseFloat(style.getPropertyValue(property)) > 0);
+
+// Whether element sets its text apart: a block box, or an inline one with horizontal margin, padding or border (a badge), or a generated box
+// with width or spacing before or after it (a separator dot drawn by ::before).
+export function setsApart(element: Element) {
+  if (isBlock(element) || spaced(getComputedStyle(element))) return true;
+
+  return ["::before", "::after"].some((pseudo) => {
+    let style = getComputedStyle(element, pseudo);
+
+    if (/^(none|normal|)$/.test(style.content) || style.display === "none")
+      return false;
+
+    return spaced(style) || parseFloat(style.width) > 0;
+  });
+}
+
 export function* flatElements(root: Node): Generator<Element> {
   for (let child of flatChildren(root)) {
     if (!(child instanceof Element) || isPruned(child)) continue;

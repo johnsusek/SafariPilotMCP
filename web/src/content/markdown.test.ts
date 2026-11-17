@@ -16,6 +16,7 @@ let read = (element: Element, maxChars = 10000) =>
 beforeEach(() => {
   document.body.innerHTML = "";
   vi.unstubAllGlobals();
+  vi.restoreAllMocks();
 });
 
 describe("markdownOf", () => {
@@ -107,6 +108,28 @@ describe("markdownOf", () => {
     expect(text).toMatch(/^Side/);
     expect(text).toContain("| Inner |\n| --- |");
     expect(text).toMatch(/\n\nLayout$/);
+  });
+
+  test("inline boxes with spacing or a drawn separator read as separate words", () => {
+    // happy-dom computes no pseudo-element styles, so the separator dot's is given.
+    let computed = window.getComputedStyle;
+    let dot = {
+      content: '""',
+      display: "inline-block",
+      width: "2px",
+      getPropertyValue: () => "0px",
+    } as unknown as CSSStyleDeclaration;
+    vi.spyOn(window, "getComputedStyle").mockImplementation(
+      (element, pseudo) =>
+        pseudo === "::before" && element.classList.contains("dot")
+          ? dot
+          : computed(element, pseudo),
+    );
+    expect(
+      markdown(
+        '<p><span style="margin-right: 8px">Play trailer</span><span>2:11</span></p><p><span>Stephen King</span><span class="dot">Frank Darabont</span></p>',
+      ),
+    ).toBe("Play trailer 2:11\n\nStephen King Frank Darabont");
   });
 
   test("code blocks keep their text and language, quotes and rules their marks", () => {

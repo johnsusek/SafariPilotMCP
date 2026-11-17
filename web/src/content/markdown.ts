@@ -1,6 +1,13 @@
 import { redactUrl } from "../shared/redact";
 import { isField, nameOf, roleOf } from "./describe";
-import { flatChildren, isBlock, isInvisible, isPruned, isShown } from "./flat";
+import {
+  flatChildren,
+  isBlock,
+  isInvisible,
+  isPruned,
+  isShown,
+  setsApart,
+} from "./flat";
 
 // Markdown written so far: blocks are finished blocks and line the inline run being built. inline writes no block markup (a heading, a table cell, a link's text),
 // inLink writes no nested link, and budget is how many more characters of text are wanted, shared by every sink of one read.
@@ -421,7 +428,13 @@ function write(element: Element, sink: Sink) {
   }
 
   if (!isBlock(element)) {
+    let apart = setsApart(element);
+
+    if (apart) append(sink, " ");
+
     flow(element, sink);
+
+    if (apart) append(sink, " ");
 
     return;
   }

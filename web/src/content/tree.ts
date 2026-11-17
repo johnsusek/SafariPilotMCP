@@ -12,7 +12,13 @@ import {
   nameOf,
   roleOf,
 } from "./describe";
-import { flatChildren, isBlock, isInvisible, isPruned, isShown } from "./flat";
+import {
+  flatChildren,
+  isInvisible,
+  isPruned,
+  isShown,
+  setsApart,
+} from "./flat";
 import {
   blocksScripts,
   contentBox,
@@ -144,21 +150,6 @@ function gap(items: Item[]) {
   let last = items.at(-1);
 
   if (last && "text" in last && !last.text.endsWith(" ")) last.text += " ";
-}
-
-// Whether element sets its text apart: a block box, or an inline one with horizontal margin, padding or border (a badge, a separator dot).
-function setsApart(element: Element) {
-  if (isBlock(element)) return true;
-
-  let style = getComputedStyle(element);
-  return [
-    "margin-left",
-    "margin-right",
-    "padding-left",
-    "padding-right",
-    "border-left-width",
-    "border-right-width",
-  ].some((property) => parseFloat(style.getPropertyValue(property)) > 0);
 }
 
 // Adds what a child that shows no line of its own holds to items, set off by spaces when the child sets its text apart.
