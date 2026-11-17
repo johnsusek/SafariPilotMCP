@@ -179,6 +179,30 @@ let tasks: Record<string, Task> = {
       return !!price && pageText.includes(price);
     },
   },
+  // The example's code comments give its default outputs, so only the edited line grades; working it out without running cannot be told apart.
+  mdn: {
+    prompt: () =>
+      "Go to https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/at. In the page's interactive example, change the code so the first `index` is 4, run it with the example's Run button and report the first line of output it prints.",
+    check: (answer) => /an index of 4 returns 44/i.test(answer),
+  },
+  // A 2023 thread whose likes have settled; it opens with Bluesky's own continuation posts, which the prompt skips.
+  bluesky: {
+    prompt: () =>
+      "Go to https://bsky.app/profile/bsky.app/post/3jymkky4cxf2u and report the handle (starting with @) of the first account other than Bluesky (@bsky.app) that replied to the post. Do not sign in.",
+    check: (answer) => /oedipusnj/i.test(answer),
+  },
+  // Pinned from a run by hand, like apple; a changed recipe fails every run loudly.
+  allrecipes: {
+    prompt: () =>
+      "Go to https://www.allrecipes.com, use the site's search to find the recipe World's Best Lasagna and report its prep time and how many servings it makes. Do not sign in or save anything.",
+    check: (answer) => /30\s*min/i.test(answer) && /\b12\b/.test(answer),
+  },
+  // Safari shows the PDF in its own viewer, which page reads cannot see into; pinned like apple.
+  irs: {
+    prompt: () =>
+      'Open https://www.irs.gov/pub/irs-pdf/fw9.pdf in the browser and report the revision date printed on Form W-9 (the "Rev." date under the form number). Read it from the page; do not download the file.',
+    check: (answer) => /march,?\s+2024/i.test(answer),
+  },
 };
 
 let ending =
