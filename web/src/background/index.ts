@@ -3,7 +3,8 @@
 // Wake paths (alarms, tab events, connectNative pushes) restart the loop if Safari unloaded us.
 import { runCommand } from "./commands";
 import type { Instance, PollReply, PollResult, ToNative } from "./native";
-import { forget, pilotOpened, restorePilotTabs } from "./network";
+import type { PilotedQuery } from "../shared/protocol";
+import { forget, isPilot, pilotOpened, restorePilotTabs } from "./network";
 
 let appId = "net.johnsolo.SafariPilot";
 let instance: Instance = {
@@ -78,6 +79,14 @@ browser.tabs.onUpdated.addListener((_tabId, change) => {
   if (change.status === "complete") wake("tabs.onUpdated");
 });
 browser.tabs.onCreated.addListener(pilotOpened);
+// A pilot tab's top frame asks as it loads, so its glow shows from the start of each page.
+browser.runtime.onMessage.addListener(
+  (message: PilotedQuery, sender: chrome.runtime.MessageSender) => {
+    if (message?.op !== "piloted") return undefined;
+
+    return restored.then(() => isPilot(sender.tab?.id ?? -1));
+  },
+);
 browser.tabs.onRemoved.addListener(forget);
 
 // Lead (b): the app calls SFSafariApplication.dispatchMessage when a command is queued and no poll is open.

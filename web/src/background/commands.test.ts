@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { accessDeadlineMs } from "./access";
 import { runCommand } from "./commands";
 import { addressSettleMs, loadTimeoutMs } from "./load";
+import { forget, piloting } from "./network";
 import { resolveTab } from "./tabs";
 
 type Listener = (tabId: number, change: { status?: string }) => void;
@@ -45,7 +46,9 @@ let fakeBrowser = () => ({
 
       return found;
     }),
-    sendMessage: vi.fn(),
+    sendMessage: vi.fn(
+      async (..._args: never[]): Promise<unknown> => undefined,
+    ),
     update: vi.fn(async () => {}),
     create: vi.fn(),
     remove: vi.fn(async () => {}),
@@ -225,6 +228,23 @@ describe("runCommand", () => {
       dataUrl: "data:image/png;base64,AA",
       tab: { id: 7 },
     });
+  });
+
+  test("screenshot hides a pilot tab's glow for the capture", async () => {
+    await piloting(async () => ({ id: 7 }));
+    let order: string[] = [];
+    fake.tabs.sendMessage.mockImplementation(
+      async (_id: number, request: { shown: boolean }) => {
+        order.push(`glow ${request.shown}`);
+      },
+    );
+    fake.tabs.captureVisibleTab.mockImplementation(async () => {
+      order.push("capture");
+      return "data:image/png;base64,AA";
+    });
+    await run({ type: "screenshot", tabId: 7 });
+    forget(7);
+    expect(order).toEqual(["glow false", "capture", "glow true"]);
   });
 
   test("navigate answers after the tab completes loading", async () => {

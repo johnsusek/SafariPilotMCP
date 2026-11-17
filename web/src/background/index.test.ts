@@ -20,6 +20,7 @@ test("every message to the app names the build of this bundle", async () => {
       }),
       onStartup: listener,
       onInstalled: listener,
+      onMessage: listener,
     },
     alarms: { onAlarm: listener, create: vi.fn() },
     tabs: {

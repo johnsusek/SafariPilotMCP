@@ -59,6 +59,7 @@ beforeEach(async () => {
     webRequest: events,
     tabs: {
       query: async () => [{ id: 7 }],
+      sendMessage: async () => undefined,
     },
     storage: {
       session: {

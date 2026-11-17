@@ -61,8 +61,13 @@ export type UploadFile = {
   data: string;
 };
 
+// The one message a content script sends the background: whether its tab is a pilot tab, asked by the top frame as it loads.
+export type PilotedQuery = { op: "piloted" };
+
 export type ContentRequest =
   | { op: "ping" }
+  // Shows or hides the glow that marks a pilot tab; only the top frame draws it.
+  | { op: "glow"; shown: boolean }
   | { op: "snapshot" }
   // clip limits the points tried to that part of this frame (what its ancestors leave visible); scroll false skips centering the element.
   | { op: "locate"; ref: number; clip: Rect | null; scroll: boolean }
@@ -447,8 +452,11 @@ export type DiffResult = {
   settled: boolean;
 };
 
+export type GlowResult = { ok: true };
+
 export type ContentResponse =
   | Failure
+  | GlowResult
   | PingResult
   | SnapshotResult
   | LocateResult

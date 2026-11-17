@@ -18,7 +18,7 @@ import {
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
-import { listRequests, piloting, requestDetail } from "./network";
+import { isPilot, listRequests, piloting, requestDetail } from "./network";
 import { runPageFetch } from "./pageFetch";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
@@ -335,10 +335,24 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
       code: "tab_unavailable",
     };
 
-  let dataUrl = await browser.tabs
-    .captureVisibleTab(tab.windowId, { format: "png" })
-    .catch(refusing(tab.id, tab.url));
-  return { ok: true, dataUrl, tab: await tabInfo(tab) };
+  // The glow is hidden for the capture, so the screenshot shows the page as it is.
+  let glow = async (shown: boolean) =>
+    isPilot(tab.id) &&
+    browser.tabs
+      .sendMessage(tab.id, { op: "glow", shown } satisfies ContentRequest, {
+        frameId: 0,
+      })
+      .catch(() => {});
+  await glow(false);
+
+  try {
+    let dataUrl = await browser.tabs
+      .captureVisibleTab(tab.windowId, { format: "png" })
+      .catch(refusing(tab.id, tab.url));
+    return { ok: true, dataUrl, tab: await tabInfo(tab) };
+  } finally {
+    await glow(true);
+  }
 }
 
 export async function runCommand(

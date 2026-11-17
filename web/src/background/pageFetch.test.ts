@@ -111,6 +111,7 @@ beforeEach(async () => {
       ].map((name) => [name, event(name)]),
     ),
     storage: { session: { set: async () => {} } },
+    tabs: { sendMessage: async () => undefined },
   });
   network = await import("./network");
   pageFetch = await import("./pageFetch");

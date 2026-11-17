@@ -6,7 +6,11 @@ import type {
   NetworkRequestResult,
   NetworkResult,
 } from "../shared/commands";
-import type { Failure, NetworkBodyResult } from "../shared/protocol";
+import type {
+  ContentRequest,
+  Failure,
+  NetworkBodyResult,
+} from "../shared/protocol";
 import { redactBody, redactHeaders, redactUrl } from "../shared/redact";
 import { type Send, thrown } from "./frames";
 
@@ -188,6 +192,9 @@ let pilot = (tabId: number) => {
   pending.delete(tabId);
   void save();
   updateListening();
+  // The page may have asked before its tab was piloted, so the glow is pushed too.
+  let request: ContentRequest = { op: "glow", shown: true };
+  browser.tabs.sendMessage(tabId, request, { frameId: 0 }).catch(() => {});
 };
 
 export let isPilot = (tabId: number) => pilotTabs.has(tabId);

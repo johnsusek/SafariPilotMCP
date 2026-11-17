@@ -6,6 +6,7 @@ import { drag } from "./drag";
 import { find, target } from "./find";
 import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
+import { askPiloted, glow } from "./glow";
 import { inspect, selectOption, setValue } from "./inspect";
 import { syntheticKeys } from "./keys";
 import { locate } from "./locate";
@@ -42,6 +43,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
       };
     if (request.op === "ping")
       return { ok: true, url: location.href, title: document.title };
+    if (request.op === "glow") return glow(request.shown);
     if (request.op === "snapshot") return snapshot();
     if (request.op === "locate")
       return await locate(request.ref, request.clip, request.scroll);
@@ -116,3 +118,5 @@ shared.safaripilotCopy = copy;
 browser.runtime.onMessage.addListener((request: ContentRequest) =>
   copy === shared.safaripilotCopy ? handle(request) : undefined,
 );
+
+void askPiloted();
