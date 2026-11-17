@@ -70,6 +70,7 @@ export async function locate(
       (union, label) => unite(union, toRect(label.getBoundingClientRect())),
       rect,
     ),
+    link: element.closest("a[href], area[href]") !== null,
     viewport,
     candidates: [] as Point[],
   };

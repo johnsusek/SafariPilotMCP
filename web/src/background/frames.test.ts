@@ -137,6 +137,7 @@ let located = (candidates: { left: number; top: number }[]) => ({
   hitsTarget: true,
   covered: false,
   hitDescription: "button",
+  link: false,
   viewport: viewport(200, 100),
   candidates,
 });

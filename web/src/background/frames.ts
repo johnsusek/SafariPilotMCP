@@ -234,6 +234,7 @@ export async function locatePath(
     ok: true as const,
     ref,
     rect: toTop(child.rect, walk.view),
+    link: child.link,
     viewport: walk.viewport,
     sandboxed: walk.sandboxed,
   };

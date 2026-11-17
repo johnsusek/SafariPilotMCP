@@ -427,7 +427,13 @@ struct Commands {
     let tab = try await frontTab(tabId)
     let located = try await locateHittable(tab.id, ref)
     try refuseSandboxed(located, "a click")
-    let match = try await AXEngine.resolve(located, tab: tab)
+    let match: AXEngine.Match
+
+    // WebKit can fold a link into a larger AX element (DoorDash's store cards are one AXButton), leaving nothing to press; a link's navigation runs from an untrusted click too.
+    do { match = try await AXEngine.resolve(located, tab: tab) } catch let failure as Failure where failure.code == .notActionable && located.link {
+      let reply = try await syntheticClick(tab.id, ref, .left, [])
+      return CLIReply(ok: reply.ok, text: "followed link ref \(ref) from the page script, since \(failure.description)\n\(reply.text)", data: reply.data, code: reply.code)
+    }
 
     // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter from the page script, as from the keyboard.
     if match.node.role == "AXDisclosureTriangle" {

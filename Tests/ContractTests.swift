@@ -137,7 +137,7 @@ struct ContractTests {
     #expect(try decode(FindResult.self, #"{"ok":true,"matches":[\#(element)]}"#).matches[0].disabled == nil)
     #expect(try decode(PageTextResult.self, #"{"ok":true,"url":"u","title":"t","text":"hello","truncated":false}"#).text == "hello")
     #expect(try decode(ScrollResult.self, #"{"ok":true,"moved":false,"viewport":\#(viewport)}"#).viewport.scrollY == 40)
-    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","viewport":\#(viewport),"sandboxed":false}"#).point == CSSPoint(left: 2, top: 4))
+    #expect(try decode(LocateResult.self, #"{"ok":true,"ref":4,"rect":{"left":1,"top":2,"width":3,"height":4},"point":{"left":2,"top":4},"hitsTarget":true,"covered":false,"hitDescription":"button","link":false,"viewport":\#(viewport),"sandboxed":false}"#).point == CSSPoint(left: 2, top: 4))
     let events = try decode(EventsResult.self, #"{"ok":true,"events":[{"type":"click","isTrusted":true,"ref":null,"target":"button","time":1.5,"detail":"","count":3,"frame":""},{"type":"keydown","isTrusted":true,"ref":"5:7","target":"input","time":2,"detail":"","count":1,"frame":"5","onTarget":true}],"origin":1762900000123.4,"origins":{"":1762900000123.4,"5":1762900000200},"busy":[]}"#)
     #expect(events.events[0].count == 3)
     #expect(events.events[1].ref == PageRef(frames: [5], local: 7))

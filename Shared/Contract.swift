@@ -53,7 +53,7 @@ struct LoggedEvent: Codable, Sendable, Equatable {
 struct PingResult: Codable, Sendable { let url: String; let title: String }
 struct SnapshotResult: Codable, Sendable { let url: String; let title: String; let viewport: Viewport; let elements: [ElementInfo] }
 /// Rects are in top-frame CSS px; sandboxed means the element's frame is sandboxed without allow-scripts, so no page listener can confirm a click or key there.
-struct LocateResult: Codable, Sendable { let ref: PageRef; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let viewport: Viewport; let sandboxed: Bool }
+struct LocateResult: Codable, Sendable { let ref: PageRef; let rect: CSSRect; let point: CSSPoint; let hitsTarget: Bool; let covered: Bool; let hitDescription: String; let link: Bool; let viewport: Viewport; let sandboxed: Bool }
 /// target is what the events went to; dispatched lists their types in order, canceled when a page listener called preventDefault; focused is the active element afterwards.
 struct SyntheticClickResult: Codable, Sendable {
   struct Dispatched: Codable, Sendable { let type: String; let canceled: Bool }

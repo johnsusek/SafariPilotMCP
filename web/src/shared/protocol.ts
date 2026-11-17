@@ -206,6 +206,8 @@ export type LocateResult = {
   // In view but under another element; focus-based actions still work then.
   covered: boolean;
   hitDescription: string;
+  // The element is or sits inside a link with an href, whose navigation an untrusted click also runs.
+  link: boolean;
   viewport: Viewport;
   // With a clip: up to 8 points on the element, best first, for the background to test against the ancestor frames.
   candidates: Point[];
