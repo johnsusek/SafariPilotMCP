@@ -578,7 +578,17 @@ struct Commands {
     lines[0] += outcome
     lines += matched + landed.lines
 
-    if !navigated, !frameNavigated { lines.append(await changes(watch, since: acted)) }
+    // AXPress sends no pointer events, and some widgets (Radix menus) open on pointerdown alone.
+    if !navigated, !frameNavigated {
+      let changed = await changes(watch, since: acted)
+      let unchanged = "page unchanged"
+
+      if changed.hasPrefix(unchanged) {
+        lines.append(unchanged + "; a widget that opens on pointerdown ignores this click, so if it should have reacted, try key Enter, Space or ArrowDown on it" + changed.dropFirst(unchanged.count))
+      } else {
+        lines.append(changed)
+      }
+    }
 
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
