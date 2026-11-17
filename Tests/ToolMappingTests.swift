@@ -321,6 +321,10 @@ struct ToolMappingTests {
     #expect(actions[0].input == ["ref": .number(3)])
     #expect(actions[1].input == [:])
 
+    let prefixed = try Tools.batchActions(["actions": .array([.object(["name": "mcp__safaripilot__read_page"]), .object(["name": "mcp__plugin_x__safaripilot__click", "input": .object(["ref": .number(3)])])])])
+    #expect(prefixed.map(\.name) == ["read_page", "click"])
+    #expect(throws: Failure.self) { try Tools.batchActions(["actions": .array([.object(["name": "mcp__safaripilot__browser_batch"])])]) }
+
     for bad: [String: JSONValue] in [[:], ["actions": .array([])], ["actions": "click"], ["actions": .array([.object(["input": .object([:])])])], ["actions": .array([.object(["name": "click", "input": "ref 3"])])]] {
       #expect(throws: Failure.self, "\(bad)") { try Tools.batchActions(bad) }
     }

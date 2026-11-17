@@ -100,7 +100,7 @@ enum Tools {
     ToolDefinition(name: "browser_batch", description: "Runs several tool calls in order in one round trip and returns each one's output, stopping at the first failure.", properties: ["actions": .object([
       "type": "array",
       "description": "Calls to run in order, each the tool's name and the input it takes on its own; browser_batch cannot be nested.",
-      "items": .object(["type": "object", "properties": .object(["name": property("string", "Tool name, such as click or form_input."), "input": .object(["type": "object", "description": "That tool's arguments."])]), "required": .array(["name"])]),
+      "items": .object(["type": "object", "properties": .object(["name": property("string", "Tool name, such as click, with or without your client's prefix."), "input": .object(["type": "object", "description": "That tool's arguments."])]), "required": .array(["name"])]),
     ])], required: ["actions"]),
   ]
 
@@ -154,13 +154,17 @@ enum Tools {
     return try .condition(tabId: session.page(tabId), condition: condition, timeout: limit)
   }
 
-  /// browser_batch's actions as tool names and inputs; nesting is refused so one call cannot fan out further.
+  /// browser_batch's actions as short tool names and inputs; nesting is refused so one call cannot fan out further.
   static func batchActions(_ arguments: [String: JSONValue]) throws -> [(name: String, input: [String: JSONValue])] {
     guard case let .array(items)? = arguments["actions"] else { throw Failure(.invalidArgument, "actions must be an array of {name, input}") }
     guard !items.isEmpty else { throw Failure(.invalidArgument, "actions is empty") }
 
     return try items.enumerated().map { index, item in
-      guard let name = item["name"]?.string else { throw Failure(.invalidArgument, "action \(index + 1) needs a string name") }
+      guard let listed = item["name"]?.string else { throw Failure(.invalidArgument, "action \(index + 1) needs a string name") }
+
+      // A step may carry the client's prefixed name, such as mcp__safaripilot__click; no tool's own name holds "__".
+      let name = String(listed.split(separator: "__" as String).last ?? Substring(listed))
+
       guard name != "browser_batch" else { throw Failure(.invalidArgument, "action \(index + 1): browser_batch cannot be nested") }
 
       switch item["input"] {
