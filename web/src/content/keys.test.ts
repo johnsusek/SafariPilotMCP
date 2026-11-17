@@ -155,3 +155,17 @@ test("ArrowUp and ArrowDown step a number field", () => {
   syntheticKeys(refFor(number), [press("ArrowDown")]);
   expect(number.value).toBe("43");
 });
+
+test("shift with a caret key says it extended the selection", () => {
+  let field = element("field") as HTMLInputElement;
+  field.value = "hello";
+  field.setSelectionRange(5, 5);
+  expect(
+    syntheticKeys(refFor(field), [press("Home", "shift"), press("End")]),
+  ).toMatchObject({
+    presses: [
+      { action: "extended the selection" },
+      { action: "moved the caret" },
+    ],
+  });
+});

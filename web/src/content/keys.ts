@@ -122,6 +122,8 @@ function moveCaret(element: Element, key: string, extend: boolean) {
     return `set the number to ${element.value}`;
   }
 
+  let done = extend ? "extended the selection" : "moved the caret";
+
   if (isTextInput(element) || element instanceof HTMLTextAreaElement) {
     let field = element;
     let start = field.selectionStart ?? 0;
@@ -146,7 +148,7 @@ function moveCaret(element: Element, key: string, extend: boolean) {
         key === "ArrowUp" ? "backward" : "forward",
         "line",
       );
-      return "moved the caret";
+      return done;
     }
 
     if (extend)
@@ -156,7 +158,7 @@ function moveCaret(element: Element, key: string, extend: boolean) {
         target < start ? "backward" : "forward",
       );
     else field.setSelectionRange(target, target);
-    return "moved the caret";
+    return done;
   }
 
   let units: Record<string, [string, string]> = {
@@ -170,7 +172,7 @@ function moveCaret(element: Element, key: string, extend: boolean) {
   let unit = units[key];
   if (!unit) return null;
   getSelection()?.modify(extend ? "extend" : "move", unit[0], unit[1]);
-  return "moved the caret";
+  return done;
 }
 
 function scrollPage(key: string, shift: boolean) {
