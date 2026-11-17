@@ -1,4 +1,4 @@
-import { fetchAnswerEvent, fetchEvent, maxBody } from "../main/network";
+import { fetchAnswerEvent, fetchEvent, maxFetchBody } from "../main/network";
 import type {
   ContentRequest,
   ErrorCode,
@@ -51,7 +51,7 @@ let answerOf = (raw: Message): PageFetchAnswer => ({
   contentType: String(raw.contentType ?? ""),
   binary: raw.binary === true,
   size: Number(raw.size) || 0,
-  body: typeof raw.body === "string" ? raw.body.slice(0, maxBody) : null,
+  body: typeof raw.body === "string" ? raw.body.slice(0, maxFetchBody) : null,
   truncated: raw.truncated === true,
 });
 

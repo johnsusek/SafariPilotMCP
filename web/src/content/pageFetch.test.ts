@@ -4,7 +4,7 @@ import {
   fetchAnswerEvent,
   fetchEvent,
   installNetworkCapture,
-  maxBody,
+  maxFetchBody,
 } from "../main/network";
 import type { ContentRequest } from "../shared/protocol";
 import { installPageFetchReader, pageFetch } from "./pageFetch";
@@ -43,7 +43,9 @@ let browserFetch = vi.fn(
         headers: { "content-type": "image/png" },
       });
 
-    let body = url.includes("big") ? "x".repeat(maxBody + 10) : '{"ok":true}';
+    let body = url.includes("big")
+      ? "x".repeat(maxFetchBody + 10)
+      : '{"ok":true}';
     return new Response(body, {
       status: 201,
       statusText: "Created",
@@ -130,9 +132,9 @@ describe("page fetch", () => {
     });
   });
 
-  test("a long text body is cut at maxBody", async () => {
+  test("a long text body is cut at maxFetchBody", async () => {
     let answer = await pageFetch(request({ url: at("/big") }));
-    expect(answer).toMatchObject({ truncated: true, size: maxBody });
+    expect(answer).toMatchObject({ truncated: true, size: maxFetchBody });
   });
 
   test("a network failure and a timeout keep their codes", async () => {

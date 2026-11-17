@@ -13,6 +13,8 @@ export let fetchEvent = "safaripilot-fetch";
 export let fetchAnswerEvent = "safaripilot-fetch-answer";
 export let maxRecords = 200;
 export let maxBody = 100000;
+// page_fetch reads far more, since pick needs a whole JSON body and only max_chars of the reply goes back to the agent.
+export let maxFetchBody = 5000000;
 // webRequest stamps a request a little after the page called fetch or send, and a fetch from a service worker or a slow main thread later still.
 export let matchWindowMs = 10000;
 
@@ -21,9 +23,9 @@ let textual =
 
 export let isTextual = (contentType: string) => textual.test(contentType);
 
-let clip = (text: string) =>
-  text.length > maxBody
-    ? { text: text.slice(0, maxBody), cut: true }
+let clip = (text: string, limit = maxBody) =>
+  text.length > limit
+    ? { text: text.slice(0, limit), cut: true }
     : { text, cut: false };
 
 // What a request carries, as text: strings and form data as written (a file as its name and size), binary bodies by size.
@@ -149,9 +151,11 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
       : `not text (${contentType || "no content type"})`;
   };
 
-  // Reads a clone of the response up to maxBody characters, then cancels it; the page reads the original as it would have.
-  // Reads a body as text up to maxBody characters, cancelling the rest; cut says there was more.
-  let readText = async (body: ReadableStream<Uint8Array> | null) => {
+  // Reads a body as text up to limit characters, cancelling the rest; cut says there was more.
+  let readText = async (
+    body: ReadableStream<Uint8Array> | null,
+    limit = maxBody,
+  ) => {
     let reader = body?.getReader();
     let decoder = new Decoder();
     let text = "";
@@ -163,15 +167,16 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
 
       text += decoder.decode(value, { stream: true });
 
-      if (text.length > maxBody) {
+      if (text.length > limit) {
         reader.cancel().catch(() => {});
-        return { text: clip(text).text, cut: true };
+        return { text: text.slice(0, limit), cut: true };
       }
     }
 
-    return { text: clip(text + decoder.decode()).text, cut: false };
+    return clip(text + decoder.decode(), limit);
   };
 
+  // Reads a clone of the response, so the page reads the original as it would have.
   let readResponse = async (record: BodyRecord, response: Response) => {
     finish(record, response.status, response.headers.get("content-type") ?? "");
 
@@ -318,12 +323,12 @@ export function installNetworkCapture(page: Window & typeof globalThis) {
 
   let failing = (error: string, code = "failed") => ({ error, code });
 
-  // A text body is read up to maxBody characters; a binary one has its bytes counted. The timeout's abort ends either read.
+  // A text body is read up to maxFetchBody characters; a binary one has its bytes counted. The timeout's abort ends either read.
   let readBody = async (answer: PageFetchAnswer, response: Response) => {
     if (!response.body) return;
 
     if (isTextual(answer.contentType)) {
-      let { text, cut } = await readText(response.body);
+      let { text, cut } = await readText(response.body, maxFetchBody);
       answer.body = text;
       answer.size = text.length;
       answer.truncated = cut;
