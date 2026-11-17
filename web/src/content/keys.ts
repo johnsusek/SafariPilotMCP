@@ -1,3 +1,4 @@
+import { isFrameHost } from "./frames";
 import type {
   Failure,
   KeyPress,
@@ -106,6 +107,21 @@ function stepSelect(select: HTMLSelectElement, down: boolean) {
 }
 
 function moveCaret(element: Element, key: string, extend: boolean) {
+  // A number field steps on ArrowUp and ArrowDown and has no selection to move.
+  if (element instanceof HTMLInputElement && element.type === "number") {
+    if (key !== "ArrowUp" && key !== "ArrowDown") return null;
+
+    let before = element.value;
+
+    if (key === "ArrowUp") element.stepUp();
+    else element.stepDown();
+
+    if (element.value === before) return null;
+
+    fire(element, "input", "change");
+    return `set the number to ${element.value}`;
+  }
+
   if (isTextInput(element) || element instanceof HTMLTextAreaElement) {
     let field = element;
     let start = field.selectionStart ?? 0;
@@ -252,9 +268,54 @@ function defaultAction(element: Element, press: KeyPress) {
   return scrollPage(press.key, held("shift"));
 }
 
+// Legacy keyCodes for named keys; a letter's or digit's is its uppercase character code.
+let keyCodes: Record<string, number> = {
+  Backspace: 8,
+  Tab: 9,
+  Enter: 13,
+  Shift: 16,
+  Control: 17,
+  Alt: 18,
+  Escape: 27,
+  " ": 32,
+  PageUp: 33,
+  PageDown: 34,
+  End: 35,
+  Home: 36,
+  ArrowLeft: 37,
+  ArrowUp: 38,
+  ArrowRight: 39,
+  ArrowDown: 40,
+  Delete: 46,
+  Meta: 91,
+};
+
+// The physical key's code, for a US layout.
+function codeOf(key: string) {
+  if (/^[a-z]$/i.test(key)) return `Key${key.toUpperCase()}`;
+  if (/^[0-9]$/.test(key)) return `Digit${key}`;
+  if (key === " ") return "Space";
+  if (Object.values(modifierKeys).includes(key)) return `${key}Left`;
+  return key.length > 1 ? key : "";
+}
+
+// Pages that read keyCode, which or code (jQuery handlers, the-internet's key_presses) see the values a real press gives.
 function keyboardEvent(type: string, key: string, modifiers: Modifier[]) {
+  let printable = key.length === 1;
+  let keyCode =
+    type === "keypress"
+      ? printable
+        ? key.charCodeAt(0)
+        : (keyCodes[key] ?? 0)
+      : (keyCodes[key] ??
+        (/^[a-z0-9]$/i.test(key) ? key.toUpperCase().charCodeAt(0) : 0));
+  // Passed in the init rather than defined on the event, which the page's world would not see; Safari's KeyboardEventInit takes them.
   return new KeyboardEvent(type, {
     key,
+    code: codeOf(key),
+    keyCode,
+    which: keyCode,
+    charCode: type === "keypress" && printable ? keyCode : 0,
     bubbles: true,
     cancelable: true,
     composed: true,
@@ -262,7 +323,7 @@ function keyboardEvent(type: string, key: string, modifiers: Modifier[]) {
     altKey: modifiers.includes("alt"),
     ctrlKey: modifiers.includes("ctrl"),
     metaKey: modifiers.includes("cmd"),
-  });
+  } as KeyboardEventInit);
 }
 
 // Presses keys as untrusted events at the focused element (after focusing ref when given) and runs each press's browser default unless a listener canceled it,
@@ -282,7 +343,7 @@ export function syntheticKeys(
   for (let press of presses) {
     let element = active();
 
-    if (element instanceof HTMLIFrameElement)
+    if (isFrameHost(element))
       return {
         ok: false,
         error: `focus is inside iframe ${describe(element)}; pass a ref inside its frame, such as ${refFor(element)}:N`,

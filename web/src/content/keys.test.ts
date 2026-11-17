@@ -114,3 +114,44 @@ test("focus inside an iframe asks for a ref in its frame", () => {
     code: "not_actionable",
   });
 });
+
+test("events carry the legacy keyCode, which, charCode and code a real press gives", () => {
+  document.execCommand = () => true;
+  let seen: string[] = [];
+  // happy-dom drops the legacy fields Safari's KeyboardEventInit takes, so the init itself is checked.
+  let Native = KeyboardEvent;
+  vi.stubGlobal(
+    "KeyboardEvent",
+    class extends Native {
+      constructor(type: string, init: KeyboardEventInit) {
+        super(type, init);
+        seen.push(
+          `${type} ${init.keyCode} ${init.which} ${init.charCode} ${init.code}`,
+        );
+      }
+    },
+  );
+
+  try {
+    syntheticKeys(refFor(element("field")), [press("a"), press("Tab")]);
+  } finally {
+    vi.unstubAllGlobals();
+  }
+
+  expect(seen).toEqual([
+    "keydown 65 65 0 KeyA",
+    "keypress 97 97 97 KeyA",
+    "keyup 65 65 0 KeyA",
+    "keydown 9 9 0 Tab",
+    "keyup 9 9 0 Tab",
+  ]);
+});
+
+test("ArrowUp and ArrowDown step a number field", () => {
+  document.body.innerHTML = '<input id="number" type="number" value="42">';
+  let number = element("number") as HTMLInputElement;
+  syntheticKeys(refFor(number), [press("ArrowUp"), press("ArrowUp")]);
+  expect(number.value).toBe("44");
+  syntheticKeys(refFor(number), [press("ArrowDown")]);
+  expect(number.value).toBe("43");
+});
