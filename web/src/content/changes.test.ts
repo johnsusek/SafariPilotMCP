@@ -159,6 +159,21 @@ describe("diff lines", () => {
     ]);
   });
 
+  test("reordered children say how many moved, the fewest that explain the new order", async () => {
+    let result = await diffAfter(
+      "<main><ul><li>A</li><li>B</li><li>C</li><li>D</li></ul></main>",
+      () => {
+        let list = document.querySelector("ul")!;
+        list.append(list.children[0], list.children[1]);
+      },
+    );
+    expect(refless(result.lines)).toEqual([
+      "in list:",
+      "~ reordered: 2 of 4 children moved",
+    ]);
+    expect(result.changed).toBe(1);
+  });
+
   test("changed text runs are paired, others added or removed", async () => {
     let result = await diffAfter(
       "<main>Total: 3 <button>Go</button></main><nav>one <button>x</button></nav>",

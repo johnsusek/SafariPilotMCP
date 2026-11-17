@@ -300,6 +300,20 @@ function compareTexts(
   for (let text of left) emit(out, "removed", context, `- ${quoted(text)}`);
 }
 
+// How many kept children moved, given each one's old index in its new order: all but the longest run still in old order, such as a sorted table's rows.
+function movedCount(order: number[]) {
+  let tails: number[] = [];
+
+  for (let index of order) {
+    let at = tails.findIndex((tail) => tail >= index);
+
+    if (at < 0) tails.push(index);
+    else tails[at] = index;
+  }
+
+  return order.length - tails.length;
+}
+
 // after and before are one element (or the root) in the two trees. Added elements show whole with refs, removed ones only where their parent survived.
 function compare(
   after: Line,
@@ -333,8 +347,22 @@ function compare(
       `- ${headOf(child.role, child.name)}${statesText(child)}`,
     );
 
+  let priorOf = (child: Line) =>
+    trees.before.nodes.get(child.element!) ?? standIns.get(child);
+  let at = new Map(before.children.map((child, index) => [child, index]));
+  let order = after.children.flatMap((child) => at.get(priorOf(child)!) ?? []);
+  let moved = movedCount(order);
+
+  if (moved)
+    emit(
+      out,
+      "changed",
+      after,
+      `~ reordered: ${moved} of ${order.length} children moved`,
+    );
+
   for (let child of after.children) {
-    let prior = trees.before.nodes.get(child.element!) ?? standIns.get(child);
+    let prior = priorOf(child);
 
     if (!prior) {
       for (let line of linesOf([child.item!], out.prefix))
