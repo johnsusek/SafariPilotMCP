@@ -209,7 +209,11 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
         : null;
       let created = await browser.windows.create({ ...data, focused: false });
 
-      if (front) await browser.windows.update(front.id!, { focused: true });
+      // That window may have closed meanwhile (an orphan sweep right after launch), leaving nothing to focus.
+      if (front)
+        await browser.windows
+          .update(front.id!, { focused: true })
+          .catch(() => {});
 
       return created!.tabs![0] as KnownTab;
     };
