@@ -34,17 +34,23 @@ describe("treeText", () => {
     );
   });
 
-  test("inline markup inside a word keeps it whole, while blocks and line breaks separate words", () => {
+  test("inline markup inside a word keeps it whole, while blocks, spaced inline boxes and line breaks separate words", () => {
     let { text } = render(
-      '<p><span class="hl">Ab</span>ort<b>C</b>ontroller</p><p><span>One</span><div>Two</div><span>Three</span> Four<br>Five</p>',
+      '<p><span class="hl">Ab</span>ort<b>C</b>ontroller</p><p><span style="margin-right: 4px">4.5</span><span style="padding-left: 2px">Rating</span></p><p><span>One</span><div>Two</div><span>Three</span> Four<br>Five</p>',
     );
     expect(withoutRefs(text)).toBe(
       [
         'paragraph "AbortController"',
+        'paragraph "4.5 Rating"',
         'paragraph "One"',
         '"Two Three Four Five"',
       ].join("\n"),
     );
+  });
+
+  test("a value keeps its line breaks", () => {
+    let { text } = render("<textarea>One  two\n\nThree\n</textarea>");
+    expect(withoutRefs(text)).toBe('textbox value="One two\\n\\nThree\\n"');
   });
 
   test("refs resolve to the rendered elements", () => {

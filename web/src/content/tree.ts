@@ -138,9 +138,24 @@ function gap(items: Item[]) {
   if (last && "text" in last && !last.text.endsWith(" ")) last.text += " ";
 }
 
-// Adds what a child that shows no line of its own holds to items, set off by spaces when it is a block box.
+// Whether element sets its text apart: a block box, or an inline one with horizontal margin, padding or border (a badge, a separator dot).
+function setsApart(element: Element) {
+  if (isBlock(element)) return true;
+
+  let style = getComputedStyle(element);
+  return [
+    "margin-left",
+    "margin-right",
+    "padding-left",
+    "padding-right",
+    "border-left-width",
+    "border-right-width",
+  ].some((property) => parseFloat(style.getPropertyValue(property)) > 0);
+}
+
+// Adds what a child that shows no line of its own holds to items, set off by spaces when the child sets its text apart.
 function splice(items: Item[], child: Element, children: Item[]) {
-  let block = isBlock(child);
+  let block = setsApart(child);
 
   if (block) gap(items);
 
