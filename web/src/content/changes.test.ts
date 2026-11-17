@@ -144,6 +144,21 @@ describe("diff lines", () => {
     expect(result.removed).toBe(1);
   });
 
+  test("a list rendered again with equal elements shows only what differs", async () => {
+    let result = await diffAfter(
+      '<main><ul><li><a href="/u/a">A</a></li><li><a href="/u/b" aria-label="B\'s profile"></a></li></ul></main>',
+      () =>
+        (document.querySelector("ul")!.innerHTML =
+          '<li><a href="/u/a">A</a></li><li><a href="/u/b" aria-label="B\'s profile"><img alt="B avatar"></a></li><li>C</li>'),
+    );
+    expect(refless(result.lines)).toEqual([
+      'in link "B\'s profile":',
+      '+ img "B avatar"',
+      "in list:",
+      '+ listitem "C"',
+    ]);
+  });
+
   test("changed text runs are paired, others added or removed", async () => {
     let result = await diffAfter(
       "<main>Total: 3 <button>Go</button></main><nav>one <button>x</button></nav>",

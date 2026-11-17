@@ -309,18 +309,32 @@ function compare(
 ) {
   compareTexts(before.texts, after.texts, after, out);
 
-  for (let child of before.children) {
-    if (!trees.after.nodes.has(child.element!))
-      emit(
-        out,
-        "removed",
-        after,
-        `- ${headOf(child.role, child.name)}${statesText(child)}`,
-      );
-  }
+  // A framework that renders a list again replaces its elements with equal ones; a gone child stands in for a new one with the same role and name.
+  let gone = before.children.filter(
+    (child) => !trees.after.nodes.has(child.element!),
+  );
+  let standIns = new Map<Line, Line>();
 
   for (let child of after.children) {
-    let prior = trees.before.nodes.get(child.element!);
+    if (trees.before.nodes.has(child.element!)) continue;
+
+    let index = gone.findIndex(
+      (old) => old.role === child.role && old.name === child.name,
+    );
+
+    if (index >= 0) standIns.set(child, gone.splice(index, 1)[0]);
+  }
+
+  for (let child of gone)
+    emit(
+      out,
+      "removed",
+      after,
+      `- ${headOf(child.role, child.name)}${statesText(child)}`,
+    );
+
+  for (let child of after.children) {
+    let prior = trees.before.nodes.get(child.element!) ?? standIns.get(child);
 
     if (!prior) {
       for (let line of linesOf([child.item!], out.prefix))
