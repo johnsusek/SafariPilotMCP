@@ -1,5 +1,4 @@
 import type { DiffResult, DiffStartResult } from "../shared/protocol";
-import { hidden } from "../shared/redact";
 import { collapse } from "./describe";
 import { pendingSince } from "./network";
 import { refFor } from "./refs";
@@ -18,6 +17,8 @@ import {
 export let maxElements = 20000;
 // The DOM counts as settled once no mutation has come for this long.
 export let quietMs = 100;
+// A page still showing no change once settled is watched this long after diffStart for a later one, such as output a cross-origin frame posts back.
+export let unchangedMs = 1000;
 let pollMs = 20;
 // A diffStart whose action never asked for its diff (the action failed before its input) stops watching after this.
 let abandonMs = 60000;
@@ -25,14 +26,14 @@ let abandonMs = 60000;
 let wasMax = 80;
 let old = (text: string) => JSON.stringify(collapse(text, wasMax));
 
-// One element line of the tree, or the root (element null). secret is a secret field's value, kept only to notice it changed; it never leaves the frame.
+// One element line of the tree, or the root (element null). value is a field's whole value, since its value= state is cut short; a secret's never leaves the frame.
 type Line = {
   element: Element | null;
   item: Item | null;
   role: string;
   name: string;
   states: string[];
-  secret: string | null;
+  value: string | null;
   texts: string[];
   children: Line[];
 };
@@ -57,14 +58,16 @@ function adopt(items: Item[], parent: Line, nodes: Map<Element, Line>) {
 
     let { element, role, name } = item;
     let states = statesOf(element, role);
-    let secret = states.includes(`value=${hidden}`) ? valueOf(element) : null;
+    let value = states.some((state) => state.startsWith("value="))
+      ? valueOf(element)
+      : null;
     let node: Line = {
       element,
       item,
       role,
       name,
       states,
-      secret,
+      value,
       texts: [],
       children: [],
     };
@@ -87,7 +90,7 @@ function snapshot(): Tree | null {
     role: "",
     name: "",
     states: [],
-    secret: null,
+    value: null,
     texts: [],
     children: [],
   };
@@ -201,14 +204,14 @@ let statesText = (node: Line) =>
 let same = (before: Line, after: Line) =>
   before.role === after.role &&
   before.name === after.name &&
-  before.secret === after.secret &&
+  before.value === after.value &&
   before.states.join(" ") === after.states.join(" ");
 
 // expanded and collapsed, checked and mixed are one state each, so a flip reads as one change.
 let keyOf = (state: string) =>
   ({ collapsed: "expanded", mixed: "checked" })[state] ?? state.split("=")[0];
 
-// What differs, as it was: the old role, name and each state that changed; a secret field's old value shows as value=[hidden] like its new one.
+// What differs, as it was: the old role, name and each state that changed; a value changed past its cut, or a secret's, shows its old value= state as it was.
 function was(before: Line, after: Line) {
   let parts: string[] = [];
 
@@ -222,9 +225,9 @@ function was(before: Line, after: Line) {
 
   for (let [key, state] of now) {
     let was = prior.get(key);
-    let secretChanged = key === "value" && before.secret !== after.secret;
+    let valueChanged = key === "value" && before.value !== after.value;
 
-    if (was === state && !secretChanged) continue;
+    if (was === state && !valueChanged) continue;
 
     parts.push(was ?? (state.includes("=") ? `no ${key}` : `not ${state}`));
   }
@@ -336,34 +339,56 @@ export async function takeDiff(
   }
 
   let deadline = Date.now() + waitMs;
+  let watchUntil = Math.min(deadline, state.started + unchangedMs);
+  let sleep = (until: number) =>
+    new Promise((resolve) =>
+      setTimeout(resolve, Math.max(0, Math.min(pollMs, until - Date.now()))),
+    );
 
   while (true) {
-    let pending = pendingSince(state.started);
-    result.tracked = pending !== null;
-    result.pending = pending ?? 0;
-    result.settled = Date.now() - state.changed >= quietMs && !result.pending;
+    while (true) {
+      let pending = pendingSince(state.started);
+      result.tracked = pending !== null;
+      result.pending = pending ?? 0;
+      result.settled = Date.now() - state.changed >= quietMs && !result.pending;
 
-    if (result.settled || Date.now() >= deadline) break;
+      if (result.settled || Date.now() >= deadline) break;
 
-    await new Promise((resolve) =>
-      setTimeout(resolve, Math.min(pollMs, deadline - Date.now())),
+      await sleep(deadline);
+    }
+
+    let after = snapshot();
+
+    if (!after) {
+      stop();
+      return { ...result, tooLarge: true };
+    }
+
+    let out: Out = {
+      ...result,
+      prefix,
+      maxChars,
+      length: 0,
+      full: false,
+      context: null,
+    };
+    compare(
+      after.root,
+      state.before.root,
+      { before: state.before, after },
+      out,
     );
+    let { lines, added, changed, removed, omitted } = out;
+
+    if (added + changed + removed || Date.now() >= watchUntil) {
+      stop();
+      return { ...result, lines, added, changed, removed, omitted };
+    }
+
+    // Settled with nothing to show: compare again once a later mutation settles, or when the watch ends.
+    let seen = state.changed;
+
+    while (state.changed === seen && Date.now() < watchUntil)
+      await sleep(watchUntil);
   }
-
-  stop();
-  let after = snapshot();
-
-  if (!after) return { ...result, tooLarge: true };
-
-  let out: Out = {
-    ...result,
-    prefix,
-    maxChars,
-    length: 0,
-    full: false,
-    context: null,
-  };
-  compare(after.root, state.before.root, { before: state.before, after }, out);
-  let { lines, added, changed, removed, omitted } = out;
-  return { ...result, lines, added, changed, removed, omitted };
 }

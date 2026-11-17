@@ -1,7 +1,13 @@
 // @vitest-environment happy-dom
 import { beforeEach, describe, expect, test } from "vitest";
 import { answerEvent, pendingEvent } from "../main/network";
-import { maxElements, quietMs, startDiff, takeDiff } from "./changes";
+import {
+  maxElements,
+  quietMs,
+  startDiff,
+  takeDiff,
+  unchangedMs,
+} from "./changes";
 import { installNetworkReader } from "./network";
 
 let refless = (lines: string[]) =>
@@ -201,6 +207,19 @@ describe("diff lines", () => {
     expect(result.lines.join("\n")).not.toMatch(/hunter2|1234|5678/);
   });
 
+  test("a value changed past where its value= state is cut is still a change", async () => {
+    let start = "const array = [5, 12, 8, 130, 44]; let index = 2;";
+    let result = await diffAfter(
+      `<textarea aria-label="Code">${start}</textarea>`,
+      () =>
+        (document.querySelector("textarea")!.value = start.replace("2;", "4;")),
+    );
+    expect(result.changed).toBe(1);
+    expect(refless(result.lines)[0]).toMatch(
+      /^~ textbox "Code" value="const array .*" \(was value="const array .*"\)$/,
+    );
+  });
+
   test("a page with more than maxElements elements is too large to diff", async () => {
     document.body.innerHTML = "<i></i>".repeat(maxElements + 1);
     expect(startDiff()).toEqual({ ok: true, tooLarge: true });
@@ -235,6 +254,35 @@ describe("waiting for quiet", () => {
     expect(result.settled).toBe(true);
   });
 
+  test("a change that comes after the page went quiet is still seen", async () => {
+    document.body.innerHTML = "<main><button>Run</button></main>";
+    startDiff();
+    setTimeout(
+      () =>
+        document
+          .querySelector("main")!
+          .insertAdjacentHTML("beforeend", "<ul><li>44</li></ul>"),
+      quietMs * 4,
+    );
+    let result = await takeDiff("", 2000, 2000);
+    expect(refless(result.lines)).toEqual([
+      "in main:",
+      "+ list",
+      '+   listitem "44"',
+    ]);
+  });
+
+  test("an unchanged page answers once the unchanged watch ends, before the wait does", async () => {
+    document.body.innerHTML = "<main><button>Run</button></main>";
+    let begun = Date.now();
+    startDiff();
+    let result = await takeDiff("", 2000, 2000);
+    let took = Date.now() - begun;
+    expect(result.lines).toEqual([]);
+    expect(took).toBeGreaterThanOrEqual(unchangedMs - 20);
+    expect(took).toBeLessThan(2000);
+  });
+
   test("sees mutations inside open shadow roots", async () => {
     document.body.innerHTML = "<div id=host></div>";
     let shadow = document
@@ -261,7 +309,7 @@ describe("waiting for quiet", () => {
     let begun = Date.now();
     let result = await takeDiff("", 2000, 2000);
     clearInterval(ticking);
-    expect(Date.now() - begun).toBeLessThan(1000);
+    expect(Date.now() - begun).toBeLessThan(unchangedMs + quietMs);
     expect(result.settled).toBe(true);
     expect(result.lines).toEqual([]);
   });
