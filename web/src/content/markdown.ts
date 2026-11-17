@@ -354,7 +354,18 @@ function write(element: Element, sink: Sink) {
     return;
   }
 
-  if (isPruned(element) || isField(element) || skippedTags.has(tag)) return;
+  if (isPruned(element) || skippedTags.has(tag)) return;
+
+  // A checkbox's state is page content (a table's yes or no column); other field values are not.
+  if (
+    element instanceof HTMLInputElement &&
+    /^(checkbox|radio)$/.test(element.type)
+  ) {
+    append(sink, element.checked ? " [x] " : " [ ] ");
+    return;
+  }
+
+  if (isField(element)) return;
 
   let role = roleOf(element);
   let isList = listTags.has(tag) || role === "list";
@@ -386,7 +397,8 @@ function write(element: Element, sink: Sink) {
   if (role === "img") {
     let name = nameOf(element, false);
 
-    if (name) append(sink, `![${name}]`);
+    // A rating drawn as five star images, each named "5 stars", reads once.
+    if (name && !sink.line.endsWith(`![${name}]`)) append(sink, `![${name}]`);
 
     return;
   }

@@ -90,6 +90,16 @@ describe("markdownOf", () => {
     );
   });
 
+  test("checkboxes show their state, and repeated images read once", () => {
+    expect(
+      markdown(
+        '<table><tr><th>Name</th><th>Bought</th><th>Rating</th></tr><tr><td>Tony</td><td><input type="checkbox" checked></td><td><img alt="2 stars"><img alt="2 stars"></td></tr></table><label><input type="checkbox"> Remember me</label>',
+      ),
+    ).toBe(
+      "| Name | Bought | Rating |\n| --- | --- | --- |\n| Tony | [x] | ![2 stars] |\n\n[ ] Remember me",
+    );
+  });
+
   test("a table holding a table, or marked as layout, reads as blocks around the data table inside", () => {
     let text = markdown(
       '<table><tr><td>Side</td><td><table><tr><td>Inner</td></tr></table></td></tr></table><table role="presentation"><tr><td>Layout</td></tr></table>',
