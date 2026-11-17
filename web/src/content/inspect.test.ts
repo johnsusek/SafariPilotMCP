@@ -141,3 +141,13 @@ test("a range input and an ARIA slider are sliders with their bounds", () => {
     max: null,
   });
 });
+
+test("an editor that draws each line as a block reads back with its line breaks", () => {
+  document.body.innerHTML =
+    '<div contenteditable="true"><div class="cm-line">let index = 4;</div><div class="cm-line">log(index);</div></div>';
+  let result = inspect(refFor(document.querySelector("[contenteditable]")!));
+  expect(result).toMatchObject({
+    kind: "text",
+    value: "let index = 4;\nlog(index);",
+  });
+});

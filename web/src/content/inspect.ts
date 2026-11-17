@@ -100,7 +100,7 @@ export function inspect(ref: number): InspectResult | Failure {
       element instanceof HTMLInputElement ||
       element instanceof HTMLTextAreaElement
         ? element.value
-        : (element.textContent ?? "");
+        : (element as HTMLElement).innerText;
     return {
       ...base,
       value: "\u2022".repeat(value.length),
@@ -117,8 +117,9 @@ export function inspect(ref: number): InspectResult | Failure {
   if (element instanceof HTMLTextAreaElement)
     return { ...base, value: element.value, kind: "text" };
 
+  // innerText, since an editor that draws each line as its own block (CodeMirror) holds no line breaks in its text.
   if (element instanceof HTMLElement && element.isContentEditable)
-    return { ...base, value: element.textContent ?? "", kind: "text" };
+    return { ...base, value: element.innerText, kind: "text" };
 
   let ariaKind = ariaChecks[element.getAttribute("role") ?? ""];
 
