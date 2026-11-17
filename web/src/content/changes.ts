@@ -1,5 +1,6 @@
 import type { DiffResult, DiffStartResult } from "../shared/protocol";
 import { collapse } from "./describe";
+import { flatParent } from "./flat";
 import { pendingSince } from "./network";
 import { refFor } from "./refs";
 import {
@@ -47,6 +48,7 @@ type Watch = {
   observer: MutationObserver;
   roots: Set<Document | ShadowRoot>;
   animations: Set<Animation>;
+  unveiled: Set<Element>;
 };
 
 let watch: Watch | null = null;
@@ -149,6 +151,19 @@ function stop() {
   watch = null;
 }
 
+// A page that animates from script (a carousel, a progress bar) rewrites inline styles nonstop, so those alone never restart the quiet clock.
+function note(records: MutationRecord[], state: Watch) {
+  if (records.some((record) => record.attributeName !== "style"))
+    state.changed = Date.now();
+
+  for (let record of records) {
+    for (let node of record.addedNodes) observe(node, state);
+
+    if (veils.has(record.attributeName!) && !veiled(record.target as Element))
+      state.unveiled.add(record.target as Element);
+  }
+}
+
 export function startDiff(): DiffStartResult {
   stop();
   let started = Date.now();
@@ -156,17 +171,10 @@ export function startDiff(): DiffStartResult {
     started,
     changed: started,
     before: snapshot(),
-    observer: new MutationObserver((records) => {
-      // A page that animates from script (a carousel, a progress bar) rewrites inline styles nonstop, so those alone never restart the quiet clock.
-      if (records.some((record) => record.attributeName !== "style"))
-        state.changed = Date.now();
-
-      for (let record of records) {
-        for (let node of record.addedNodes) observe(node, state);
-      }
-    }),
+    observer: new MutationObserver((records) => note(records, state)),
     roots: new Set(),
     animations: new Set(),
+    unveiled: new Set(),
   };
 
   if (state.before) {
@@ -183,6 +191,7 @@ type Kind = "added" | "changed" | "removed";
 
 type Out = {
   kinds: Set<Kind>;
+  unveiled: Set<Element>;
   prefix: string;
   maxChars: number;
   lines: string[];
@@ -338,6 +347,19 @@ function sharesHalf(before: Line, after: Line) {
   return shared * 2 >= Math.max(left.length + shared, right.length);
 }
 
+// aria-hidden and inert take a subtree out of the accessibility tree, as a modal does to the rest of the page.
+let veils = new Set(["aria-hidden", "inert"]);
+let veiled = (element: Element) =>
+  element.getAttribute("aria-hidden") === "true" ||
+  element.hasAttribute("inert");
+
+let underAny = (element: Element, test: (node: Element) => boolean) => {
+  for (let node: Element | null = element; node; node = flatParent(node))
+    if (test(node)) return true;
+
+  return false;
+};
+
 // after and before are one element (or the root) in the two trees. Added elements show whole with refs, removed ones only where their parent survived.
 function compare(
   after: Line,
@@ -366,10 +388,16 @@ function compare(
     if (index >= 0) standIns.set(child, gone.splice(index, 1)[0]);
   }
 
-  // Equal removed lines, such as a table's unnamed rows, are counted on one.
+  // Equal removed lines, such as a table's unnamed rows, are counted on one. A modal hides the rest of the page with aria-hidden (Radix) or inert (react-aria), leaving it in place, so those share one line too.
   let removed = new Map<string, number>();
+  let hidden = 0;
 
   for (let child of gone) {
+    if (child.element!.isConnected && underAny(child.element!, veiled)) {
+      hidden++;
+      continue;
+    }
+
     let line = `${headOf(child.role, child.name)}${statesText(child)}`;
     removed.set(line, (removed.get(line) ?? 0) + 1);
   }
@@ -379,6 +407,17 @@ function compare(
     emit(out, "removed", after, `- ${line}${times}`);
 
     if (out.kinds.has("removed")) out.removed += count - 1;
+  }
+
+  if (hidden) {
+    emit(
+      out,
+      "removed",
+      after,
+      `- ${hidden} hidden by aria-hidden or inert, still in the page`,
+    );
+
+    if (out.kinds.has("removed")) out.removed += hidden - 1;
   }
 
   let priorOf = (child: Line) =>
@@ -395,8 +434,15 @@ function compare(
       `~ reordered: ${moved} of ${order.length} children moved`,
     );
 
+  let shown = 0;
+
   for (let child of after.children) {
     let prior = priorOf(child);
+
+    if (!prior && underAny(child.element!, (node) => out.unveiled.has(node))) {
+      shown++;
+      continue;
+    }
 
     if (!prior) {
       for (let line of linesOf([child.item!], out.prefix))
@@ -415,6 +461,17 @@ function compare(
 
     compare(child, prior, trees, out);
   }
+
+  if (!shown) return;
+
+  emit(
+    out,
+    "added",
+    after,
+    `+ ${shown} shown again as aria-hidden or inert was lifted; read_page shows them`,
+  );
+
+  if (out.kinds.has("added")) out.added += shown - 1;
 }
 
 export async function takeDiff(
@@ -462,6 +519,8 @@ export async function takeDiff(
       await sleep(deadline);
     }
 
+    // Records not yet delivered still say what was unveiled.
+    note(state.observer.takeRecords(), state);
     let after = snapshot();
 
     if (!after) {
@@ -473,6 +532,7 @@ export async function takeDiff(
     let pass = (kinds: Kind[], out?: Out) => {
       let next: Out = out ?? {
         ...result,
+        unveiled: state.unveiled,
         lines: [],
         kinds: new Set(kinds),
         prefix,

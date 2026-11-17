@@ -30,7 +30,12 @@ export function flatChildren(node: Node): Node[] {
 // Whether element's whole subtree is left out. display:contents elements (slots by default) have no box, so checkVisibility is false for them though their children render.
 export function isPruned(element: Element) {
   if (skippedTags.has(element.localName)) return true;
-  if (element.getAttribute("aria-hidden") === "true") return true;
+  // inert, like aria-hidden, takes a subtree out of the accessibility tree: react-aria's modal popovers set it on the rest of the page.
+  if (
+    element.getAttribute("aria-hidden") === "true" ||
+    element.hasAttribute("inert")
+  )
+    return true;
   if ((element as HTMLElement).hidden === true) return true;
   if (!element.checkVisibility())
     return getComputedStyle(element).display !== "contents";

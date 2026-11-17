@@ -252,12 +252,47 @@ describe("diff lines", () => {
     ]);
   });
 
+  test("elements a modal hides with aria-hidden or inert share one line", async () => {
+    let result = await diffAfter(
+      '<header><a href="/a">A</a><a href="/b">B</a></header><main><h1>Title</h1></main>',
+      () => {
+        document.querySelector("header")!.setAttribute("aria-hidden", "true");
+        document.querySelector("main")!.setAttribute("inert", "");
+
+        document.body.insertAdjacentHTML(
+          "beforeend",
+          '<div role="menu" aria-label="Options"></div>',
+        );
+      },
+    );
+    expect(refless(result.lines)).toEqual([
+      "- 2 hidden by aria-hidden or inert, still in the page",
+      '+ menu "Options"',
+    ]);
+    expect(result.removed).toBe(2);
+  });
+
+  test("elements back from aria-hidden or inert share one line", async () => {
+    let result = await diffAfter(
+      '<header aria-hidden="true"><a href="/a">A</a></header><main inert><h1>Title</h1><p>Text</p></main><div role="menu" aria-label="Options"></div>',
+      () => {
+        document.querySelector("header")!.removeAttribute("aria-hidden");
+        document.querySelector("main")!.removeAttribute("inert");
+        document.querySelector("[role=menu]")!.remove();
+      },
+    );
+    expect(refless(result.lines)).toEqual([
+      '- menu "Options"',
+      "+ 2 shown again as aria-hidden or inert was lifted; read_page shows them",
+    ]);
+    expect(result.added).toBe(2);
+  });
+
   test("a diff too long to show whole puts new content before removed lines", async () => {
     let result = await diffAfter(
       `<main>${Array.from({ length: 20 }, (_, index) => `<a href="/${index}">Link ${index}</a>`).join("")}</main>`,
       () => {
-        for (let link of document.querySelectorAll("a"))
-          link.setAttribute("aria-hidden", "true");
+        for (let link of document.querySelectorAll("a")) link.remove();
 
         document
           .querySelector("main")!

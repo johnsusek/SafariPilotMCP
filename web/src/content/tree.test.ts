@@ -113,6 +113,14 @@ describe("treeText", () => {
     expect(text).not.toContain("hunter2");
   });
 
+  test("an inert subtree is left out, as aria-hidden is", () => {
+    document.body.innerHTML =
+      "<div inert><button>Behind</button></div><button>Front</button>";
+    expect(withoutRefs(treeText(document.body, "all", 10000).text)).toBe(
+      'button "Front"',
+    );
+  });
+
   test("a box whose content scrolls inside it is interactive and says so", () => {
     document.body.innerHTML =
       '<div id="list" style="overflow-y: auto; height: 50px"><div>Row 0</div><div>Row 1</div></div><div id="fits" style="overflow-y: auto">Fits</div>';
