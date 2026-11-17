@@ -435,6 +435,12 @@ struct Commands {
       return CLIReply(ok: reply.ok, text: "followed link ref \(ref) from the page script, since \(failure.description)\n\(reply.text)", data: reply.data, code: reply.code)
     }
 
+    // WebKit exposes some custom widgets (react-select's options) as AXStaticText, whose AXPress dispatches nothing yet can move focus and close the menu holding them.
+    if match.node.role == kAXStaticTextRole {
+      let reply = try await syntheticClick(tab.id, ref, .left, [])
+      return CLIReply(ok: reply.ok, text: "clicked ref \(ref) from the page script, since Safari exposes it as text, which AXPress does not click\n\(reply.text)", data: reply.data, code: reply.code)
+    }
+
     // WebKit's summary (AXDisclosureTriangle) has no AXPress and pressing its details group does nothing, so it is toggled with Enter from the page script, as from the keyboard.
     if match.node.role == "AXDisclosureTriangle" {
       let reply = try await key(tab.id, [try KeyChord.parse("Enter")], ref, 1, compat: false)
@@ -479,7 +485,7 @@ struct Commands {
     let navigated = pageNavigated || landed.moved
     let frameNavigated = !frame.isEmpty && after.replaced(frame, since: before)
 
-    // WebKit answers AXPress on some elements, such as a custom listbox option it exposes as AXStaticText, without dispatching anything.
+    // WebKit answers AXPress on some elements without dispatching anything.
     if !navigated, !frameNavigated, clicks.isEmpty {
       lines[0] += ", but no click reached the page; try key Enter or Space on it, or on the control that owns it"
       return await CLIReply(failing: .inputUnconfirmed, text: (lines + matched + landed.lines + [changes(watch, since: acted)]).joined(separator: "\n"), data: .null)
