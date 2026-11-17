@@ -179,7 +179,10 @@ export function startDiff(): DiffStartResult {
   return { ok: true, tooLarge: state.before === null };
 }
 
+type Kind = "added" | "changed" | "removed";
+
 type Out = {
+  kinds: Set<Kind>;
   prefix: string;
   maxChars: number;
   lines: string[];
@@ -199,13 +202,10 @@ let header = (node: Line, out: Out) =>
       ? `in iframe ${out.prefix.slice(0, -1)}:`
       : "in page:";
 
-// Adds a change line under the line naming its context, which is left out for the top frame's root before anything else; once a line does not fit, every later one is omitted.
-function emit(
-  out: Out,
-  kind: "added" | "changed" | "removed",
-  context: Line,
-  line: string,
-) {
+// Adds a change line of a kind this pass shows under the line naming its context, which is left out for the top frame's root before anything else; once a line does not fit, every later one is omitted.
+function emit(out: Out, kind: Kind, context: Line, line: string) {
+  if (!out.kinds.has(kind)) return;
+
   out[kind]++;
   let lines =
     context === out.context ||
@@ -377,7 +377,8 @@ function compare(
   for (let [line, count] of removed) {
     let times = count > 1 ? ` (${count} times)` : "";
     emit(out, "removed", after, `- ${line}${times}`);
-    out.removed += count - 1;
+
+    if (out.kinds.has("removed")) out.removed += count - 1;
   }
 
   let priorOf = (child: Line) =>
@@ -468,20 +469,28 @@ export async function takeDiff(
       return { ...result, tooLarge: true };
     }
 
-    let out: Out = {
-      ...result,
-      prefix,
-      maxChars,
-      length: 0,
-      full: false,
-      context: null,
+    let trees = { before: state.before, after };
+    let pass = (kinds: Kind[], out?: Out) => {
+      let next: Out = out ?? {
+        ...result,
+        lines: [],
+        kinds: new Set(kinds),
+        prefix,
+        maxChars,
+        length: 0,
+        full: false,
+        context: null,
+      };
+      next.kinds = new Set(kinds);
+      next.context = null;
+      compare(after.root, state.before!.root, trees, next);
+      return next;
     };
-    compare(
-      after.root,
-      state.before.root,
-      { before: state.before, after },
-      out,
-    );
+    let out = pass(["added", "changed", "removed"]);
+
+    // A diff too long to show whole lists removed lines last, so the cut drops them before new content: a modal that hides the rest of the page removes it all from view.
+    if (out.omitted) out = pass(["removed"], pass(["added", "changed"]));
+
     let { lines, added, changed, removed, omitted } = out;
 
     if (added + changed + removed || Date.now() >= watchUntil) {

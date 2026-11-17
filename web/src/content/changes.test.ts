@@ -252,6 +252,31 @@ describe("diff lines", () => {
     ]);
   });
 
+  test("a diff too long to show whole puts new content before removed lines", async () => {
+    let result = await diffAfter(
+      `<main>${Array.from({ length: 20 }, (_, index) => `<a href="/${index}">Link ${index}</a>`).join("")}</main>`,
+      () => {
+        for (let link of document.querySelectorAll("a"))
+          link.setAttribute("aria-hidden", "true");
+
+        document
+          .querySelector("main")!
+          .insertAdjacentHTML(
+            "beforeend",
+            '<div role="menu"><div role="menuitem">New Tab</div></div>',
+          );
+      },
+      200,
+    );
+    expect(refless(result.lines).slice(0, 3)).toEqual([
+      "in main:",
+      "+ menu",
+      '+   menuitem "New Tab"',
+    ]);
+    expect(result.removed).toBeGreaterThan(0);
+    expect(result.omitted).toBeGreaterThan(0);
+  });
+
   test("lines past maxChars are cut on a line boundary and counted", async () => {
     let result = await diffAfter(
       "<main><h1>List</h1></main>",
