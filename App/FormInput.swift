@@ -69,10 +69,11 @@ extension Commands {
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
     let after = try await settled(tab.id, ref) { $0.value == expected }
     let matched = after.value == expected
+    let masked = secure ? ", one bullet per character because the field holds a secret" : ""
     let lines = (pressed.map { ["pressed \($0.summary) via AXPress first, as the page could not focus it"] } ?? []) + [
       "focused \(focus.focused) from the page",
       "AXValue on \(valueNode.summary): \(valueResult.name)",
-      "read back: \(after.value.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")",
+      "read back: \(after.value.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")\(masked)",
     ] + matchLines(located, match)
     let data: JSONValue = .object([
       "tabId": .number(Double(tab.id)),
