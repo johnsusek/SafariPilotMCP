@@ -8,8 +8,13 @@ enum FrameMatching {
   /// Below this the best frame is too far from the element to act on.
   static let minimum = 0.7
 
-  /// Intersection over union: 1 for identical rects, 0 for disjoint ones.
+  /// Both rects grow by this many points before scoring, since AX frames are rounded to whole points, which alone halves the score of a 1 px wide element (Monaco's hidden textarea).
+  static let slack: CGFloat = 2
+
+  /// Intersection over union of the rects grown by slack: 1 for identical rects, 0 for ones further apart than twice slack.
   static func score(_ frame: CGRect, _ wanted: CGRect) -> Double {
+    let frame = frame.insetBy(dx: -slack, dy: -slack)
+    let wanted = wanted.insetBy(dx: -slack, dy: -slack)
     let overlap = frame.intersection(wanted)
 
     if overlap.isNull || overlap.isEmpty { return 0 }

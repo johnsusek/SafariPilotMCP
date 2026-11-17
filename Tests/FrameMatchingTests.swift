@@ -6,14 +6,18 @@ struct FrameMatchingTests {
 
   @Test func identicalFramesScoreOne() { #expect(FrameMatching.score(wanted, wanted) == 1) }
 
-  @Test func disjointAndTouchingFramesScoreZero() {
+  @Test func distantFramesScoreZeroAndTouchingOnesNearly() {
     #expect(FrameMatching.score(CGRect(x: 500, y: 500, width: 10, height: 10), wanted) == 0)
-    #expect(FrameMatching.score(CGRect(x: 180, y: 200, width: 10, height: 20), wanted) == 0)
+    #expect(FrameMatching.score(CGRect(x: 180, y: 200, width: 10, height: 20), wanted) < 0.05)
   }
 
   @Test func containingWrapperScoresByAreaRatio() {
     let wrapper = CGRect(x: 100, y: 200, width: 160, height: 20)
-    #expect(FrameMatching.score(wrapper, wanted) == 0.5)
+    #expect(abs(FrameMatching.score(wrapper, wanted) - 0.5) < 0.03)
+  }
+
+  @Test func onePointWideElementMatchesItsRoundedFrame() {
+    #expect(FrameMatching.score(CGRect(x: 478, y: 291, width: 2, height: 19), CGRect(x: 478, y: 291.4, width: 1, height: 18)) >= FrameMatching.minimum)
   }
 
   @Test func clearlyHigherScoreWinsRegardlessOfDepth() {
