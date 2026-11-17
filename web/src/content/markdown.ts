@@ -174,27 +174,85 @@ let isDataTable = (table: HTMLTableElement) =>
   !/^(presentation|none)$/.test(table.getAttribute("role") ?? "") &&
   !table.querySelector("table");
 
-function table(element: HTMLTableElement, sink: Sink) {
+let ariaTableRoles = new Set(["table", "grid", "treegrid"]);
+let ariaCellRoles = new Set(["cell", "gridcell", "columnheader", "rowheader"]);
+
+// A cell's text, escaped for a markdown table, followed by an empty cell for each further column it spans.
+let cellOf = (cell: Element, span: number, sink: Sink) => [
+  inlineText(cell, sink).replace(/[\\|]/g, "\\$&"),
+  ...Array<string>(Math.max(span - 1, 0)).fill(""),
+];
+
+// The shown descendants of root with a role in roles, not looking inside a match or inside an element with a role in stop.
+function* byRole(
+  root: Element,
+  roles: Set<string>,
+  stop: Set<string>,
+): Generator<Element> {
+  for (let child of flatChildren(root)) {
+    if (!(child instanceof Element) || isPruned(child)) continue;
+
+    let role = roleOf(child);
+
+    if (roles.has(role)) {
+      if (!isInvisible(child)) yield child;
+
+      continue;
+    }
+
+    if (!stop.has(role)) yield* byRole(child, roles, stop);
+  }
+}
+
+// An ARIA table's rows; rows sharing aria-rowindex (a grid's pinned and scrolling parts) join into one, their cells ordered by aria-colindex.
+function ariaRows(element: Element, sink: Sink) {
+  let rows = new Map<string | Element, { index: number; cells: string[] }[]>();
+
+  for (let row of byRole(element, new Set(["row"]), ariaTableRoles)) {
+    let key = row.getAttribute("aria-rowindex") ?? row;
+    let cells = [...byRole(row, ariaCellRoles, ariaTableRoles)].map(
+      (cell, order) => ({
+        index: Number(cell.getAttribute("aria-colindex") ?? order),
+        cells: cellOf(
+          cell,
+          Number(cell.getAttribute("aria-colspan") ?? 1),
+          sink,
+        ),
+      }),
+    );
+    rows.set(key, [...(rows.get(key) ?? []), ...cells]);
+  }
+
+  return [...rows.values()].map((cells) =>
+    cells
+      .sort((one, other) => one.index - other.index)
+      .flatMap((cell) => cell.cells),
+  );
+}
+
+function table(element: Element, sink: Sink) {
   if (sink.inline) {
     flow(element, sink);
     return;
   }
 
   flush(sink);
-  let caption = element.caption;
+  let caption = element instanceof HTMLTableElement ? element.caption : null;
 
   if (caption && isShown(caption)) push(sink, inlineText(caption, sink));
 
-  let rows = Array.from(element.rows)
-    .filter(isShown)
-    .map((row) => {
-      let cells = Array.from(row.cells)
-        .filter(isShown)
-        .flatMap((cell) => [
-          inlineText(cell, sink).replace(/[\\|]/g, "\\$&"),
-          ...Array<string>(Math.max(cell.colSpan - 1, 0)).fill(""),
-        ]);
-
+  let rows = (
+    element instanceof HTMLTableElement
+      ? Array.from(element.rows)
+          .filter(isShown)
+          .map((row) =>
+            Array.from(row.cells)
+              .filter(isShown)
+              .flatMap((cell) => cellOf(cell, cell.colSpan, sink)),
+          )
+      : ariaRows(element, sink)
+  )
+    .map((cells) => {
       while (cells.length && !cells.at(-1)) cells.pop();
 
       return cells;
@@ -214,6 +272,23 @@ function table(element: HTMLTableElement, sink: Sink) {
       ...rows.slice(1).map(line),
     ].join("\n"),
   );
+
+  // A virtualized grid renders only the rows near its scroll position.
+  let count = Number(element.getAttribute("aria-rowcount"));
+  let rendered =
+    element instanceof HTMLTableElement
+      ? element.rows.length
+      : new Set(
+          [...byRole(element, new Set(["row"]), ariaTableRoles)].map(
+            (row) => row.getAttribute("aria-rowindex") ?? row,
+          ),
+        ).size;
+
+  if (count > rendered)
+    push(
+      sink,
+      `(${rendered} of the grid's ${count} rows are rendered; scrolling the grid renders others)`,
+    );
 }
 
 function pre(element: Element, sink: Sink) {
@@ -294,7 +369,11 @@ function write(element: Element, sink: Sink) {
 
   if (tag === "pre") return pre(element, sink);
 
-  if (element instanceof HTMLTableElement && isDataTable(element))
+  if (
+    element instanceof HTMLTableElement
+      ? isDataTable(element)
+      : ariaTableRoles.has(role)
+  )
     return table(element, sink);
 
   if (isList) return list(element, sink);

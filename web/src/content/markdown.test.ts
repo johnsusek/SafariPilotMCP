@@ -76,6 +76,20 @@ describe("markdownOf", () => {
     );
   });
 
+  test("an ARIA grid becomes a markdown table: pinned parts join by row index, cells sort by column index, and unrendered rows are counted", () => {
+    expect(
+      markdown(
+        '<div role="grid" aria-rowcount="100"><div role="rowgroup"><div role="row" aria-rowindex="1"><span role="columnheader" aria-colindex="2">Name</span><span role="columnheader" aria-colindex="3">CPU</span></div><div role="row" aria-rowindex="2"><span role="gridcell" aria-colindex="2">Chrome</span><span role="gridcell" aria-colindex="3">7%</span></div></div><div role="rowgroup"><div role="row" aria-rowindex="1"><span role="columnheader" aria-colindex="1">#</span></div><div role="row" aria-rowindex="2"><span role="rowheader" aria-colindex="1">1</span></div><div role="row" aria-rowindex="3"><span role="gridcell"><input aria-label="Filter"></span></div></div></div><div role="table"><div role="row"><span role="cell">a | b</span><span role="cell">c</span></div></div>',
+      ),
+    ).toBe(
+      [
+        "| # | Name | CPU |\n| --- | --- | --- |\n| 1 | Chrome | 7% |",
+        "(3 of the grid's 100 rows are rendered; scrolling the grid renders others)",
+        "| a \\| b | c |\n| --- | --- |",
+      ].join("\n\n"),
+    );
+  });
+
   test("a table holding a table, or marked as layout, reads as blocks around the data table inside", () => {
     let text = markdown(
       '<table><tr><td>Side</td><td><table><tr><td>Inner</td></tr></table></td></tr></table><table role="presentation"><tr><td>Layout</td></tr></table>',
