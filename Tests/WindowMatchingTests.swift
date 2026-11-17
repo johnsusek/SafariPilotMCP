@@ -2,7 +2,7 @@ import CoreGraphics
 import Testing
 
 struct WindowMatchingTests {
-  func tab(_ url: String, frame: CSSRect? = nil) -> TabInfo { TabInfo(id: 5, windowId: 2, active: true, url: url, title: "Page", windowFrame: frame, openerId: nil) }
+  func tab(_ url: String, frame: CSSRect? = nil) -> TabInfo { TabInfo(id: 5, windowId: 2, active: true, url: url, title: "Page", windowFrame: frame, openerId: nil, pilot: false) }
 
   func window(_ urls: [String], at frame: CGRect? = CGRect(x: 0, y: 25, width: 1200, height: 800), minimized: Bool = false) -> WindowCandidate {
     WindowCandidate(title: "W", frame: frame, minimized: minimized, urls: urls)

@@ -7,13 +7,13 @@ struct ContractTests {
   }
 
   let viewport = #"{"innerWidth":1200,"innerHeight":800,"scrollX":0,"scrollY":40,"devicePixelRatio":2,"visualScale":1,"visualOffsetLeft":0,"visualOffsetTop":0}"#
-  let tab = #"{"id":12,"windowId":3,"active":false,"url":"https://a.test/","title":"A","windowFrame":{"left":0,"top":25,"width":1200,"height":900}}"#
+  let tab = #"{"id":12,"windowId":3,"active":false,"url":"https://a.test/","title":"A","windowFrame":{"left":0,"top":25,"width":1200,"height":900},"pilot":false}"#
 
   @Test func tabInfoDecodesWithAndWithoutWindowFrame() throws {
-    let decoded = try decode(TabsResult.self, #"{"ok":true,"tabs":[\#(tab),{"id":13,"windowId":3,"active":true,"url":"","title":"","windowFrame":null,"openerId":12}]}"#)
-    #expect(decoded.tabs[0] == TabInfo(id: 12, windowId: 3, active: false, url: "https://a.test/", title: "A", windowFrame: CSSRect(left: 0, top: 25, width: 1200, height: 900), openerId: nil))
+    let decoded = try decode(TabsResult.self, #"{"ok":true,"tabs":[\#(tab),{"id":13,"windowId":3,"active":true,"url":"","title":"","windowFrame":null,"openerId":12,"pilot":true}]}"#)
+    #expect(decoded.tabs[0] == TabInfo(id: 12, windowId: 3, active: false, url: "https://a.test/", title: "A", windowFrame: CSSRect(left: 0, top: 25, width: 1200, height: 900), openerId: nil, pilot: false))
     #expect(decoded.tabs[1].windowFrame == nil)
-    #expect(decoded.tabs[1].openerId == 12)
+    #expect(decoded.tabs[1].openerId == 12 && decoded.tabs[1].pilot)
   }
 
   @Test func tabClosedAndScreenshotResultsDecode() throws {
@@ -48,7 +48,7 @@ struct ContractTests {
   @Test func settleEncodesAndNamesWhereTheTabLanded() throws {
     #expect(BackgroundCommand.settle(tabId: 12, url: "https://a.test/", watchMs: 40).json == ["type": "settle", "tabId": .number(12), "url": "https://a.test/", "watchMs": .number(40)])
     let landed = { (navigation: String, url: String, loading: Bool) in
-      try self.decode(SettleResult.self, #"{"ok":true,"tab":{"id":12,"windowId":3,"active":true,"url":"\#(url)","title":"B","windowFrame":null},"navigation":"\#(navigation)","loading":\#(loading)}"#)
+      try self.decode(SettleResult.self, #"{"ok":true,"tab":{"id":12,"windowId":3,"active":true,"url":"\#(url)","title":"B","windowFrame":null,"pilot":true},"navigation":"\#(navigation)","loading":\#(loading)}"#)
     }
     let loaded = try landed("load", "https://b.test/", false)
     #expect(loaded.moved(from: "https://a.test/", replaced: false))
@@ -205,7 +205,9 @@ struct ContractTests {
 
   @Test func commandsEncodeTheContractShapes() throws {
     #expect(BackgroundCommand.tab(tabId: nil).json == ["type": "tab", "tabId": .null])
-    #expect(BackgroundCommand.tabCreate(url: nil, safariFrontmost: true).json == ["type": "tabCreate", "url": .null, "safariFrontmost": .bool(true)])
+    #expect(BackgroundCommand.tabCreate(url: nil, safariFrontmost: true, windowId: nil, own: []).json == ["type": "tabCreate", "url": .null, "safariFrontmost": .bool(true), "windowId": .null, "own": .array([])])
+    #expect(BackgroundCommand.tabCreate(url: "https://a.test/", safariFrontmost: false, windowId: 3, own: [8, 9]).json["own"] == .array([.number(8), .number(9)]))
+    #expect(BackgroundCommand.closeTabs(tabIds: [4, 6]).json == ["type": "closeTabs", "tabIds": .array([.number(4), .number(6)])])
     #expect(BackgroundCommand.history(tabId: 4, direction: .back).json == ["type": "history", "tabId": .number(4), "direction": "back"])
     #expect(BackgroundCommand.screenshot(tabId: 9).json == ["type": "screenshot", "tabId": .number(9)])
     #expect(BackgroundCommand.content(tabId: 2, request: .scroll(ref: nil, left: 0, top: 300)).json == [

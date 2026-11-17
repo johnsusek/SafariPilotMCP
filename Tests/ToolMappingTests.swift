@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 struct ToolMappingTests {
-  func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(owned: Set(session.map { [$0] } ?? []), current: session)) }
+  func map(_ name: String, _ arguments: [String: JSONValue] = [:], session: Int? = 20) throws -> AppCommand { try Tools.command(name: name, arguments: arguments, session: TabSession(current: session)) }
 
   @Test func everyToolMapsWithItsRequiredArguments() throws {
     let file = FileManager.default.temporaryDirectory.appending(path: "sample-\(UUID().uuidString).txt")
@@ -183,7 +183,7 @@ struct ToolMappingTests {
   }
 
   @Test func waitSleepsOrWaitsForTextOrSelector() throws {
-    let session = TabSession(owned: [20, 7], current: 20)
+    let session = TabSession(current: 20)
     let wait = { (arguments: [String: JSONValue]) in try Tools.wait(arguments, session: session) }
     #expect(try wait(["seconds": .number(2.5)]) == .sleep(seconds: 2.5))
     #expect(try Tools.wait(["seconds": "1"], session: TabSession()) == .sleep(seconds: 1))
@@ -254,33 +254,17 @@ struct ToolMappingTests {
     let created = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "tab": .object(["id": .number(31), "windowId": .number(4)])]))
     let failed = CLIReply(failing: .failed, text: "", data: .object(["error": "no"]))
     let closed = CLIReply(ok: true, text: "", data: .object(["ok": .bool(true), "closed": .number(31)]))
-    var session = TabSession(owned: [8], current: 8)
+    var session = TabSession(current: 8)
     session.record(.tabCreate(url: nil), reply: failed)
-    #expect(session == TabSession(owned: [8], current: 8))
+    #expect(session == TabSession(current: 8))
     session.record(.tabCreate(url: nil), reply: created)
-    #expect(session == TabSession(owned: [8, 31], current: 31))
+    #expect(session == TabSession(current: 31))
     session.record(.click(tabId: 8, target: .ref(1)), reply: created)
-    #expect(session == TabSession(owned: [8, 31], current: 31))
+    #expect(session == TabSession(current: 31))
     session.record(.tabClose(tabId: 8), reply: closed)
-    #expect(session == TabSession(owned: [31], current: 31))
+    #expect(session == TabSession(current: 31))
     session.record(.tabClose(tabId: 31), reply: closed)
-    #expect(session == TabSession(owned: [], current: nil))
-  }
-
-  func tab(_ id: Int, opener: Int? = nil) -> TabInfo { TabInfo(id: id, windowId: 1, active: false, url: "https://\(id).test/", title: "", windowFrame: nil, openerId: opener) }
-
-  @Test func adoptsPopupsOfOwnedTabsTransitively() {
-    var session = TabSession(owned: [5], current: 5)
-    let tabs = [tab(1), tab(5, opener: 1), tab(7, opener: 9), tab(9, opener: 5), tab(3, opener: 2)]
-    #expect(session.adopt(tabs).map(\.id).sorted() == [7, 9])
-    #expect(session.visible(tabs).map(\.id) == [5, 7, 9])
-    #expect(session.adopt(tabs).isEmpty)
-  }
-
-  @Test func adoptForgetsClosedTabs() {
-    var session = TabSession(owned: [5, 6], current: 5)
-    _ = session.adopt([tab(6)])
-    #expect(session == TabSession(owned: [6], current: nil))
+    #expect(session == TabSession(current: nil))
   }
 
   @Test func commandsNameTheirTargetTab() {

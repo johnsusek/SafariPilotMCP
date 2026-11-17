@@ -19,6 +19,8 @@ struct TabInfo: Codable, Sendable, Equatable {
   let title: String
   let windowFrame: CSSRect?
   let openerId: Int?
+  /// Opened by tab_create or by such a tab, so SafariPilot closes it once no live session owns it.
+  let pilot: Bool
 
   var line: String { "\(active ? "*" : " ") \(id) w\(windowId) \(shownURL) \(title)\(openerId.map { " (opened by \($0))" } ?? "")" }
 }
@@ -341,9 +343,12 @@ enum BackgroundCommand: Equatable, Sendable {
   case content(tabId: Int?, request: ContentRequest)
   case tabs
   case tab(tabId: Int?)
-  case tabCreate(url: String?, safariFrontmost: Bool)
+  /// windowId is the session's own window, or nil for a new one; the tab must land in a window holding only it and own, the session's other tabs.
+  case tabCreate(url: String?, safariFrontmost: Bool, windowId: Int?, own: [Int])
   case tabSelect(tabId: Int)
   case tabClose(tabId: Int)
+  /// Closes each tab that is still open, for sessions that ended.
+  case closeTabs(tabIds: [Int])
   case navigate(tabId: Int?, url: String)
   case history(tabId: Int?, direction: HistoryDirection)
   case settle(tabId: Int, url: String, watchMs: Int)
@@ -362,9 +367,10 @@ enum BackgroundCommand: Equatable, Sendable {
     case let .content(tabId, request): return ["type": "content", "tabId": id(tabId), "request": .object(request.json)]
     case .tabs: return ["type": "tabs"]
     case let .tab(tabId): return ["type": "tab", "tabId": id(tabId)]
-    case let .tabCreate(url, safariFrontmost): return ["type": "tabCreate", "url": url.map { .string($0) } ?? .null, "safariFrontmost": .bool(safariFrontmost)]
+    case let .tabCreate(url, safariFrontmost, windowId, own): return ["type": "tabCreate", "url": url.map { .string($0) } ?? .null, "safariFrontmost": .bool(safariFrontmost), "windowId": id(windowId), "own": .array(own.map { .number(Double($0)) })]
     case let .tabSelect(tabId): return ["type": "tabSelect", "tabId": id(tabId)]
     case let .tabClose(tabId): return ["type": "tabClose", "tabId": id(tabId)]
+    case let .closeTabs(tabIds): return ["type": "closeTabs", "tabIds": .array(tabIds.map { .number(Double($0)) })]
     case let .navigate(tabId, url): return ["type": "navigate", "tabId": id(tabId), "url": .string(url)]
     case let .history(tabId, direction): return ["type": "history", "tabId": id(tabId), "direction": .string(direction.rawValue)]
     case let .settle(tabId, url, watchMs): return ["type": "settle", "tabId": id(tabId), "url": .string(url), "watchMs": .number(Double(watchMs))]

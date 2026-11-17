@@ -20,7 +20,7 @@ let lifecycle = (event: string) => {
   send({ kind: "lifecycle", instance, event, at: Date.now() }).catch(() => {});
 };
 
-// Commands wait for the pilot tabs, since tab_create trusts a pilot window only while every tab in it is one.
+// Commands wait for the pilot tabs, since the app closes the pilot tabs no session owns and keeps request logs only for them.
 let restored = restorePilotTabs().catch((error) =>
   lifecycle(`pilot tabs not restored: ${error}`),
 );

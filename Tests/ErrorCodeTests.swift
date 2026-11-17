@@ -69,9 +69,9 @@ struct ErrorCodeTests {
 
   @Test func badArgumentsAndBadBatchesAreInvalidArguments() throws {
     for arguments: [String: JSONValue] in [[:], ["ref": "x:y"], ["ref": .number(1), "action": "hover"]] {
-      #expect(throws: Failure.self) { try Tools.command(name: "click", arguments: arguments, session: TabSession(owned: [4], current: 4)) }
+      #expect(throws: Failure.self) { try Tools.command(name: "click", arguments: arguments, session: TabSession(current: 4)) }
 
-      do { _ = try Tools.command(name: "click", arguments: arguments, session: TabSession(owned: [4], current: 4)) } catch { #expect(ErrorCode(of: error) == .invalidArgument, "\(arguments)") }
+      do { _ = try Tools.command(name: "click", arguments: arguments, session: TabSession(current: 4)) } catch { #expect(ErrorCode(of: error) == .invalidArgument, "\(arguments)") }
     }
 
     #expect(throws: Failure.self) { try Tools.batchActions(["actions": .array([])]) }

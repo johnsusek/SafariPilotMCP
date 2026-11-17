@@ -2,7 +2,7 @@ import Foundation
 import Testing
 
 struct PageFetchTests {
-  func map(_ arguments: [String: JSONValue]) throws -> AppCommand { try Tools.command(name: "page_fetch", arguments: arguments, session: TabSession(owned: [20], current: 20)) }
+  func map(_ arguments: [String: JSONValue]) throws -> AppCommand { try Tools.command(name: "page_fetch", arguments: arguments, session: TabSession(current: 20)) }
 
   func request(url: String? = nil, method: String? = nil, requestId: String? = nil, query: [String: String?] = [:], headers: [String: String?] = [:], body: String? = nil, pick: String? = nil, maxChars: Int = 50000) throws -> PageFetchRequest {
     try PageFetchRequest(url: url, method: method, requestId: requestId, query: query, headers: headers, body: body, pick: pick, maxChars: maxChars)

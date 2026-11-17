@@ -79,7 +79,7 @@ enum AppCommand: Codable, Sendable, Equatable {
   case drag(tabId: Int?, ref: PageRef, to: PageRef)
   case events(tabId: Int?, clear: Bool)
   case tabs
-  /// Opens the tab in SafariPilot's window, or in a new one when none is open.
+  /// Opens the tab in the session's own window, or in a new one when it has none.
   case tabCreate(url: String?)
   case tabSelect(tabId: Int)
   case tabClose(tabId: Int)

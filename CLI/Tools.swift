@@ -36,7 +36,7 @@ enum Tools {
 
   static let definitions = [
     ToolDefinition(name: "tabs_list", description: "Lists this session's tabs, those opened with tab_create and any they opened, with id, window id, URL, title, opener and whether each is the active tab of its window."),
-    ToolDefinition(name: "tab_create", description: "Opens a new tab in SafariPilot's Safari window, shared by every session and opened when none is, loading url when given, and makes it this session's default tab for page tools.", properties: ["url": property("string", "URL to load.")]),
+    ToolDefinition(name: "tab_create", description: "Opens a new tab in this session's own Safari window, opened when it has none, loading url when given, and makes it this session's default tab for page tools.", properties: ["url": property("string", "URL to load.")]),
     ToolDefinition(name: "tab_select", description: "Makes a tab the active tab of its window.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "tab_close", description: "Closes a tab.", properties: ["tabId": requiredTabId], required: ["tabId"]),
     ToolDefinition(name: "navigate", description: "Loads a URL in a tab, or goes back or forward in its history when url is \"back\" or \"forward\", and waits for the page to load.", properties: ["tabId": tabId, "url": property("string", "URL to load, or \"back\" or \"forward\".")], required: ["url"]),
@@ -107,7 +107,7 @@ enum Tools {
   static let instructions = """
   SafariPilot drives the user's real Safari, with their logins and cookies, in its own window without taking their cursor or keyboard. Tool names here are short; call them by the full names your client lists, such as mcp__safaripilot__click.
 
-  Tabs: open your own with tab_create and work there; page tools default to it. You see only tabs this session opened and tabs they open (tabs_list). Close your tabs with tab_close when the task is done, unless the user will want one left open. The first call waits for the user to approve this client; if they deny it, ask before trying again.
+  Tabs: open your own with tab_create and work there; page tools default to it. You see only tabs this session opened and tabs they open (tabs_list). Close your tabs with tab_close when the task is done; any left open close when this session ends. The first call waits for the user to approve this client; if they deny it, ask before trying again.
 
   Reading: read only what you need. Use find, or read_page with viewport true or filter interactive, for elements, and get_page_text with format markdown and a ref_id for a table's rows or a list's links. Use screenshot only for what text cannot show. javascript reads state the other tools cannot, and fails on pages whose CSP forbids eval.
 

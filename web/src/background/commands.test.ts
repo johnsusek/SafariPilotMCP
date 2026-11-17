@@ -112,6 +112,8 @@ afterEach(() => {
 
 let run = (command: object) =>
   runCommand({ id: "c1", ...command } as Parameters<typeof runCommand>[0]);
+let create = (fields: object = {}) =>
+  run({ type: "tabCreate", url: null, windowId: null, own: [], ...fields });
 
 describe("resolveTab", () => {
   test("null is the active tab of the last focused window", async () => {
@@ -261,15 +263,14 @@ describe("runCommand", () => {
     expect(await pending).toMatchObject({ ok: false });
   });
 
-  test("tabCreate with a url opens in the pilot window and waits", async () => {
-    stored.pilotWindow = 1;
+  test("tabCreate with a url opens in the session's window and waits", async () => {
     tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       fireComplete(8);
       return tabs.at(-1);
     });
-    let result = await run({ type: "tabCreate", url: "https://new" });
+    let result = await create({ url: "https://new", windowId: 1 });
     expect(fake.tabs.create).toHaveBeenCalledWith({
       windowId: 1,
       url: "https://new",
@@ -284,13 +285,12 @@ describe("runCommand", () => {
 
   test("tabCreate answers with a tab still loading after the timeout, so its caller can own it", async () => {
     vi.useFakeTimers();
-    stored.pilotWindow = 1;
     tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       tabs.push(tab(8, 1, true));
       return tabs.at(-1);
     });
-    let pending = run({ type: "tabCreate", url: "https://slow" });
+    let pending = create({ url: "https://slow", windowId: 1 });
     await vi.advanceTimersByTimeAsync(loadTimeoutMs);
     expect(await pending).toMatchObject({
       ok: true,
@@ -300,7 +300,7 @@ describe("runCommand", () => {
     expect(listeners.size).toBe(0);
   });
 
-  test("tabCreate opens an unfocused pilot window when none is open, then reuses it", async () => {
+  test("tabCreate opens an unfocused window for a session without one, then reuses it", async () => {
     fake.windows.create.mockImplementation(async () => {
       tabs.push(tab(9, 3, true));
       return { id: 3, tabs: [tabs.at(-1)!] };
@@ -309,8 +309,8 @@ describe("runCommand", () => {
       tabs.push(tab(10, 3, true));
       return tabs.at(-1);
     });
-    let first = await run({ type: "tabCreate", url: null });
-    let second = await run({ type: "tabCreate", url: null });
+    let first = await create();
+    let second = await create({ windowId: 3, own: [9] });
     expect(fake.windows.create).toHaveBeenCalledOnce();
     expect(fake.windows.create).toHaveBeenCalledWith({
       url: undefined,
@@ -325,12 +325,12 @@ describe("runCommand", () => {
     expect(second).toMatchObject({ ok: true, tab: { id: 10, windowId: 3 } });
   });
 
-  test("tabCreate puts the user's window back in front of a new pilot window when Safari is the front app", async () => {
+  test("tabCreate puts the user's window back in front of a new session window when Safari is the front app", async () => {
     fake.windows.create.mockImplementation(async () => {
       tabs.push(tab(9, 3, true));
       return { id: 3, tabs: [tabs.at(-1)!] };
     });
-    await run({ type: "tabCreate", url: null, safariFrontmost: true });
+    await create({ safariFrontmost: true });
     expect(fake.windows.update).toHaveBeenCalledWith(1, { focused: true });
     expect(fake.windows.update.mock.invocationCallOrder[0]).toBeGreaterThan(
       fake.windows.create.mock.invocationCallOrder[0],
@@ -342,23 +342,24 @@ describe("runCommand", () => {
       tabs.push(tab(9, 3, true));
       return { id: 3, tabs: [tabs.at(-1)!] };
     });
-    await run({ type: "tabCreate", url: null, safariFrontmost: false });
-    stored = {};
+    await create({ safariFrontmost: false });
     fake.windows.getLastFocused.mockRejectedValueOnce(new Error("no windows"));
-    await run({ type: "tabCreate", url: null, safariFrontmost: true });
+    await create({ safariFrontmost: true });
     expect(fake.windows.create).toHaveBeenCalledTimes(2);
     expect(fake.windows.update).not.toHaveBeenCalled();
   });
 
-  test("tabCreate never reuses a stored window holding the user's tabs", async () => {
-    stored.pilotWindow = 1;
+  test("tabCreate never reuses a window holding a tab outside the session", async () => {
+    tabs.push(tab(9, 3, false), tab(10, 3, true));
     fake.windows.create.mockImplementation(async () => {
-      tabs.push(tab(9, 3, true));
-      return { id: 3, tabs: [tabs.at(-1)!] };
+      let id = tabs.length + 20;
+      tabs.push(tab(id, id, true));
+      return { id, tabs: [tabs.at(-1)!] };
     });
-    await run({ type: "tabCreate", url: null });
+    await create({ windowId: 1 });
+    await create({ windowId: 3, own: [9] });
+    expect(fake.windows.create).toHaveBeenCalledTimes(2);
     expect(fake.tabs.create).not.toHaveBeenCalled();
-    expect(stored.pilotWindow).toBe(3);
   });
 
   test("tabCreate moves a tab Safari put among the user's tabs into its own window", async () => {
@@ -371,13 +372,12 @@ describe("runCommand", () => {
         tabs.at(-1)!.windowId = 3;
         return { id: 3, tabs: [tabs.at(-1)!] };
       });
-    let result = await run({ type: "tabCreate", url: null });
+    let result = await create();
     expect(fake.windows.create).toHaveBeenLastCalledWith({
       tabId: 9,
       focused: false,
     });
     expect(result).toMatchObject({ ok: true, tab: { id: 9, windowId: 3 } });
-    expect(stored.pilotWindow).toBe(3);
   });
 
   test("tabCreate closes a tab it cannot get out of the user's window", async () => {
@@ -385,22 +385,31 @@ describe("runCommand", () => {
       tabs.push(tab(9, 1, false));
       return { id: 1, tabs: [tabs.at(-1)!] };
     });
-    let result = await run({ type: "tabCreate", url: null });
+    let result = await create();
     expect(result).toMatchObject({ ok: false, code: "failed" });
     expect(fake.tabs.remove).toHaveBeenCalledWith(9);
-    expect(stored.pilotWindow).toBeUndefined();
   });
 
-  test("tabCreate replaces a closed pilot window", async () => {
-    stored.pilotWindow = 4;
+  test("tabCreate replaces a session window that closed", async () => {
     fake.windows.get.mockRejectedValueOnce(new Error("No window with id: 4"));
     fake.windows.create.mockImplementation(async () => {
       tabs.push(tab(9, 3, true));
       return { id: 3, tabs: [tabs.at(-1)!] };
     });
-    await run({ type: "tabCreate", url: null });
+    expect(await create({ windowId: 4 })).toMatchObject({
+      ok: true,
+      tab: { id: 9, windowId: 3 },
+    });
     expect(fake.tabs.create).not.toHaveBeenCalled();
-    expect(stored.pilotWindow).toBe(3);
+  });
+
+  test("closeTabs closes each tab and skips ones already gone", async () => {
+    fake.tabs.remove.mockRejectedValueOnce(new Error("No tab with id: 40"));
+    expect(await run({ type: "closeTabs", tabIds: [40, 6] })).toEqual({
+      ok: true,
+    });
+    expect(fake.tabs.remove).toHaveBeenCalledWith(40);
+    expect(fake.tabs.remove).toHaveBeenCalledWith(6);
   });
 
   test("tabSelect activates without focusing the window, tabClose reports the id", async () => {
@@ -634,14 +643,13 @@ describe("site access", () => {
 
   test("tabCreate keeps its tab when Safari holds it behind the prompt", async () => {
     vi.useFakeTimers();
-    stored.pilotWindow = 1;
     tabs = tabs.filter((tab) => tab.windowId !== 1);
     fake.tabs.create.mockImplementation(async () => {
       fake.tabs.get.mockReturnValue(new Promise(() => {}));
       setTimeout(() => fireComplete(8), 0);
       return { ...tab(8, 1, true), url: "" };
     });
-    let pending = run({ type: "tabCreate", url: "https://new.test/" });
+    let pending = create({ url: "https://new.test/", windowId: 1 });
     await vi.advanceTimersByTimeAsync(accessDeadlineMs + 1);
     expect(await pending).toMatchObject({
       ok: true,

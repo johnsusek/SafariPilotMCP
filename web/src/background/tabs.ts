@@ -2,6 +2,7 @@ import type { TabInfo } from "../shared/commands";
 import type { Rect } from "../shared/protocol";
 import { withinAccess } from "./access";
 import { thrown } from "./frames";
+import { isPilot } from "./network";
 
 type Tab = chrome.tabs.Tab;
 type Window = chrome.windows.Window;
@@ -27,6 +28,7 @@ export let infoOf = (
   title: tab.title ?? "",
   windowFrame: frame,
   openerId: tab.openerTabId ?? null,
+  pilot: isPilot(tab.id),
 });
 
 // Fails as Safari's website access prompt when the lookup is held past the access deadline.

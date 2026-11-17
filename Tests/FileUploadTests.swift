@@ -27,7 +27,7 @@ struct FileUploadTests {
     return path
   }
 
-  func map(_ arguments: [String: JSONValue]) throws -> AppCommand { try Tools.command(name: "file_upload", arguments: arguments, session: TabSession(owned: [20], current: 20)) }
+  func map(_ arguments: [String: JSONValue]) throws -> AppCommand { try Tools.command(name: "file_upload", arguments: arguments, session: TabSession(current: 20)) }
 
   @Test func readsNameMimeTypeDateAndBytes() throws {
     let photo = try write("photo.png", Data([0x89, 0x50, 0x4E, 0x47]), modified: Date(timeIntervalSince1970: 1_700_000_000.5))

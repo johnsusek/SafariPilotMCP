@@ -8,7 +8,7 @@ struct RedactionTests {
   static let secretURL = "https://u:pw@site.test/cb?code=4/0Ab&state=s#access_token=ya29"
   static let shown = "https://[hidden]@site.test/cb?code=[hidden]&state=s#access_token=[hidden]"
 
-  let tab = TabInfo(id: 4, windowId: 1, active: true, url: secretURL, title: "Back", windowFrame: CSSRect(left: 0, top: 0, width: 800, height: 600), openerId: nil)
+  let tab = TabInfo(id: 4, windowId: 1, active: true, url: secretURL, title: "Back", windowFrame: CSSRect(left: 0, top: 0, width: 800, height: 600), openerId: nil, pilot: false)
 
   /// The same cases web/src/shared/redact.test.ts runs, so the two copies of the rule cannot drift.
   @Test func sharedCases() throws {

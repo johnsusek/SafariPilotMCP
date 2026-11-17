@@ -18,7 +18,7 @@ import {
 import { runJavascript } from "./javascript";
 import { loadAfter, loadTimeoutMs, settle } from "./load";
 import type { NativeCommand } from "./native";
-import { isPilot, listRequests, piloting, requestDetail } from "./network";
+import { listRequests, piloting, requestDetail } from "./network";
 import { runPageFetch } from "./pageFetch";
 import { runPage } from "./page";
 import { allTabs, resolveTab, tabInfo } from "./tabs";
@@ -187,17 +187,17 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     return { ok: true, tab: await tabInfo(await resolveTab(command.tabId)) };
 
   if (command.type === "tabCreate") {
-    // Every session shares one pilot window, which never holds a tab of the user's. A window is trusted only while every tab in it is a pilot tab (or the one being made),
-    // since a renumbered id can name the user's window and Safari can put a new window's tab into an existing window.
+    // Each session has its own window, which never holds another session's tab or the user's. A window is trusted only while every tab in it is one of the session's (or the one being made),
+    // since a renumbered id can name another window and Safari can put a new window's tab into an existing window.
     let url = command.url ?? undefined;
-    let pilotOnly = async (windowId: unknown, newTab?: number) => {
-      if (typeof windowId !== "number") return null;
+    let ownOnly = async (windowId: number | null, newTab?: number) => {
+      if (windowId === null) return null;
 
       let found = await browser.windows
         .get(windowId, { populate: true })
         .catch(() => null);
       let only = found?.tabs?.every(
-        (tab) => tab.id === newTab || isPilot(tab.id!),
+        (tab) => tab.id === newTab || command.own.includes(tab.id!),
       );
       return only ? found : null;
     };
@@ -213,8 +213,7 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
 
       return created!.tabs![0] as KnownTab;
     };
-    let { pilotWindow } = await browser.storage.session.get("pilotWindow");
-    let window = await pilotOnly(pilotWindow);
+    let window = await ownOnly(command.windowId);
     let create = () =>
       piloting(async () => {
         // Opened as a background tab: Safari brings a window in front of its others when an active tab opens in it. Input selects the tab when it needs to.
@@ -226,20 +225,19 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
             })) as KnownTab)
           : await newWindow({ url });
 
-        if (!(await pilotOnly(tab.windowId, tab.id)))
+        if (!(await ownOnly(tab.windowId, tab.id)))
           tab = await newWindow({ tabId: tab.id });
 
-        if (!(await pilotOnly(tab.windowId, tab.id))) {
+        if (!(await ownOnly(tab.windowId, tab.id))) {
           await browser.tabs.remove(tab.id).catch(() => {});
           throw thrown({
             ok: false,
             error:
-              "Safari put the new tab in a window with the user's tabs and would not move it to its own window, so it was closed",
+              "Safari put the new tab in a window with other tabs and would not move it to its own window, so it was closed",
             code: "failed",
           });
         }
 
-        await browser.storage.session.set({ pilotWindow: tab.windowId });
         return tab;
       });
 
@@ -265,6 +263,13 @@ async function dispatch(command: NativeCommand): Promise<CommandResponse> {
     let tab = await resolveTab(command.tabId);
     await browser.tabs.remove(tab.id);
     return { ok: true, closed: tab.id };
+  }
+
+  if (command.type === "closeTabs") {
+    await Promise.all(
+      command.tabIds.map((id) => browser.tabs.remove(id).catch(() => {})),
+    );
+    return { ok: true };
   }
 
   if (command.type === "navigate") {

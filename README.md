@@ -79,7 +79,7 @@ The **Tools** pane in the app shows each tool's full description.
 ## Security and trust
 
 - **Approve every client.** Each new client needs your approval. A client you always trust gets a credential in its MCP settings, so other software on your Mac can't pass itself off as that client.
-- **Tab isolation.** An agent sees only the tabs it opened and the popups they open.
+- **Tab isolation.** Each agent session gets its own Safari window and sees only the tabs it opened, plus any popups from those; SafariPilot closes them all when the session ends.
 - **Secure local connection.** The Safari extension, the app and the agent talk only over loopback, and every connection needs a secret token that changes each launch.
 - **Secrets stay hidden.** Page reads, URLs and network logs redact password fields, card numbers, tokens and cookies.
 

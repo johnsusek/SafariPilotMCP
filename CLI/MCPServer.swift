@@ -4,7 +4,7 @@ import Synchronization
 
 /// `safaripilot mcp`: a stdio MCP server whose tools each become one app command. stdout carries only protocol messages.
 enum MCPServer {
-  /// The tabs this server process may see and act on, and its default tab for page tools.
+  /// This server process's default tab for page tools; the app decides which tabs it may act on.
   static let session = Mutex(TabSession())
   /// The name and version the client reported in initialize, shown in the approval dialog.
   static let client = Mutex((name: "", version: ""))
@@ -50,20 +50,11 @@ enum MCPServer {
           try await Task.sleep(for: .seconds(seconds))
           return .text("waited \(seconds.formatted()) s")
         case let .condition(tabId, condition, timeout):
-          try await requireOwned(tabId)
           return try await .text(Wait.poll(condition, tabId: tabId, timeout: timeout, look: exchange))
         }
       }
 
       let command = try Tools.command(name: name, arguments: arguments, session: session.withLock { $0 })
-
-      if command == .tabs {
-        let lines = try await refresh().visible.map(\.line)
-        return .text(lines.isEmpty ? "no tabs: call tab_create to open one" : lines.joined(separator: "\n"))
-      }
-
-      if let target = command.targetTab { try await requireOwned(target) }
-
       let reply = try await exchange(command)
       session.withLock { $0.record(command, reply: reply) }
 
@@ -71,43 +62,11 @@ enum MCPServer {
 
       if reply.ok, let png = reply.data["png"]?.string { return ToolResult(items: [.png(png), .text(reply.text)]) }
 
-      switch command {
-      case .click, .key, .drag: break
-      default: return .reply(reply)
-      }
-
-      // A dialog the click or key press opened stops the extension, so tabs cannot be listed until it closes.
-      guard reply.ok, reply.data["dialog"] == nil else { return .reply(reply) }
-
-      // A click or key press can open a popup; adopt it now so the caller hears about it.
-      // The action already happened, so a failed listing, as when its page opens a dialog a moment later, is reported beside it and not in its place.
-      do {
-        let opened = try await refresh().adopted.map { "opened tab \($0.id) \($0.url)" }
-        return .text(([reply.text] + opened).joined(separator: "\n"))
-      } catch {
-        return .text("\(reply.text)\ntabs could not be listed afterwards to look for popups: \(error)")
-      }
+      return .reply(reply)
     } catch {
       log("\(name) failed: \(error)")
       return .failed(error)
     }
-  }
-
-  /// Lists every Safari tab, adopts the ones this session's tabs opened, and returns those plus the session's visible tabs.
-  static func refresh() async throws -> (adopted: [TabInfo], visible: [TabInfo]) {
-    let reply = try await exchange(.tabs)
-
-    guard reply.ok else { throw Failure(reply.code ?? .failed, reply.text) }
-
-    let tabs = try reply.data.decode(TabsResult.self).tabs
-    return session.withLock { ($0.adopt(tabs), $0.visible(tabs)) }
-  }
-
-  /// Refuses tabs this session did not open, after adopting any new popups of its own tabs.
-  static func requireOwned(_ tab: Int) async throws {
-    if session.withLock({ $0.owned.contains(tab) }) { return }
-
-    guard try await refresh().visible.contains(where: { $0.id == tab }) else { throw Failure(.tabUnavailable, "tab \(tab) is not one of this session's tabs; tabs_list shows them and tab_create opens one") }
   }
 
   static func text(_ text: String) -> Tool.Content { .text(text: text, annotations: nil, _meta: nil) }

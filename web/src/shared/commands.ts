@@ -182,6 +182,8 @@ export type TabInfo = {
   title: string;
   windowFrame: Rect | null;
   openerId: number | null;
+  // Opened by tabCreate or by such a tab; the app closes it once no live session owns it.
+  pilot: boolean;
 };
 
 export type Command =
@@ -190,12 +192,20 @@ export type Command =
   | { type: "tabs" }
   // Resolves the target tab without side effects.
   | { type: "tab"; tabId: number | null }
-  // Opens a background tab in the pilot window, or a new unfocused window when it is closed; with a url, answers once it has loaded, or as loading after a timeout.
-  // safariFrontmost says Safari is the front app, where a new window has to be put back behind the one the user is in.
-  | { type: "tabCreate"; url: string | null; safariFrontmost: boolean }
+  // Opens a background tab in the session's window, or a new unfocused window when it has none; with a url, answers once it has loaded, or as loading after a timeout.
+  // own lists the session's other tabs, the only ones the tab's window may hold. safariFrontmost says Safari is the front app, where a new window has to be put back behind the one the user is in.
+  | {
+      type: "tabCreate";
+      url: string | null;
+      safariFrontmost: boolean;
+      windowId: number | null;
+      own: number[];
+    }
   // Makes the tab the active tab of its window.
   | { type: "tabSelect"; tabId: number }
   | { type: "tabClose"; tabId: number }
+  // Closes each tab still open, for sessions that ended.
+  | { type: "closeTabs"; tabIds: number[] }
   // navigate and history answer once the tab has finished loading, or fail after a timeout.
   // settle follows an action the app dispatched: it watches the tab for watchMs for a load to start and waits for it, or notices an address change from url without one.
   | { type: "navigate"; tabId: number | null; url: string }
@@ -257,6 +267,7 @@ export type SettleResult = {
   loading: boolean;
 };
 export type ClosedResult = { ok: true; closed: number };
+export type ClosedTabsResult = { ok: true };
 export type ScreenshotResult = { ok: true; dataUrl: string; tab: TabInfo };
 
 export type FrameNode = {
@@ -358,6 +369,7 @@ export type CommandResponse =
   | TabResult
   | SettleResult
   | ClosedResult
+  | ClosedTabsResult
   | ScreenshotResult
   | FramesTree
   | JavascriptResult

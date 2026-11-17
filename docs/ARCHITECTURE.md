@@ -59,7 +59,7 @@ Client ──stdio──▶ safaripilot mcp ──TCP 127.0.0.1:47821──▶ S
 
 ## Isolation and redaction
 
-- The MCP server sees only tabs it opened plus their popups (by `openerTabId`). All sessions share one SafariPilot window.
+- Each MCP session sees and acts on only the tabs it opened plus their popups (by `openerTabId`), in a Safari window of its own. The app keeps this record by session key and refuses any other tab. When a session's MCP process exits or the person disconnects it, the app closes its tabs; at launch it closes pilot tabs left from before. Code: `Shared/SessionTabs.swift`.
 - Secret fields (passwords, OTP, card numbers and secret-named fields, rules in `web/src/content/sensitive.ts`) never leave the content script; they show as `value=[hidden]`.
 - URL credentials and secret query or fragment parameters are hidden in every reply (`web/src/shared/redact.ts` and `Shared/Redaction.swift`, sharing `redactUrl.cases.json`). Cookie, Set-Cookie and secret headers and body fields are hidden in network logs.
 - page_fetch (`web/src/background/pageFetch.ts`) sends from the page's main world with the `fetch` the capture kept at document_start, over a CustomEvent pair whose request no page listener sees. A replay fills in the logged request's raw headers, which the background keeps beside the redacted ones in memory only and never puts in a reply; Cookie, Origin, Referer, `sec-` and the browser's own headers are left for the browser. Its reply goes through the same redaction before `pick`, so a path cannot lift a hidden value out from under its name.

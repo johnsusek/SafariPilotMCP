@@ -6,9 +6,37 @@ import Foundation
 @AXActor
 struct Commands {
   let model: AppModel
+  /// The MCP session's key, or "" for the Debug CLI's session-less commands, which may act on any tab.
+  let session: String
   let deadline: ContinuousClock.Instant
 
+  /// An MCP session acts only on its own tabs. A click, key press or drag can open a popup, which joins the session, so the caller hears of it.
   func run(_ command: AppCommand) async throws -> CLIReply {
+    if !session.isEmpty { try await requireOwned(command) }
+
+    let reply = try await perform(command)
+
+    switch command {
+    case .click, .key, .drag: break
+    default: return reply
+    }
+
+    // A dialog the action opened stops the extension, so tabs cannot be listed until it closes.
+    guard reply.ok, reply.data["dialog"] == nil else { return reply }
+
+    // The action already happened, so a failed listing, as when its page opens a dialog a moment later, is reported beside it and not in its place.
+    do {
+      let opened = try await listTabs().adopted.map { "opened tab \($0.id) \($0.shownURL)" }
+
+      if opened.isEmpty { return reply }
+
+      return CLIReply(ok: true, text: ([reply.text] + opened).joined(separator: "\n"), data: reply.data)
+    } catch {
+      return CLIReply(ok: true, text: "\(reply.text)\ntabs could not be listed afterwards to look for popups: \(error)", data: reply.data)
+    }
+  }
+
+  private func perform(_ command: AppCommand) async throws -> CLIReply {
     switch command {
     case .status: await status()
     case let .ping(tabId): try await ping(tabId)
@@ -18,7 +46,7 @@ struct Commands {
     case let .formInput(tabId, target, value, compat): try await resolving(tabId, target) { try await formInput(tabId, $0, value, compat: compat) }
     case let .events(tabId, clear): try await events(tabId, clear)
     case .tabs: try await tabs()
-    case let .tabCreate(url): try await tabReply("opened", call(.tabCreate(url: url, safariFrontmost: NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Safari")))
+    case let .tabCreate(url): try await tabCreate(url)
     case let .tabSelect(tabId): try await tabReply("selected", call(.tabSelect(tabId: tabId)))
     case let .tabClose(tabId): try await tabClose(tabId)
     case let .navigate(tabId, url): try await tabReply("loaded", call(.navigate(tabId: tabId, url: url)))
@@ -257,10 +285,56 @@ struct Commands {
     return CLIReply(ok: true, text: lines.isEmpty ? "no events" : lines.joined(separator: "\n"), data: response)
   }
 
+  /// Refuses a tab another session owns, or none at all, which would reach the user's active tab; a popup not yet adopted is adopted first.
+  private func requireOwned(_ command: AppCommand) async throws {
+    switch command {
+    case .status, .tabs, .tabCreate: return
+    default: break
+    }
+
+    guard let tab = command.targetTab else { throw Failure(.tabUnavailable, TabSession.noCurrent) }
+
+    if await model.sessionTabs.owns(session, tab) { return }
+
+    _ = try await listTabs()
+
+    guard await model.sessionTabs.owns(session, tab) else { throw Failure(.tabUnavailable, "tab \(tab) is not one of this session's tabs; tabs_list shows them and tab_create opens one") }
+  }
+
+  /// Every Safari tab, after giving popups to the sessions whose tabs opened them, and the ones this session adopted.
+  private func listTabs() async throws -> (all: [TabInfo], adopted: [TabInfo]) {
+    let tabs = try await call(.tabs).decode(TabsResult.self).tabs
+    let adopted = await MainActor.run { model.sessionTabs.adopt(tabs)[session] ?? [] }
+    return (tabs, adopted)
+  }
+
+  /// A session sees only its own tabs; the Debug CLI sees them all.
   private func tabs() async throws -> CLIReply {
-    let response = try await call(.tabs)
-    let lines = try response.decode(TabsResult.self).tabs.map(\.line)
-    return CLIReply(ok: true, text: lines.isEmpty ? "no tabs" : lines.joined(separator: "\n"), data: response)
+    let all = try await listTabs().all
+    let shown = session.isEmpty ? all : await MainActor.run { all.filter { model.sessionTabs.owns(session, $0.id) } }
+    let lines = shown.map(\.line)
+    return try CLIReply(ok: true, text: lines.isEmpty ? "no tabs: call tab_create to open one" : lines.joined(separator: "\n"), data: JSONValue(encoding: TabsResult(tabs: shown)))
+  }
+
+  /// Opens the tab in the session's own window, which holds no other session's tab and none of the user's.
+  private func tabCreate(_ url: String?) async throws -> CLIReply {
+    let all = try await listTabs().all
+    let (window, own) = await MainActor.run { (model.sessionTabs.window(for: session, in: all), model.sessionTabs.sessions[session]?.tabs.sorted() ?? []) }
+    let frontmost = NSWorkspace.shared.frontmostApplication?.bundleIdentifier == "com.apple.Safari"
+    let response = try await call(.tabCreate(url: url, safariFrontmost: frontmost, windowId: window, own: own))
+    let tab = try response.decode(TabResult.self).tab
+    await MainActor.run { model.sessionTabs.opened(tab, by: session) }
+    return try tabReply("opened", response)
+  }
+
+  /// Closes the pilot tabs no live session owns: those of sessions that ended and any left from before the app started.
+  func closeOrphans(live: Set<String>) async throws -> [Int] {
+    let tabs = try await call(.tabs).decode(TabsResult.self).tabs
+    let orphans = await MainActor.run { model.sessionTabs.orphans(live: live, in: tabs) }
+
+    if !orphans.isEmpty { _ = try await call(.closeTabs(tabIds: orphans)) }
+
+    return orphans
   }
 
   private func tabReply(_ verb: String, _ response: JSONValue) throws -> CLIReply {
@@ -273,6 +347,7 @@ struct Commands {
 
   private func tabClose(_ tabId: Int) async throws -> CLIReply {
     let response = try await call(.tabClose(tabId: tabId))
+    await MainActor.run { model.sessionTabs.closed(tabId) }
     return try CLIReply(ok: true, text: "closed tab \(response.decode(ClosedResult.self).closed)", data: response)
   }
 

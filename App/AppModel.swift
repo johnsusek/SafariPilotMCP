@@ -40,6 +40,11 @@ final class AppModel {
 
   /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
   private(set) var knownTabs: [Int: TabInfo] = [:]
+  /// Which tabs each session owns; Commands reads and updates it.
+  var sessionTabs = SessionTabs()
+  /// The sessions alive at the last check, so one ending (its process exited or the person disconnected it) closes its tabs.
+  private var liveSessions: Set<String> = []
+  private var closedLeftovers = false
   private var started = false
   /// Commands that may touch Safari, running or recently ended, for naming the one that brought Safari forward.
   private var inFlight: [UUID: (label: String, start: Date)] = [:]
@@ -70,6 +75,11 @@ final class AppModel {
         loginItem = SMAppService.mainApp.status
         await refreshExtensionState()
         gate.dropExited()
+        let live = Set(gate.sessions.map(\.id))
+
+        if !liveSessions.isSubset(of: live) { Task { await closeOrphans() } }
+
+        liveSessions = live
         refreshSetUp()
         try? await Task.sleep(for: .seconds(3))
       }
@@ -249,7 +259,7 @@ final class AppModel {
       return CLIReply(failed: buildMismatch)
     }
 
-    let commands = Commands(model: self, deadline: .now + .seconds(request.timeoutSeconds))
+    let commands = Commands(model: self, session: request.session ?? "", deadline: .now + .seconds(request.timeoutSeconds))
     let id = UUID()
 
     if case .status = request.command {} else { inFlight[id] = (label, .now) }
@@ -295,7 +305,27 @@ final class AppModel {
       record("extension build", ok: mismatch == nil, summary: mismatch.map { "\($0)" } ?? "matches this app, \(build ?? "")")
     }
 
+    // The first message after launch: pilot tabs left from before belong to no session now.
+    if !closedLeftovers {
+      closedLeftovers = true
+      Task { await closeOrphans() }
+    }
+
     return await transport.handle(message, poll: poll, refusal: buildMismatch)
+  }
+
+  /// Closes the tabs of sessions that ended, through the queue so it never lands between another command's steps.
+  private func closeOrphans() async {
+    do {
+      let closed = try await queue.run {
+        let commands = Commands(model: self, session: "", deadline: .now + .seconds(CLIRequest.defaultTimeout))
+        return try await commands.closeOrphans(live: Set(gate.sessions.map(\.id)).union([""]))
+      }
+
+      if !closed.isEmpty { record("close ended sessions' tabs", ok: true, summary: "closed \(closed.map(String.init).joined(separator: ", "))") }
+    } catch {
+      record("close ended sessions' tabs", ok: false, summary: "\(ErrorCode(of: error).rawValue): \(error)")
+    }
   }
 
   /// Keeps the TabInfo a background reply carried and forgets a closed tab.
