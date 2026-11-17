@@ -28,9 +28,14 @@ import {
   toolCalls,
 } from "./agent.ts";
 
-type Expected = { hnUser: string; jqTag: string; ytSpotify: string };
+type Expected = {
+  hnUser: string;
+  jqTag: string;
+  ytSpotify: string;
+  flightDate: string;
+};
 type Task = {
-  prompt: (fixture: string) => string;
+  prompt: (fixture: string, expected: Expected) => string;
   // pageText is the tool results' text from every saved run of the task, for answers no fixed value can grade.
   check: (answer: string, expected: Expected, pageText: string) => boolean;
   // The run may read the fixture's folder, which Claude in Chrome needs to upload it.
@@ -159,6 +164,21 @@ let tasks: Record<string, Task> = {
       "Go to https://www.reddit.com/r/space/comments/frdd1d/?sort=top and report the username of whoever wrote the first top-level comment.",
     check: (answer) => /lewri/i.test(answer),
   },
+  maps: {
+    prompt: () =>
+      "Go to https://www.openstreetmap.org, search for the Ferry Building in San Francisco and report its street address with its postcode.",
+    check: (answer) =>
+      /\b1,? the embarcadero/i.test(answer) && answer.includes("94111"),
+  },
+  // Fares change between runs, so the price only has to be one some run's tools read as text, like ytcomments.
+  flights: {
+    prompt: (_, expected) =>
+      `Go to https://www.kayak.com/flights and use its search form to find one-way economy flights for 1 adult from SFO to JFK (not nearby airports) on ${new Date(`${expected.flightDate}T12:00`).toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}. Report the cheapest price shown. Do not sign in or book anything.`,
+    check: (answer, _, pageText) => {
+      let price = answer.match(/\$[\d,]+/)?.[0];
+      return !!price && pageText.includes(price);
+    },
+  },
 };
 
 let ending =
@@ -191,6 +211,8 @@ let expectedFor = async (out: string): Promise<Expected> => {
     ytSpotify:
       description.match(/Spotify:\s*(\S+)/)?.[1]?.replace(/^https?:\/\//, "") ??
       "",
+    // About three weeks out, fixed per pass so every run searches the same day.
+    flightDate: new Date(Date.now() + 21 * 86400000).toISOString().slice(0, 10),
   };
   if (!expected.hnUser || !expected.jqTag || !expected.ytSpotify)
     throw new Error(
@@ -303,7 +325,7 @@ if (!values.analyze) {
 
         let { events, timedOut } = await runAgent(
           browser,
-          `${tasks[task].prompt(fixture)}\n${ending}`,
+          `${tasks[task].prompt(fixture, expected)}\n${ending}`,
           values.model,
           tasks[task].readsFixture ? { readDirs: [dirname(fixture)] } : {},
         );
