@@ -266,7 +266,7 @@ describe("diff lines", () => {
       },
     );
     expect(refless(result.lines)).toEqual([
-      "- 2 hidden by aria-hidden or inert, still in the page",
+      "- 2 hidden by aria-hidden, inert or a modal dialog, still in the page",
       '+ menu "Options"',
     ]);
     expect(result.removed).toBe(2);
@@ -283,9 +283,44 @@ describe("diff lines", () => {
     );
     expect(refless(result.lines)).toEqual([
       '- menu "Options"',
-      "+ 2 shown again as aria-hidden or inert was lifted; read_page shows them",
+      "+ 2 shown again as aria-hidden, inert or a modal dialog was lifted; read_page shows them",
     ]);
     expect(result.added).toBe(2);
+  });
+
+  test("a modal dialog hides the rest of the page, which comes back on one line when it closes, apart from what was inserted", async () => {
+    // happy-dom does not match :modal.
+    let modal: Element | null = null;
+    let native = document.querySelector.bind(document);
+    vi.spyOn(document, "querySelector").mockImplementation(
+      (selector: string) => (selector === ":modal" ? modal : native(selector)),
+    );
+    let tick = () => new Promise((resolve) => setTimeout(resolve));
+    document.body.innerHTML =
+      '<main><a href="/a">A</a><button>Open</button></main><dialog aria-label="Pick"><button>Close</button></dialog>';
+    await tick();
+    startDiff();
+    modal = document.querySelector("dialog")!;
+    modal.setAttribute("open", "");
+    await tick();
+    let opened = await takeDiff("", 0, 2000);
+    expect(refless(opened.lines)).toEqual([
+      "- 1 hidden by aria-hidden, inert or a modal dialog, still in the page",
+      '+ dialog "Pick"',
+      '+   button "Close"',
+    ]);
+    await tick();
+    startDiff();
+    modal!.removeAttribute("open");
+    modal = null;
+    document.body.insertAdjacentHTML("beforeend", '<p role="status">Saved</p>');
+    await tick();
+    let closed = await takeDiff("", 0, 2000);
+    expect(refless(closed.lines)).toEqual([
+      '- dialog "Pick"',
+      '+ status "Saved"',
+      "+ 1 shown again as aria-hidden, inert or a modal dialog was lifted; read_page shows them",
+    ]);
   });
 
   test("a diff too long to show whole puts new content before removed lines", async () => {

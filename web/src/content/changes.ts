@@ -1,6 +1,6 @@
 import type { DiffResult, DiffStartResult } from "../shared/protocol";
 import { collapse } from "./describe";
-import { flatParent } from "./flat";
+import { flatParent, openModal, outsideModal } from "./flat";
 import { pendingSince } from "./network";
 import { refFor } from "./refs";
 import {
@@ -49,6 +49,8 @@ type Watch = {
   roots: Set<Document | ShadowRoot>;
   animations: Set<Animation>;
   unveiled: Set<Element>;
+  inserted: WeakSet<Node>;
+  modal: Element | null;
 };
 
 let watch: Watch | null = null;
@@ -157,7 +159,10 @@ function note(records: MutationRecord[], state: Watch) {
     state.changed = Date.now();
 
   for (let record of records) {
-    for (let node of record.addedNodes) observe(node, state);
+    for (let node of record.addedNodes) {
+      observe(node, state);
+      state.inserted.add(node);
+    }
 
     if (veils.has(record.attributeName!) && !veiled(record.target as Element))
       state.unveiled.add(record.target as Element);
@@ -175,6 +180,8 @@ export function startDiff(): DiffStartResult {
     roots: new Set(),
     animations: new Set(),
     unveiled: new Set(),
+    inserted: new WeakSet(),
+    modal: openModal(),
   };
 
   if (state.before) {
@@ -191,7 +198,10 @@ type Kind = "added" | "changed" | "removed";
 
 type Out = {
   kinds: Set<Kind>;
+  // Elements back in view: under one whose aria-hidden or inert was lifted, or outside a modal dialog that closed (freed) and not inserted meanwhile.
   unveiled: Set<Element>;
+  freed: Element | null;
+  inserted: WeakSet<Node>;
   prefix: string;
   maxChars: number;
   lines: string[];
@@ -353,6 +363,11 @@ let veiled = (element: Element) =>
   element.getAttribute("aria-hidden") === "true" ||
   element.hasAttribute("inert");
 
+let backInView = (element: Element, out: Out) =>
+  underAny(element, (node) => out.unveiled.has(node)) ||
+  (out.freed !== null &&
+    !underAny(element, (node) => node === out.freed || out.inserted.has(node)));
+
 let underAny = (element: Element, test: (node: Element) => boolean) => {
   for (let node: Element | null = element; node; node = flatParent(node))
     if (test(node)) return true;
@@ -393,7 +408,10 @@ function compare(
   let hidden = 0;
 
   for (let child of gone) {
-    if (child.element!.isConnected && underAny(child.element!, veiled)) {
+    if (
+      child.element!.isConnected &&
+      (underAny(child.element!, veiled) || outsideModal(child.element!))
+    ) {
       hidden++;
       continue;
     }
@@ -414,7 +432,7 @@ function compare(
       out,
       "removed",
       after,
-      `- ${hidden} hidden by aria-hidden or inert, still in the page`,
+      `- ${hidden} hidden by aria-hidden, inert or a modal dialog, still in the page`,
     );
 
     if (out.kinds.has("removed")) out.removed += hidden - 1;
@@ -439,7 +457,7 @@ function compare(
   for (let child of after.children) {
     let prior = priorOf(child);
 
-    if (!prior && underAny(child.element!, (node) => out.unveiled.has(node))) {
+    if (!prior && backInView(child.element!, out)) {
       shown++;
       continue;
     }
@@ -468,7 +486,7 @@ function compare(
     out,
     "added",
     after,
-    `+ ${shown} shown again as aria-hidden or inert was lifted; read_page shows them`,
+    `+ ${shown} shown again as aria-hidden, inert or a modal dialog was lifted; read_page shows them`,
   );
 
   if (out.kinds.has("added")) out.added += shown - 1;
@@ -533,6 +551,8 @@ export async function takeDiff(
       let next: Out = out ?? {
         ...result,
         unveiled: state.unveiled,
+        freed: state.modal && openModal() !== state.modal ? state.modal : null,
+        inserted: state.inserted,
         lines: [],
         kinds: new Set(kinds),
         prefix,

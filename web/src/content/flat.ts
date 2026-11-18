@@ -27,6 +27,30 @@ export function flatChildren(node: Node): Node[] {
   return Array.from(node.childNodes);
 }
 
+// A modal dialog makes everything outside it inert with no attribute to read. Looked up once per task, since a walk asks for every element and runs within one.
+let modal: Element | null | undefined;
+
+export function openModal() {
+  if (modal === undefined) {
+    modal = document.querySelector(":modal");
+    setTimeout(() => (modal = undefined));
+  }
+
+  return modal;
+}
+
+// Whether an open modal dialog blocks element: it neither holds the dialog nor sits inside it, shadow roots included.
+export function outsideModal(element: Element) {
+  let blocking = openModal();
+
+  if (!blocking || element.contains(blocking)) return false;
+
+  for (let node: Element | null = element; node; node = flatParent(node))
+    if (node === blocking) return false;
+
+  return true;
+}
+
 // Whether element's whole subtree is left out. display:contents elements (slots by default) have no box, so checkVisibility is false for them though their children render.
 export function isPruned(element: Element) {
   if (skippedTags.has(element.localName)) return true;
@@ -37,6 +61,7 @@ export function isPruned(element: Element) {
   )
     return true;
   if ((element as HTMLElement).hidden === true) return true;
+  if (outsideModal(element)) return true;
   if (!element.checkVisibility())
     return getComputedStyle(element).display !== "contents";
   return isFlattened(getComputedStyle(element));
