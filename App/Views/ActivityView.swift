@@ -2,9 +2,10 @@ import SwiftUI
 
 struct ActivityView: View {
   let model: AppModel
+  @AppStorage("activityErrorsOnly") private var errorsOnly = false
 
   var body: some View {
-    Table(model.log.reversed()) {
+    Table(model.log.reversed().filter { !errorsOnly || !$0.ok }) {
       TableColumn("Time") { Text($0.at.formatted(date: .omitted, time: .standard)) }
         .width(min: 70, ideal: 80, max: 100)
       TableColumn("Command", value: \.command)
@@ -17,6 +18,10 @@ struct ActivityView: View {
         Text(line).foregroundStyle(.secondary).textSelection(.enabled).help(line)
       }
       .width(min: 120, ideal: 320)
+    }
+    .toolbar {
+      Toggle("Errors Only", systemImage: "exclamationmark.triangle", isOn: $errorsOnly).help("Show only failed entries")
+      Toggle("Keep Log", systemImage: "internaldrive", isOn: Bindable(model).retainLog).help("Keep the last 500 entries between launches")
     }
   }
 }

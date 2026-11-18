@@ -5,6 +5,7 @@ import SwiftUI
 struct SafariPilotApp: App {
   @NSApplicationDelegateAdaptor private var delegate: AppDelegate
   @AppStorage("showInMenuBar") private var showInMenuBar = true
+  @AppStorage("activityErrorsOnly") private var errorsOnly = false
   @Environment(\.openWindow) private var openWindow
 
   var body: some Scene {
@@ -42,6 +43,8 @@ struct SafariPilotApp: App {
         Button("Clear Log") { delegate.model.clearLog() }
           .keyboardShortcut("k")
           .disabled(delegate.model.log.isEmpty)
+        Toggle("Show Errors Only", isOn: $errorsOnly)
+        Toggle("Keep Log Between Launches", isOn: Bindable(delegate.model).retainLog)
       }
     }
   }
@@ -58,6 +61,10 @@ struct SafariPilotApp: App {
       model.start()
       openMain = !model.axTrusted
     }
+  }
+
+  func applicationWillTerminate(_: Notification) {
+    MainActor.assumeIsolated { model.saveLog() }
   }
 
   func applicationShouldTerminateAfterLastWindowClosed(_: NSApplication) -> Bool { false }

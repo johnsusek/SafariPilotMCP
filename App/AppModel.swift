@@ -7,8 +7,8 @@ import ServiceManagement
 
 @Observable @MainActor
 final class AppModel {
-  struct LogEntry: Identifiable {
-    let id = UUID()
+  struct LogEntry: Identifiable, Codable {
+    var id = UUID()
     let at: Date
     let command: String
     let ok: Bool
@@ -36,6 +36,16 @@ final class AppModel {
   var serverEnabled = UserDefaults.standard.object(forKey: "serverEnabled") as? Bool ?? true {
     didSet { UserDefaults.standard.set(serverEnabled, forKey: "serverEnabled") }
   }
+  /// Keeps the log on disk across launches, capped like the in-memory one.
+  var retainLog = UserDefaults.standard.bool(forKey: "retainLog") {
+    didSet {
+      UserDefaults.standard.set(retainLog, forKey: "retainLog")
+
+      if retainLog { saveLog() } else { try? FileManager.default.removeItem(at: Self.logURL) }
+    }
+  }
+  static let logURL = URL.applicationSupportDirectory.appending(path: "SafariPilot/activity.json")
+  private var saveTask: Task<Void, Never>?
   static let serverOff = "SafariPilot's MCP server is turned off; turn on Enable MCP Server in its menu bar menu."
 
   /// The last TabInfo each background reply carried, for finding a tab's window while a dialog keeps the extension from answering.
@@ -62,6 +72,11 @@ final class AppModel {
     guard !started else { return }
 
     started = true
+
+    if retainLog, let data = try? Data(contentsOf: Self.logURL) {
+      do { log = try JSONDecoder().decode([LogEntry].self, from: data) + log } catch { record("load log", ok: false, summary: "\(error)") }
+    }
+
     Task { await Server.run(model: self) }
     NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { note in
       let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
@@ -358,7 +373,34 @@ final class AppModel {
   func record(_ command: String, ok: Bool, summary: String, timing: CommandTiming? = nil) {
     log.append(LogEntry(at: .now, command: command, ok: ok, summary: summary, timing: timing))
     log = Array(log.suffix(500))
+    scheduleSave()
   }
 
-  func clearLog() { log.removeAll() }
+  func clearLog() {
+    log.removeAll()
+    scheduleSave()
+  }
+
+  /// Writes at most every two seconds, since an agent can record several commands a second.
+  private func scheduleSave() {
+    guard retainLog, saveTask == nil else { return }
+
+    saveTask = Task {
+      try? await Task.sleep(for: .seconds(2))
+      saveTask = nil
+      saveLog()
+    }
+  }
+
+  func saveLog() {
+    guard retainLog else { return }
+
+    do {
+      try FileManager.default.createDirectory(at: Self.logURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+      try JSONEncoder().encode(log).write(to: Self.logURL, options: .atomic)
+    } catch {
+      // Appended directly, since record would schedule another save that fails the same way.
+      log.append(LogEntry(at: .now, command: "save log", ok: false, summary: "\(error)"))
+    }
+  }
 }
