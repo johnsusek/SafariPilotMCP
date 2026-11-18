@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum Pane: String, CaseIterable, Identifiable {
-  case general, clients, tools, activity
+  case general, clients, activity
 
   var id: Self { self }
 
@@ -12,7 +12,6 @@ enum Pane: String, CaseIterable, Identifiable {
     switch self {
     case .general: "gearshape"
     case .clients: "point.3.connected.trianglepath.dotted"
-    case .tools: "wrench.and.screwdriver"
     case .activity: "list.bullet.rectangle"
     }
   }
@@ -33,7 +32,6 @@ struct MainView: View {
         switch pane {
         case .general: GeneralView(model: model)
         case .clients: ClientsView(model: model)
-        case .tools: ToolsView()
         case .activity: ActivityView(model: model)
         }
       }

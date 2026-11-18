@@ -70,8 +70,6 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 - **Inspect:** `javascript`, `read_console_messages`, `read_network_requests`, `page_fetch`
 - **Batch:** `browser_batch` runs several calls in one round trip.
 
-The **Tools** pane in the app shows each tool's full description.
-
 > [!WARNING]
 > **Agent permissions:** An agent acts as you on every site you're signed in to. It can read pages, submit forms and upload files there, as well as run JavaScript and read network requests. Review which clients you approve, and take care with sensitive accounts.
 
