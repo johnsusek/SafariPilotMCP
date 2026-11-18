@@ -3,8 +3,7 @@
 <p align="center"><a href="https://scorecard.dev/viewer/?uri=github.com/johnsusek/SafariPilotMCP"><img src="https://api.scorecard.dev/projects/github.com/johnsusek/SafariPilotMCP/badge" alt="OpenSSF Scorecard"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/ci.yml/badge.svg" alt="CI"></a> <a href="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml"><img src="https://github.com/johnsusek/SafariPilotMCP/actions/workflows/codeql.yml/badge.svg" alt="CodeQL"></a></p>
 
 # SafariPilot
-SafariPilot is a local MCP server for Safari on macOS. Agents work in the Safari
-you're already signed in to, and you keep using your Mac.
+SafariPilot is a local MCP server for Safari on macOS. Your agent works in the Safari you're already signed in to, in a separate window, and you keep using your Mac: it never brings Safari to the front, never switches your tabs, and never takes your cursor or keyboard.
 
 ## Features
 
@@ -126,11 +125,20 @@ Tool times are the mean of every call in those runs. Claude in Chrome does its c
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tools-dark.webp"><img src="docs/benchmark/tools-light.webp" alt="Mean time per tool call, SafariPilot against Claude in Chrome"></picture>
 
-## Why SafariPilot
+## Comparison
 
-- **Instead of [safari-mcp](https://github.com/achiya-automation/safari-mcp):** real clicks and keys without bringing Safari forward, approval per client, and secrets hidden from the agent.
-- **Instead of [MCPSafari](https://github.com/Epistates/MCPSafari):** real clicks and keys without bringing Safari forward, approval per client, and network request bodies.
-- **Instead of [Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/):** it works in your signed-in Safari, where Apple's opens a separate window without your logins.
+| | SafariPilot | safari-mcp | MCPSafari |
+| --- | --- | --- | --- |
+| Makes Safari the active app | Never | Sometimes, then switches back to your app | Needs you to, for real input |
+| Puts its window in front of your Safari windows | Only with `compat: true` | No, it works in your window | When selecting a tab and for real input |
+| Changes the tab you're looking at | Never | For real input and screenshots | For new tabs and screenshots |
+| Takes your cursor or keyboard | Never | During file upload | During real input |
+
+### Competitors
+
+- **[safari-mcp](https://github.com/achiya-automation/safari-mcp)** has no trusted input in its everyday click, type and key tools; pages that check for it need its separate native tools. Since its tabs open in your window, real input and screenshots switch the tab you're looking at, and its AppleScript can bring Safari to the front. Passwords and tokens on the page reach the agent unredacted.
+- **[MCPSafari](https://github.com/Epistates/MCPSafari)** can't send a trusted click. Its real input needs Safari in front, and its hover and drag move your pointer. Its network log has no request bodies, and like safari-mcp, it never asks you to approve a client.
+- **[Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/)** can't use your signed-in Safari; it opens a separate window without your logins.
 
 ## How it runs
 
