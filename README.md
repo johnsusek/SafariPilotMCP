@@ -114,11 +114,17 @@ In SafariPilot's window, **General > Status** shows Accessibility, the Safari ex
 
 ## Benchmark
 
-SafariPilot against Claude in Chrome, both driven by Claude Code (Sonnet) with the same prompts. Each ran 11 tasks 5 times, and all 110 runs passed. SafariPilot took 601 s in total to Chrome's 1,304 s, and used 36% fewer input tokens. [scripts/compare](scripts/compare) runs it.
+Claude Code (Sonnet 5.5) drove both browsers with the same prompts and no other tools. Of the 22 tasks, 15 run on public sites such as YouTube, DoorDash, the Apple Store and a PDF on irs.gov; the other 7 use local test pages. Each task ran 3 to 5 times per browser, and all 176 runs passed.
 
-<picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tools-dark.webp"><img src="docs/benchmark/tools-light.webp" alt="Median time per tool call, SafariPilot against Claude in Chrome"></picture>
+SafariPilot finished in under half the time, 1,176 s against Chrome's 2,471 s, with 32% fewer input tokens and 46% fewer output tokens. [scripts/compare](scripts/compare) runs the tasks and draws the charts.
 
 <picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tasks-dark.webp"><img src="docs/benchmark/tasks-light.webp" alt="Median time per task, SafariPilot against Claude in Chrome"></picture>
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tokens-dark.webp"><img src="docs/benchmark/tokens-light.webp" alt="Median input tokens per task, SafariPilot against Claude in Chrome"></picture>
+
+Tool times are the mean of every call in those runs. Claude in Chrome does its clicks, typing, scrolling and screenshots through one computer tool, so each of those calls counts under the SafariPilot tool that does the same job.
+
+<picture><source media="(prefers-color-scheme: dark)" srcset="docs/benchmark/tools-dark.webp"><img src="docs/benchmark/tools-light.webp" alt="Mean time per tool call, SafariPilot against Claude in Chrome"></picture>
 
 ## Why SafariPilot
 
