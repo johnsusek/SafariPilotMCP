@@ -21,10 +21,6 @@ export type ToolCall = {
 };
 
 let credential = process.env.SAFARIPILOT_CREDENTIAL;
-if (!credential)
-  throw new Error(
-    "SAFARIPILOT_CREDENTIAL is not set: without it every SafariPilot session waits for approval",
-  );
 
 let safaripilot = {
   mcpServers: {
@@ -57,6 +53,11 @@ export let runAgent = async (
   model: string,
   { timeoutMs = 10 * 60_000, readDirs = [] as string[] } = {},
 ) => {
+  if (!credential)
+    throw new Error(
+      "SAFARIPILOT_CREDENTIAL is not set: without it every SafariPilot session waits for approval",
+    );
+
   let cwd = await mkdtemp(join(tmpdir(), "compare-"));
   if (cwd.startsWith(homedir()))
     throw new Error(
