@@ -35,6 +35,16 @@ describe("markdownOf", () => {
     );
   });
 
+  test("a code editor whose lines are blocks reads as a fenced block with its indentation", () => {
+    expect(
+      markdown(
+        '<p>Before</p><div contenteditable="true" data-language="python" style="white-space: pre"><div style="display: block">def f():</div><div style="display: block">  return 1</div><div style="display: block"><br></div><div style="display: block">f()</div></div>',
+      ),
+    ).toBe(
+      ["Before", "```python\ndef f():\n  return 1\n\nf()\n```"].join("\n\n"),
+    );
+  });
+
   test("link targets hide secrets, and a javascript: link is only its text", () => {
     expect(
       markdown(

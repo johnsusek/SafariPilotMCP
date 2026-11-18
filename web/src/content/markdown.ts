@@ -1,5 +1,5 @@
 import { redactUrl } from "../shared/redact";
-import { isField, nameOf, roleOf } from "./describe";
+import { isEditableRoot, isField, nameOf, roleOf } from "./describe";
 import {
   flatChildren,
   isBlock,
@@ -83,11 +83,14 @@ function flow(node: Node, sink: Sink, invisible = false) {
 
 // Text exactly as a pre shows it.
 function rawText(node: Node, invisible = false): string {
-  let parts: string[] = [];
+  let text = "";
+  let breakLine = () => {
+    if (text && !text.endsWith("\n")) text += "\n";
+  };
 
   for (let child of flatChildren(node)) {
     if (child.nodeType === Node.TEXT_NODE) {
-      if (!invisible) parts.push(child.textContent ?? "");
+      if (!invisible) text += child.textContent ?? "";
 
       continue;
     }
@@ -95,14 +98,23 @@ function rawText(node: Node, invisible = false): string {
     if (!(child instanceof Element)) continue;
 
     if (child.localName === "br") {
-      parts.push("\n");
+      text += "\n";
       continue;
     }
 
-    if (!isPruned(child)) parts.push(rawText(child, isInvisible(child)));
+    if (isPruned(child)) continue;
+
+    // Code editors (CodeMirror) draw each line as a block, with no newline in the text.
+    let block = isBlock(child);
+
+    if (block) breakLine();
+
+    text += rawText(child, isInvisible(child));
+
+    if (block) breakLine();
   }
 
-  return parts.join("");
+  return text;
 }
 
 // Same-origin links as paths and others whole, secrets hidden either way; a javascript: link has none.
@@ -298,6 +310,18 @@ function table(element: Element, sink: Sink) {
     );
 }
 
+// An editor that keeps whitespace in a monospace font, or names its language, holds code: CodeMirror's content element.
+function isCodeEditor(element: Element) {
+  if (!isEditableRoot(element)) return false;
+
+  let style = getComputedStyle(element);
+  return (
+    style.whiteSpace.startsWith("pre") &&
+    (element.hasAttribute("data-language") ||
+      style.fontFamily.includes("monospace"))
+  );
+}
+
 function pre(element: Element, sink: Sink) {
   let text = rawText(element).replace(/\n+$/, "");
 
@@ -308,7 +332,10 @@ function pre(element: Element, sink: Sink) {
 
   sink.budget.left -= text.length;
   let classes = `${element.className} ${element.querySelector("code")?.className ?? ""}`;
-  let language = classes.match(/\b(?:language|lang)-([\w+#-]+)/)?.[1] ?? "";
+  let language =
+    element.getAttribute("data-language") ??
+    classes.match(/\b(?:language|lang)-([\w+#-]+)/)?.[1] ??
+    "";
   let fence = text.includes("```") ? "````" : "```";
   flush(sink);
   push(sink, text && `${fence}${language}\n${text}\n${fence}`);
@@ -385,7 +412,7 @@ function write(element: Element, sink: Sink) {
 
   if (role === "heading") return heading(element, sink);
 
-  if (tag === "pre") return pre(element, sink);
+  if (tag === "pre" || isCodeEditor(element)) return pre(element, sink);
 
   if (
     element instanceof HTMLTableElement
