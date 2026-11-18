@@ -10,7 +10,7 @@ struct GeneralView: View {
       Section {
         Toggle(isOn: Binding(get: { model.loginItem == .enabled }, set: { model.setLaunchAtLogin($0) })) {
           Text("Launch at Login")
-          Text("Opens SafariPilot when you log in, so Claude can reach Safari.")
+          Text("Opens SafariPilot when you log in, so clients can reach Safari.")
         }
 
         if model.loginItem == .requiresApproval {

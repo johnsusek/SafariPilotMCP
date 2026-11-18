@@ -9,10 +9,14 @@ struct ClientsView: View {
       Section("Connect a Client") {
         ForEach(ClientSetup.Client.allCases) { client in
           LabeledContent {
-            if model.configured.contains(client) { Text("Already set up").foregroundStyle(.secondary) } else { Button(client == .claudeCode ? "Copy" : "Set Up…") { model.setUp(client) } }
+            if model.status[client, default: .missing] != .missing { Button("Remove…") { model.remove(client) } } else { Button(client == .claudeCode ? "Copy" : "Set Up…") { model.setUp(client) } }
           } label: {
-            Text(client.rawValue)
-            Text(detail(client))
+            Label {
+              Text(client.rawValue)
+              if model.status[client] == .untrusted { Text("Has no valid credential, so every connection asks.").foregroundStyle(.orange) } else { Text(detail(client)) }
+            } icon: {
+              Image("\(client)").resizable().scaledToFit().frame(width: 20, height: 20)
+            }
           }
         }
         LabeledContent {
@@ -68,7 +72,14 @@ struct ClientsView: View {
   }
 
   private func detail(_ client: ClientSetup.Client) -> String {
-    if let json = client.json { return "Adds SafariPilot to \((json.url.path as NSString).abbreviatingWithTildeInPath)." }
+    let added = model.status[client] == .ready
+
+    if let json = client.json {
+      let path = (json.url.path as NSString).abbreviatingWithTildeInPath
+      return added ? "Added to \(path)." : "Adds SafariPilot to \(path)."
+    }
+
+    if added { return "Added with a trusted credential." }
 
     if client == .claudeCode { return "Copies a claude mcp add command with a new credential." }
 

@@ -28,7 +28,7 @@ final class AppModel {
   private(set) var extensionEnabled: Bool?
   private(set) var extensionError: String?
   /// The clients whose config already runs SafariPilot from any source.
-  private(set) var configured: Set<ClientSetup.Client> = []
+  private(set) var status: [ClientSetup.Client: ClientSetup.Status] = [:]
   private(set) var loginItem = SMAppService.mainApp.status
 
   private(set) var log: [LogEntry] = []
@@ -103,17 +103,18 @@ final class AppModel {
 
   private func refreshSetUp() {
     let read = { (url: URL) in try? Data(contentsOf: url) }
-    let resolve = { (path: String) in URL(filePath: path).resolvingSymlinksInPath().path }
     let path = ClientSetup.serverPath
     let knows = { (credential: String) in self.gate.knows(credential: credential) }
 
-    configured = Set(ClientSetup.Client.allCases.filter { client in
-      if let json = client.json { return ClientSetup.hasServer(config: read(json.url), key: json.key, serverPath: path, resolve: resolve, knows: knows) }
+    let credentials = { (client: ClientSetup.Client) -> [String?] in
+      if let json = client.json { return ClientSetup.jsonCredentials(config: read(json.url), key: json.key, serverPath: path, resolve: ClientSetup.resolve) }
 
-      if client == .claudeCode { return ClientSetup.codeHasServer(config: read(ClientSetup.codeConfigURL), serverPath: path, resolve: resolve) }
+      if client == .claudeCode { return ClientSetup.codeServers(config: read(ClientSetup.codeConfigURL), serverPath: path, resolve: ClientSetup.resolve).map(\.credential) }
 
-      return ClientSetup.codexHasServer(config: read(ClientSetup.codexConfigURL), serverPath: path, resolve: resolve, knows: knows)
-    })
+      return ClientSetup.codexServers(toml: read(ClientSetup.codexConfigURL)).values.filter { $0.command.map(ClientSetup.resolve) == ClientSetup.resolve(path) }.map(\.credential)
+    }
+
+    status = Dictionary(uniqueKeysWithValues: ClientSetup.Client.allCases.map { ($0, ClientSetup.Status(credentials: credentials($0), knows: knows)) })
   }
 
   func refreshExtensionState() async {
@@ -156,10 +157,14 @@ final class AppModel {
   }
 
   private func confirmed(_ client: ClientSetup.Client, _ path: String) -> Bool {
+    confirmed("Set Up SafariPilot Server", "Adds SafariPilot to \(client.rawValue)'s settings with a credential, so the approval prompt can confirm the request comes from \(client.rawValue). Your other servers stay as they are.\n\n\(path)", button: "Set Up")
+  }
+
+  private func confirmed(_ title: String, _ message: String, button: String) -> Bool {
     let confirm = NSAlert()
-    confirm.messageText = "Set Up SafariPilot Server"
-    confirm.informativeText = "Adds SafariPilot to \(client.rawValue)'s settings, with a credential that identifies it to SafariPilot. Your other servers stay as they are.\n\n\(path)"
-    confirm.addButton(withTitle: "Set Up")
+    confirm.messageText = title
+    confirm.informativeText = message
+    confirm.addButton(withTitle: button)
     confirm.addButton(withTitle: "Cancel")
     NSApp.activate()
     return confirm.runModal() == .alertFirstButtonReturn
@@ -171,15 +176,67 @@ final class AppModel {
 
     do {
       let existing = FileManager.default.fileExists(atPath: json.url.path) ? try Data(contentsOf: json.url) : nil
-      let credential = try gate.credentialForSettings(name: client.rawValue, existing: ClientSetup.credential(in: existing, key: json.key))
-      let merged = try ClientSetup.merged(config: existing, in: json, serverPath: ClientSetup.serverPath, credential: credential)
+      let known = ClientSetup.jsonCredentials(config: existing, key: json.key, serverPath: ClientSetup.serverPath, resolve: ClientSetup.resolve).compactMap { $0 }.first { gate.knows(credential: $0) }
+      let credential = try gate.credentialForSettings(name: client.rawValue, existing: known)
+      let merged = try ClientSetup.merged(config: existing, in: json, serverPath: ClientSetup.serverPath, credential: credential, resolve: ClientSetup.resolve)
       try FileManager.default.createDirectory(at: json.url.deletingLastPathComponent(), withIntermediateDirectories: true)
       try merged.write(to: json.url, options: .atomic)
-      configured.insert(client)
+      status[client] = .ready
       alert("Added to \(client.rawValue)", "Quit and reopen \(client.rawValue) to load SafariPilot.")
     } catch {
       alert("Couldn't Update \(client.rawValue)", "\(error)")
     }
+  }
+
+  /// Takes SafariPilot out of the client's settings and forgets the credentials it held, so the next setup starts from scratch.
+  func remove(_ client: ClientSetup.Client) {
+    guard confirmed("Remove SafariPilot from \(client.rawValue)?", "Deletes every SafariPilot server in \(client.rawValue)'s settings and revokes its credentials. Your other servers stay as they are.", button: "Remove") else { return }
+
+    Task {
+      do {
+        try await removeServers(client)
+        status[client] = .missing
+        alert("Removed from \(client.rawValue)", "Quit and reopen \(client.rawValue) to unload SafariPilot.")
+      } catch {
+        alert("Couldn't Update \(client.rawValue)", "\(error)")
+      }
+    }
+  }
+
+  /// JSON configs are edited here; Claude Code and Codex rewrite their own files through their CLIs.
+  private func removeServers(_ client: ClientSetup.Client) async throws {
+
+    if let json = client.json {
+      let (config, credentials) = try ClientSetup.removed(config: try Data(contentsOf: json.url), key: json.key, serverPath: ClientSetup.serverPath, resolve: ClientSetup.resolve)
+      try config.write(to: json.url, options: .atomic)
+      return gate.forget(credentials: credentials)
+    }
+
+    if client == .claudeCode {
+      guard let claude = await toolPath("claude") else { throw Failure(.failed, "claude not found on the login shell's PATH") }
+
+      let servers = ClientSetup.codeServers(config: try? Data(contentsOf: ClientSetup.codeConfigURL), serverPath: ClientSetup.serverPath, resolve: ClientSetup.resolve)
+
+      for server in servers {
+        let (status, output) = try await run(claude, ["mcp", "remove", server.name, "--scope", server.project == nil ? "user" : "local"], in: server.project)
+
+        guard status == 0 else { throw Failure(.failed, "claude mcp remove \(server.name) exited with status \(status).\n\n\(output)") }
+      }
+
+      return gate.forget(credentials: servers.compactMap(\.credential))
+    }
+
+    guard let codex = await codexPath() else { throw Failure(.failed, "codex not found") }
+
+    let servers = ClientSetup.codexOwnServers(config: try? Data(contentsOf: ClientSetup.codexConfigURL), serverPath: ClientSetup.serverPath, resolve: ClientSetup.resolve)
+
+    for name in servers.keys {
+      let (status, output) = try await run(codex, ["mcp", "remove", name])
+
+      guard status == 0 else { throw Failure(.failed, "codex mcp remove \(name) exited with status \(status).\n\n\(output)") }
+    }
+
+    gate.forget(credentials: servers.values.compactMap(\.credential))
   }
 
   /// Runs ChatGPT's bundled codex, or the one the login shell finds, so Codex writes its own TOML.
@@ -189,13 +246,13 @@ final class AppModel {
     guard confirmed(.codex, ClientSetup.codexConfigURL.path) else { return }
 
     do {
-      let existing = ClientSetup.codexServers(toml: try? Data(contentsOf: ClientSetup.codexConfigURL))[ClientSetup.serverName]?.credential
+      let existing = ClientSetup.codexOwnServers(config: try? Data(contentsOf: ClientSetup.codexConfigURL), serverPath: ClientSetup.serverPath, resolve: ClientSetup.resolve).values.compactMap(\.credential).first { gate.knows(credential: $0) }
       let credential = try gate.credentialForSettings(name: ClientSetup.Client.codex.rawValue, existing: existing)
       let (status, output) = try await run(codex, ClientSetup.codexArguments(serverPath: ClientSetup.serverPath, credential: credential))
 
       guard status == 0 else { return alert("Couldn't Update ChatGPT and Codex", "codex exited with status \(status).\n\n\(output)") }
 
-      configured.insert(.codex)
+      self.status[.codex] = .ready
       alert("Added to ChatGPT and Codex", "Quit and reopen ChatGPT, or start a new Codex session, to load SafariPilot.")
     } catch {
       alert("Couldn't Update ChatGPT and Codex", "\(error)")
@@ -205,19 +262,25 @@ final class AppModel {
   private func codexPath() async -> String? {
     if FileManager.default.isExecutableFile(atPath: ClientSetup.bundledCodex) { return ClientSetup.bundledCodex }
 
+    return await toolPath("codex")
+  }
+
+  /// The tool the login shell finds on its PATH.
+  private func toolPath(_ name: String) async -> String? {
     let shell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
-    guard let (status, output) = try? await run(shell, ["-lc", "command -v codex"]), status == 0 else { return nil }
+    guard let (status, output) = try? await run(shell, ["-lc", "command -v \(name)"]), status == 0 else { return nil }
 
     let path = output.trimmingCharacters(in: .whitespacesAndNewlines)
     return FileManager.default.isExecutableFile(atPath: path) ? path : nil
   }
 
   /// Runs a tool to completion and returns its status with stdout and stderr together.
-  private func run(_ path: String, _ arguments: [String]) async throws -> (Int32, String) {
+  private func run(_ path: String, _ arguments: [String], in directory: String? = nil) async throws -> (Int32, String) {
     let process = Process()
     let pipe = Pipe()
     process.executableURL = URL(filePath: path)
     process.arguments = arguments
+    process.currentDirectoryURL = directory.map { URL(filePath: $0) }
     process.standardOutput = pipe
     process.standardError = pipe
     process.standardInput = FileHandle.nullDevice

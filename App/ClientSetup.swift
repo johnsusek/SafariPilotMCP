@@ -9,6 +9,7 @@ enum ClientSetup {
   static let bundledCodex = "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
 
   static var serverPath: String { Bundle.main.sharedSupportURL!.appending(path: "safaripilot").path }
+  static func resolve(_ path: String) -> String { URL(filePath: path).resolvingSymlinksInPath().path }
 
   /// A JSON config file, the key holding its servers, and fields that client wants beside command, args and env.
   struct JSONConfig {
@@ -38,7 +39,7 @@ enum ClientSetup {
     }
   }
 
-  static func codeCommand(serverPath: String, credential: String) -> String { "claude mcp add --scope user --env \(HelloRequest.credentialVariable)=\(credential) \(serverName) -- '\(serverPath)' mcp" }
+  static func codeCommand(serverPath: String, credential: String) -> String { "claude mcp add \(serverName) --scope user --env \(HelloRequest.credentialVariable)=\(credential) -- '\(serverPath)' mcp" }
 
   /// Arguments for codex, which writes the entry into the config.toml that ChatGPT's Mac app and Codex CLI share.
   static func codexArguments(serverPath: String, credential: String) -> [String] { ["mcp", "add", "--env", "\(HelloRequest.credentialVariable)=\(credential)", serverName, "--", serverPath, "mcp"] }
@@ -63,8 +64,8 @@ enum ClientSetup {
     return String(decoding: data, as: UTF8.self)
   }
 
-  /// Returns the config with this server's entry set, keeping every other key; nil config means no file yet.
-  static func merged(config: Data?, in json: JSONConfig, serverPath: String, credential: String) throws -> Data {
+  /// Returns the config with this server's entry set in place of any other entry that runs SafariPilot, keeping every other key; nil config means no file yet.
+  static func merged(config: Data?, in json: JSONConfig, serverPath: String, credential: String, resolve: (String) -> String) throws -> Data {
     var root: [String: Any] = [:]
 
     if let config, !config.isEmpty {
@@ -79,6 +80,7 @@ enum ClientSetup {
       servers = object
     }
 
+    servers = servers.filter { !runsSafariPilot($0.value, serverPath: serverPath, resolve: resolve) }
     servers[serverName] = entry(serverPath: serverPath, credential: credential, extra: json.extra)
     root[json.key] = servers
     return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes])
@@ -86,12 +88,17 @@ enum ClientSetup {
 
   private static func servers(_ config: Data?, key: String) -> [String: Any] { object(config)?[key] as? [String: Any] ?? [:] }
 
-  static func credential(in config: Data?, key: String) -> String? { ((servers(config, key: key)[serverName] as? [String: Any])?["env"] as? [String: Any])?[HelloRequest.credentialVariable] as? String }
+  /// Ready when an entry that runs SafariPilot carries a credential it knows; untrusted when entries run it with none, so every connection asks.
+  enum Status {
+    case missing, untrusted, ready
 
-  /// Added means this app's binary, the mcp argument, and a credential SafariPilot still knows.
-  static func isAdded(config: Data?, key: String, serverPath: String, knows: (String) -> Bool) -> Bool {
-    guard let entry = servers(config, key: key)[serverName] as? [String: Any], let credential = credential(in: config, key: key) else { return false }
-    return entry["command"] as? String == serverPath && entry["args"] as? [String] == ["mcp"] && knows(credential)
+    init(credentials: [String?], knows: (String) -> Bool) {
+      if credentials.contains(where: { $0.map(knows) ?? false }) {
+        self = .ready
+      } else {
+        self = credentials.isEmpty ? .missing : .untrusted
+      }
+    }
   }
 
   private static func object(_ data: Data?) -> [String: Any]? {
@@ -105,20 +112,39 @@ enum ClientSetup {
     return resolve(command) == resolve(serverPath)
   }
 
-  /// The config has SafariPilot through this app's own entry or another entry that runs it.
-  static func hasServer(config: Data?, key: String, serverPath: String, resolve: (String) -> String, knows: (String) -> Bool) -> Bool {
-    if isAdded(config: config, key: key, serverPath: serverPath, knows: knows) { return true }
-
-    return servers(config, key: key).contains { $0.key != serverName && runsSafariPilot($0.value, serverPath: serverPath, resolve: resolve) }
+  /// The credential, or nil, of each entry in a JSON config that runs SafariPilot.
+  static func jsonCredentials(config: Data?, key: String, serverPath: String, resolve: (String) -> String) -> [String?] {
+    servers(config, key: key).values.filter { runsSafariPilot($0, serverPath: serverPath, resolve: resolve) }.map { (($0 as? [String: Any])?["env"] as? [String: Any])?[HelloRequest.credentialVariable] as? String }
   }
 
-  /// Claude Code has SafariPilot through a user or project server that runs it.
-  static func codeHasServer(config: Data?, serverPath: String, resolve: (String) -> String) -> Bool {
-    let root = object(config) ?? [:]
-    let projects = (root["projects"] as? [String: Any] ?? [:]).values.compactMap { ($0 as? [String: Any])?["mcpServers"] as? [String: Any] }
-    let servers = ([root["mcpServers"] as? [String: Any] ?? [:]] + projects).flatMap(\.values)
+  /// The config without SafariPilot's own entry or any other entry that runs it, and the credentials those entries held.
+  static func removed(config: Data, key: String, serverPath: String, resolve: (String) -> String) throws -> (config: Data, credentials: [String]) {
+    guard var root = object(config) else { throw SetupError.notAnObject("The config") }
 
-    return servers.contains { runsSafariPilot($0, serverPath: serverPath, resolve: resolve) }
+    let servers = root[key] as? [String: Any] ?? [:]
+    let gone = servers.filter { $0.key == serverName || runsSafariPilot($0.value, serverPath: serverPath, resolve: resolve) }
+    root[key] = servers.filter { gone[$0.key] == nil }
+    let credentials = gone.values.compactMap { (($0 as? [String: Any])?["env"] as? [String: Any])?[HelloRequest.credentialVariable] as? String }
+    return (try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]), credentials)
+  }
+
+  /// A Claude Code server that runs SafariPilot; project is nil for user scope, else the folder of a local-scope server.
+  struct CodeServer: Equatable {
+    var name: String
+    var project: String?
+    var credential: String?
+  }
+
+  static func codeServers(config: Data?, serverPath: String, resolve: (String) -> String) -> [CodeServer] {
+    let root = object(config) ?? [:]
+    let projects = (root["projects"] as? [String: Any] ?? [:]).map { ($0.key as String?, ($0.value as? [String: Any])?["mcpServers"] as? [String: Any] ?? [:]) }
+    let scopes = [(nil, root["mcpServers"] as? [String: Any] ?? [:])] + projects
+
+    return scopes.flatMap { project, servers in
+      servers.filter { runsSafariPilot($0.value, serverPath: serverPath, resolve: resolve) }.map { name, entry in
+        CodeServer(name: name, project: project, credential: ((entry as? [String: Any])?["env"] as? [String: Any])?[HelloRequest.credentialVariable] as? String)
+      }
+    }.sorted { ($0.project ?? "", $0.name) < ($1.project ?? "", $1.name) }
   }
 
   struct CodexServer: Equatable {
@@ -199,14 +225,8 @@ enum ClientSetup {
     return nil
   }
 
-  /// Codex has SafariPilot through this app's own entry with a known credential, or another entry that runs it.
-  static func codexHasServer(config: Data?, serverPath: String, resolve: (String) -> String, knows: (String) -> Bool) -> Bool {
-    codexServers(toml: config).contains { name, server in
-      guard let command = server.command, resolve(command) == resolve(serverPath) else { return false }
-
-      if name != serverName { return true }
-
-      return server.credential.map(knows) ?? false
-    }
+  /// Codex servers named SafariPilot or running it, which removal deletes.
+  static func codexOwnServers(config: Data?, serverPath: String, resolve: (String) -> String) -> [String: CodexServer] {
+    codexServers(toml: config).filter { name, server in name == serverName || server.command.map(resolve) == resolve(serverPath) }
   }
 }

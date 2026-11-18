@@ -83,7 +83,7 @@ private struct SetUpClientMenu: View {
     Menu("Set Up Client") {
       ForEach(ClientSetup.Client.allCases) { client in
         Button(client == .claudeCode ? "Copy Claude Code Command" : "\(client.rawValue)…") { model.setUp(client) }
-          .disabled(model.configured.contains(client))
+          .disabled(model.status[client, default: .missing] != .missing)
       }
       Divider()
       Button("Copy Config JSON") { model.copyConfigJSON() }

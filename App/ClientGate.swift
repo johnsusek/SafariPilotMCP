@@ -115,6 +115,11 @@ final class ClientGate {
     }
   }
 
+  /// Removes the records behind credentials taken out of a client's settings.
+  func forget(credentials: [String]) {
+    for record in credentials.compactMap({ store?.record(for: $0) }) { remove(record) }
+  }
+
   func removeAll() {
     for record in store?.records ?? [] { remove(record) }
   }
@@ -262,7 +267,7 @@ private struct CredentialView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
       Text("Add a Credential to \u{201C}\(name)\u{201D}").font(.headline)
-      Text("To connect without asking, add this environment variable to SafariPilot in the client's MCP settings. SafariPilot keeps no copy.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+      Text("To connect without asking, add this environment variable to SafariPilot in the client's MCP settings. SafariPilot doesn't save a copy.").font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       Text("\(HelloRequest.credentialVariable)=\(credential)").font(.caption.monospaced()).textSelection(.enabled)
       HStack {
         Spacer()
