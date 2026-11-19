@@ -97,7 +97,7 @@ enum Tools {
       "selector": property("string", "CSS selector, such as \"#results li\", of a shown element to wait for."),
       "timeout": property("number", "Seconds to wait for text or selector, up to \(Int(maxWaitTimeout)); defaults to \(Int(defaultWaitTimeout))."),
     ]),
-    ToolDefinition(name: "browser_batch", description: "Runs several tool calls in order in one round trip and returns each one's output, stopping at the first failure.", properties: ["actions": .object([
+    ToolDefinition(name: "browser_batch", description: "Runs several tool calls in order in one round trip and returns each one's output, going on past a failed read but stopping at any other failure.", properties: ["actions": .object([
       "type": "array",
       "description": "Calls to run in order, each the tool's name and the input it takes on its own; browser_batch cannot be nested.",
       "items": .object(["type": "object", "properties": .object(["name": property("string", "Tool name, such as click, with or without your client's prefix."), "input": .object(["type": "object", "description": "That tool's arguments."])]), "required": .array(["name"])]),

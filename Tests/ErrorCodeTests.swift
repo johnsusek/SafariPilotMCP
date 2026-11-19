@@ -62,6 +62,36 @@ struct ErrorCodeTests {
     #expect(result.structured?["code"] == "input_unconfirmed")
   }
 
+  @Test func browserBatchGoesOnPastAFailedReadAndReportsTheFirstFailure() async {
+    var ran: [String] = []
+    let actions: [(name: String, input: [String: JSONValue])] = [("get_page_text", [:]), ("javascript", [:]), ("find", [:]), ("get_page_text", [:])]
+    let result = await ToolResult.batch(actions) { name, _ in
+      ran.append(name)
+
+      switch name {
+      case "javascript": return .reply(CLIReply(failing: .notActionable, text: "the page's Content-Security-Policy blocks running code here", data: .null))
+      case "find": return .reply(CLIReply(failing: .staleRef, text: "ref 9 is gone", data: .null))
+      default: return .text("page text")
+      }
+    }
+
+    #expect(ran == ["get_page_text", "javascript", "find", "get_page_text"])
+    #expect(result.code == .notActionable && result.step == 2)
+    #expect(result.message == "1/4 get_page_text:\npage text\n2/4 javascript failed:\nthe page's Content-Security-Policy blocks running code here\n3/4 find failed:\nref 9 is gone\n4/4 get_page_text:\npage text")
+  }
+
+  @Test func javascriptThatRanAndFailedStopsTheBatch() async {
+    var ran: [String] = []
+    let actions: [(name: String, input: [String: JSONValue])] = [("javascript", [:]), ("get_page_text", [:])]
+    let result = await ToolResult.batch(actions) { name, _ in
+      ran.append(name)
+      return name == "javascript" ? .reply(CLIReply(failing: .invalidArgument, text: "the code threw TypeError", data: .null)) : .text("page text")
+    }
+
+    #expect(ran == ["javascript"])
+    #expect(result.code == .invalidArgument && result.step == 1)
+  }
+
   @Test func aBatchThatFinishesHasNoCode() async {
     let result = await ToolResult.batch([("find", [:])]) { _, _ in .text("no matches") }
     #expect(result == ToolResult(items: [.text("1/1 find:\nno matches")]))

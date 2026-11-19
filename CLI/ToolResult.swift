@@ -49,11 +49,16 @@ struct ToolResult: Equatable, Sendable {
     return .object(fields)
   }
 
-  /// Runs browser_batch's actions in order, labeling each one's output, and stops at the first failure, which carries that step's code and number.
-  /// Text between images is merged into one block joined by line breaks, since clients concatenate blocks with no separator.
+  /// Reads whose failure leaves the page as it was; wait is left out, since the steps after it count on what it waited for.
+  static let reads: Set = ["get_page_text", "read_page", "find", "screenshot", "tabs_list", "read_console_messages", "read_network_requests"]
+
+  /// Runs browser_batch's actions in order, labeling each one's output. A failed read, or javascript a page's policy refused to run, changed nothing,
+  /// so the batch goes on past it; any other failure stops it. The result carries the code and number of the step that stopped it, else of the first
+  /// failure. Text between images is merged into one block joined by line breaks, since clients concatenate blocks with no separator.
   static func batch(_ actions: [(name: String, input: [String: JSONValue])], run: (String, [String: JSONValue]) async -> ToolResult) async -> ToolResult {
     var items: [Item] = []
     var lines: [String] = []
+    var failure: (code: ErrorCode, step: Int)?
 
     func flush() {
       if !lines.isEmpty { items.append(.text(lines.joined(separator: "\n"))) }
@@ -75,14 +80,19 @@ struct ToolResult: Equatable, Sendable {
         items.append(item)
       }
 
-      if let code = result.code {
-        lines.append("stopped after \(index + 1) of \(actions.count) actions")
-        flush()
-        return ToolResult(items: items, code: code, step: index + 1)
+      guard let code = result.code else { continue }
+
+      if reads.contains(action.name) || (action.name == "javascript" && code == .notActionable) {
+        failure = failure ?? (code, index + 1)
+        continue
       }
+
+      lines.append("stopped after \(index + 1) of \(actions.count) actions")
+      flush()
+      return ToolResult(items: items, code: code, step: index + 1)
     }
 
     flush()
-    return ToolResult(items: items)
+    return ToolResult(items: items, code: failure?.code, step: failure?.step)
   }
 }
