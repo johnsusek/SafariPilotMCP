@@ -22,6 +22,8 @@ if (!values.out || !positionals.length)
 let taskNames: Record<string, string> = {
   form: "Signup form",
   table: "500-row table",
+  results: "Compare 8 results",
+  reading: "Compare 14 articles",
   delayed: "Delayed content",
   frame: "Cross-origin iframe",
   editor: "Rich text editor",

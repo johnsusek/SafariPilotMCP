@@ -17,6 +17,7 @@ import { dirname, join } from "node:path";
 import { parseArgs } from "node:util";
 import { code } from "../../testpage/bench/code.js";
 import { rows } from "../../testpage/bench/data.js";
+import { laptops } from "../../testpage-items/laptops.js";
 import {
   type Browser,
   loadEvents,
@@ -62,6 +63,30 @@ let tasks: Record<string, Task> = {
       answer
         .toLowerCase()
         .includes(rows().find((person) => person.id == 4271)!.email),
+  },
+  // Battery life is only on each result's own page, on another origin a script on the results page can't read, so the answer needs every one of them opened.
+  results: {
+    prompt: () =>
+      `Go to ${site}/results.html, which lists laptops, and report which one has the longest battery life and how many hours it lasts.`,
+    check: (answer) => {
+      let best = laptops.reduce((most, laptop) =>
+        laptop.battery > most.battery ? laptop : most,
+      );
+      return (
+        answer.includes(best.name) &&
+        new RegExp(`\\b${best.battery}\\b`).test(answer)
+      );
+    },
+  },
+  // The real-world version of results: fourteen real articles on fourteen sites, whose dates show only on their own pages. Coding Horror's, 30 May
+  // 2007, is the earliest; LWN's, 21 September 2007, is next.
+  reading: {
+    prompt: () =>
+      `Go to ${site}/reading.html, which links to articles on other sites, and report which article was published earliest and its publication date as the article's page shows it.`,
+    check: (answer) =>
+      /best code is no code/i.test(answer) &&
+      /\b2007\b/.test(answer) &&
+      /\b30\b|-30\b/.test(answer),
   },
   delayed: {
     prompt: () =>
@@ -331,6 +356,7 @@ let pageText = async (task: string) =>
 
 if (!values.analyze) {
   await requireTestPage(`${site}/form.html`);
+  await requireTestPage("http://127.0.0.1:8766/laptops/1");
   // The real path, since /var is a symlink to /private/var and Claude in Chrome checks a file against the session's folders by real path.
   let fixture = join(
     await realpath(await mkdtemp(join(tmpdir(), "compare-fixture-"))),

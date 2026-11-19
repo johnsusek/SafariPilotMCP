@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Laptop</title>
+    <link rel="stylesheet" href="http://127.0.0.1:8765/bench/bench.css" />
+    <script type="module">
+      import { laptops } from "/laptops.js";
+      window.laptop = laptops.find(
+        (laptop) => laptop.id == location.pathname.split("/").at(-1),
+      );
+      document.title = window.laptop.name;
+    </script>
+    <script
+      defer
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"
+    ></script>
+  </head>
+  <body x-data="{ laptop: window.laptop }">
+    <h1 x-text="laptop.name"></h1>
+    <dl>
+      <dt>Price</dt>
+      <dd x-text="`$${laptop.price.toLocaleString('en-US')}`"></dd>
+      <dt>Battery life</dt>
+      <dd x-text="`${laptop.battery} hours`"></dd>
+      <dt>Weight</dt>
+      <dd x-text="`${laptop.weight} kg`"></dd>
+    </dl>
+    <a href="http://127.0.0.1:8765/bench/results.html">All laptops</a>
+  </body>
+</html>

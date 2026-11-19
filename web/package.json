@@ -6,9 +6,9 @@
     "build": "node build.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --passWithNoTests",
-    "format": "prettier --write src build.mjs ../testpage",
-    "testpage": "python3 -m http.server 8765 --bind 127.0.0.1 --directory ../testpage",
-    "lint": "oxlint --deny-warnings src build.mjs && prettier --check src build.mjs ../testpage"
+    "format": "prettier --write src build.mjs ../testpage ../testpage-items",
+    "testpage": "python3 ../scripts/compare/items-server.py & python3 -m http.server 8765 --bind 127.0.0.1 --directory ../testpage",
+    "lint": "oxlint --deny-warnings src build.mjs && prettier --check src build.mjs ../testpage ../testpage-items"
   },
   "devDependencies": {
     "@types/chrome": "^0.3.7",

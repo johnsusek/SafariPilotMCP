@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Laptops</title>
+    <link rel="stylesheet" href="bench.css" />
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.17.5/dist/cdn.min.js"></script>
+  </head>
+  <!-- The same laptops as testpage-items/laptops.js, without the specs that only their own pages on 8766 show. -->
+  <body
+    x-data="{ laptops: [{ id: 1, name: 'Aster 14', price: 1149 }, { id: 2, name: 'Corvid Pro 16', price: 2399 }, { id: 3, name: 'Fenwick Air 13', price: 999 }, { id: 4, name: 'Halden X1', price: 1749 }, { id: 5, name: 'Marlow 15 Studio', price: 1899 }, { id: 6, name: 'Pike Book 14', price: 849 }, { id: 7, name: 'Quill Flex 13', price: 1299 }, { id: 8, name: 'Tern Ultra 14', price: 1599 }] }"
+  >
+    <h1>Laptops</h1>
+    <ul>
+      <template x-for="laptop in laptops" :key="laptop.id">
+        <li><a :href="`http://127.0.0.1:8766/laptops/${laptop.id}`" x-text="laptop.name"></a> <span x-text="`$${laptop.price.toLocaleString('en-US')}`"></span></li>
+      </template>
+    </ul>
+  </body>
+</html>
