@@ -38,15 +38,14 @@ enum AXEngine {
 
   static func windows(of app: AXNode) throws -> [AXNode] {
     // A window that is closing answers with no role for a moment (seen live as ["?", "AXWindow"] right after pilot windows closed), so it is skipped.
-    let windows = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init).filter { $0.string(kAXRoleAttribute) != nil }
-    let roles = windows.map(\.role)
+    let entries = (app.value(kAXWindowsAttribute) as? [AXUIElement] ?? []).map(AXNode.init).filter { $0.string(kAXRoleAttribute) != nil }
+    // A popup a page opens, such as an AutoFill list on a focused form field, shows up as an AXScrollArea beside the windows for as long as it stays open, so it is skipped.
+    let windows = entries.filter { $0.role == kAXWindowRole }
 
     // Seen live: Safari's AX reported every window, and its main and focused window, as the AXApplication itself, so walking them expanded the menu bar again and again.
-    guard roles.allSatisfy({ $0 == kAXWindowRole }) else {
-      throw Failure(.safariUnavailable, "Safari's accessibility reports its windows with roles \(roles), not AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
-    }
+    guard windows.isEmpty, !entries.isEmpty else { return windows }
 
-    return windows
+    throw Failure(.safariUnavailable, "Safari's accessibility reports its windows with roles \(entries.map(\.role)) and none as AXWindow, so no page can be reached through it; this is a fault in Safari, and quitting and reopening Safari clears it")
   }
 
   static func candidate(_ window: AXNode, urls: [String]) -> WindowCandidate {
@@ -60,7 +59,7 @@ enum AXEngine {
     let app = try safari()
 
     // WebKit builds a page's AX tree lazily and a just-selected tab takes a moment to appear, so a miss is retried for 1 s.
-    // A window list holding something other than windows is retried too: seen once live as [AXScrollArea, AXWindow], gone on the next call.
+    // A window list holding no windows at all is retried too.
     var attempt = 0
 
     while true {
