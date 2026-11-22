@@ -85,7 +85,7 @@ site_github() {
   open_tab "https://github.com/WebKit/WebKit/pulls"
   local search=$(ref "Search pull requests" combobox)
   check "github: react search field set" '\(matches\)' form-input $search "is:pr accessibility"
-  check "github: enter searches" 'keydowns reached|navigated' key Enter --ref $search
+  check "github: enter searches" 'page changed|landed on' key Enter --ref $search
   sleep 3
   check "github: results listed" 'link "AX' find "AX" --role link
   check "github: javascript refused by the page CSP" "Content-Security-Policy" javascript "1"
@@ -96,12 +96,12 @@ site_mdn() {
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/details"
   check "mdn: svg title names the logo link" 'link "MDN"' read-page --max-chars 600
   local summary=$(ref "Baseline" button)
-  check "mdn: summary toggles with click" 'toggled summary' click $summary
+  check "mdn: summary toggles with click" '(collapsed|expanded) \(was (expanded|collapsed)\)' click $summary
   close_tab
   open_tab "https://developer.mozilla.org/en-US/play"
   check "mdn: editor roots are textboxes" '^\[[0-9]+\] textbox <div>' find --role textbox
   (($(print -r -- "$output" | grep -c textbox) == 3)) && print "PASS mdn: only the 3 editor roots" || { print "FAIL mdn: only the 3 editor roots"; failures=$((failures + 1)) }
-  check "mdn: editor takes keys" 'keydowns reached' key --ref $(ref "" textbox) --text "<p>x"
+  check "mdn: editor takes keys" 'page changed' key --ref $(ref "" textbox) --text "<p>x"
   close_tab
 }
 
@@ -109,10 +109,10 @@ site_httpbin() {
   open_tab "https://httpbin.org/forms/post"
   check "httpbin: labels not repeated, fieldset named" 'group "Pizza Size"' read-page --all --max-chars 1500
   check "httpbin: text field" '\(matches\)' form-input $(ref "Customer" textbox) "Ada"
-  check "httpbin: key after form-input keeps focus" 'last on \[[0-9]+\] input' key --text "X"
+  check "httpbin: key after form-input keeps focus" 'focus is on input$' key --text "X"
   check "httpbin: radio" 'checked radio' form-input $(ref "Medium" radio) true
   check "httpbin: time field" '\(matches\)' form-input $(ref "delivery time" textbox) "19:30"
-  check "httpbin: submit" 'click on|navigated' click $(ref "Submit order" button)
+  check "httpbin: submit" 'click on|landed on' click $(ref "Submit order" button)
   sleep 2
   check "httpbin: posted values" '"custname": "AdaX"' text
   close_tab
@@ -153,7 +153,7 @@ site_youtube() {
   open_tab "https://www.youtube.com/"
   local search=$(ref "Search" combobox)
   check "youtube: search field set despite role change" '\(matches\)' form-input $search "safari technology preview"
-  check "youtube: enter searches" 'keydowns reached|navigated' key Enter --ref $search
+  check "youtube: enter searches" 'page changed|landed on' key Enter --ref $search
   close_tab
 }
 
@@ -167,7 +167,7 @@ site_npm() {
   open_tab "https://www.npmjs.com/"
   local search=$(ref "Search packages" combobox)
   check "npm: search field" '\(matches\)' form-input $search vitest
-  check "npm: covered field still takes keys" 'keydowns reached|navigated' key Enter --ref $search
+  check "npm: covered field still takes keys" 'page changed|landed on' key Enter --ref $search
   close_tab
 }
 
@@ -175,7 +175,7 @@ site_apple() {
   open_tab "https://www.apple.com/"
   local menu=$(ref "Mac menu" button)
   check "apple: covered menu button refused with a hint" 'key Enter or Space' click $menu
-  check "apple: menu opens from the keyboard" 'keydowns reached' key Enter --ref $menu
+  check "apple: menu opens from the keyboard" 'page changed' key Enter --ref $menu
   close_tab
 }
 
@@ -223,7 +223,7 @@ site_frames() {
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/text"
   local field=$(ref "Name (4 to 8 characters)" textbox)
   check "frames: form-input in frame" '\(matches\)' form-input $field "abcd"
-  check "frames: keys counted in frame" 'keydowns reached' key --ref $field --text "ef"
+  check "frames: keys reach a field in a frame" 'value="abcdef"' key --ref $field --text "ef"
   close_tab
   open_tab "https://developer.mozilla.org/en-US/docs/Web/HTML/Reference/Elements/input/color"
   local well=$(ref "Foreground color" button)
@@ -280,7 +280,7 @@ site_theinternet() {
   local file=$(mktemp -d)/smoke-upload.txt
   print "smoke upload" >$file
   check "the-internet: file input took the file" 'to smoke-upload.txt \(13 bytes' file-upload $(ref "" button) $file
-  check "the-internet: upload submitted" 'navigated' click $(ref "Upload" button)
+  check "the-internet: upload submitted" 'landed on' click $(ref "Upload" button)
   sleep 2
   check "the-internet: server got the file" '^smoke-upload.txt$' text
   rm -r ${file:h}
