@@ -65,6 +65,11 @@ extension Commands {
     }
 
     let (valueNode, valueResult) = try await Timing.measure("ax value") { try AXEngine.setValue(text, in: match) }
+    // WebKit sets a password field's AXValue without firing beforeinput, input or change, so a page counting its fields never hears of it.
+    let announced = valueNode.subrole == "AXSecureTextField"
+
+    if announced { _ = try await content(tab.id, .announceInput(ref: ref)) }
+
     let acted = ContinuousClock.now
     let expected = secure ? String(repeating: "\u{2022}", count: text.count) : text
     let after = try await settled(tab.id, ref) { $0.value == expected }
@@ -73,6 +78,7 @@ extension Commands {
     let lines = (pressed.map { ["pressed \($0.summary) via AXPress first, as the page could not focus it"] } ?? []) + [
       "focused \(focus.focused) from the page",
       "AXValue on \(valueNode.summary): \(valueResult.name)",
+    ] + (announced ? ["fired untrusted input and change from the page, since WebKit sends none for a password field's AXValue"] : []) + [
       "read back: \(after.value.map { "\"\($0)\"" } ?? "nil") \(matched ? "(matches)" : "(DIFFERS)")\(masked)",
     ] + matchLines(located, match)
     let data: JSONValue = .object([

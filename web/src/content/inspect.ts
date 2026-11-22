@@ -189,6 +189,14 @@ export function setValue(ref: number, value: string): InspectResult | Failure {
   return inspect(ref);
 }
 
+export function announceInput(ref: number): InspectResult | Failure {
+  let element = resolveRef(ref);
+  if (!(element instanceof Element)) return element;
+
+  fire(element, "input", "change");
+  return inspect(ref);
+}
+
 // Picks a select's option by index from the page script instead of the native menu, which brings its window forward; input and change are untrusted.
 export function selectOption(
   ref: number,

@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { expect, test, vi } from "vitest";
-import { inspect, selectOption, setValue } from "./inspect";
+import { announceInput, inspect, selectOption, setValue } from "./inspect";
 import { refFor } from "./refs";
 
 test("a password reads back as bullets and is marked secure", () => {
@@ -151,6 +151,16 @@ test("an emptied editable reads back empty, not its placeholder line break", () 
   expect(inspect(refFor(document.querySelector("#lines")!))).not.toMatchObject({
     value: "",
   });
+});
+
+test("announceInput fires input and change and reads the field back", () => {
+  document.body.innerHTML = '<input type="password" value="abc">';
+  let field = document.querySelector("input")!;
+  let seen: string[] = [];
+  field.addEventListener("input", () => seen.push("input"));
+  field.addEventListener("change", () => seen.push("change"));
+  expect(announceInput(refFor(field))).toMatchObject({ secure: true });
+  expect(seen).toEqual(["input", "change"]);
 });
 
 test("an editor that draws each line as a block reads back with its line breaks", () => {

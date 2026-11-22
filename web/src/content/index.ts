@@ -7,7 +7,7 @@ import { find, target } from "./find";
 import { focusRef } from "./focus";
 import { frameBox, hitFrame, listFrames } from "./frames";
 import { askPiloted, glow } from "./glow";
-import { inspect, selectOption, setValue } from "./inspect";
+import { announceInput, inspect, selectOption, setValue } from "./inspect";
 import { syntheticKeys } from "./keys";
 import { locate } from "./locate";
 import { installNetworkReader, takeBody } from "./network";
@@ -53,6 +53,7 @@ async function handle(request: ContentRequest): Promise<ContentResponse> {
     if (request.op === "setValue") return setValue(request.ref, request.value);
     if (request.op === "selectOption")
       return selectOption(request.ref, request.index);
+    if (request.op === "announceInput") return announceInput(request.ref);
     if (request.op === "keys")
       return syntheticKeys(request.ref, request.presses);
     if (request.op === "focus") return focusRef(request.ref);

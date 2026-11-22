@@ -735,7 +735,9 @@ async function dispatch(
 
   let inspected = await send(
     frameId,
-    request.op === "setValue" || request.op === "selectOption"
+    request.op === "setValue" ||
+      request.op === "selectOption" ||
+      request.op === "announceInput"
       ? { ...request, ref: path.local }
       : { op: "inspect", ref: path.local },
   );

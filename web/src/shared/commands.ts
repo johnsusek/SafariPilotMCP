@@ -36,6 +36,7 @@ export type PageRequest =
   | { op: "inspect"; ref: RefPath }
   | { op: "setValue"; ref: RefPath; value: string }
   | { op: "selectOption"; ref: RefPath; index: number }
+  | { op: "announceInput"; ref: RefPath }
   // ref null presses at whatever has focus in the top frame.
   | { op: "keys"; ref: RefPath | null; presses: KeyPress[] }
   | { op: "focus"; ref: RefPath }

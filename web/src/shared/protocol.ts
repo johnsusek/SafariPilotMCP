@@ -78,6 +78,8 @@ export type ContentRequest =
   | { op: "setValue"; ref: number; value: string }
   // Picks a select's option by index and fires bubbling input and change events, which are untrusted; answers with inspect's read-back.
   | { op: "selectOption"; ref: number; index: number }
+  // Fires bubbling input and change events, which are untrusted, on a field AX set without them (WebKit's password field); answers with inspect's read-back.
+  | { op: "announceInput"; ref: number }
   // Presses keys as untrusted keyboard events at the focused element, after focusing ref when given, running each press's browser default unless a listener canceled it.
   | { op: "keys"; ref: number | null; presses: KeyPress[] }
   // Focuses ref, or its nearest ancestor that takes focus, with element.focus().

@@ -280,6 +280,8 @@ enum ContentRequest: Equatable, Sendable {
   case setValue(ref: PageRef, value: String)
   /// Picks a select's option by index from the page script instead of its native menu, firing untrusted input and change events; answers with inspect's read-back.
   case selectOption(ref: PageRef, index: Int)
+  /// Fires untrusted input and change on a field AX set without them (WebKit's password field); answers with inspect's read-back.
+  case announceInput(ref: PageRef)
   /// Presses keys as untrusted events at the focused element (after focusing ref when given) and runs each press's browser default unless a listener canceled it.
   case keys(ref: PageRef?, presses: [KeyChord])
   /// Focuses ref, or its nearest ancestor that takes focus, with element.focus(); AXFocused would make a background Safari ask to come forward.
@@ -316,6 +318,7 @@ enum ContentRequest: Equatable, Sendable {
     case let .inspect(ref): ["op": "inspect", "ref": .string(ref.description)]
     case let .setValue(ref, value): ["op": "setValue", "ref": .string(ref.description), "value": .string(value)]
     case let .selectOption(ref, index): ["op": "selectOption", "ref": .string(ref.description), "index": .number(Double(index))]
+    case let .announceInput(ref): ["op": "announceInput", "ref": .string(ref.description)]
     case let .keys(ref, presses):
       [
         "op": "keys", "ref": ref.map { .string($0.description) } ?? .null,

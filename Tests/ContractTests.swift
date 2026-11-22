@@ -218,6 +218,7 @@ struct ContractTests {
     #expect(ContentRequest.inspect(ref: 5).json == ["op": "inspect", "ref": "5"])
     #expect(ContentRequest.setValue(ref: PageRef(frames: [5], local: 3), value: "#00ff00").json == ["op": "setValue", "ref": "5:3", "value": "#00ff00"])
     #expect(ContentRequest.selectOption(ref: PageRef(frames: [], local: 3), index: 2).json == ["op": "selectOption", "ref": "3", "index": .number(2)])
+    #expect(ContentRequest.announceInput(ref: PageRef(frames: [5], local: 3)).json == ["op": "announceInput", "ref": "5:3"])
     #expect(try ContentRequest.keys(ref: nil, presses: [KeyChord.parse("shift+Tab"), KeyChord.parse("a")]).json == [
       "op": "keys", "ref": .null,
       "presses": .array([.object(["key": "Tab", "character": .null, "modifiers": .array(["shift"])]), .object(["key": "a", "character": "a", "modifiers": .array([])])]),
