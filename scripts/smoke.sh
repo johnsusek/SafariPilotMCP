@@ -284,6 +284,52 @@ site_theinternet() {
   sleep 2
   check "the-internet: server got the file" '^smoke-upload.txt$' text
   rm -r ${file:h}
+  safaripilot --tab $tab navigate "$base/nested_frames" >/dev/null
+  check "the-internet: frames in a frameset in a frameset read" '\[frame [0-9]+:[0-9]+ [^]]*\]' text
+  verdict "the-internet: nested frame text" '^MIDDLE$'
+  local middle=$(safaripilot --tab $tab read-page | sed -nE 's/^  iframe \[ref=([0-9]+:[0-9]+)\].*/\1/p' | sed -n 2p)
+  check "the-internet: javascript in a nested frame" '^"MIDDLE"$' javascript --frame ${middle:-0} "document.body.innerText.trim()"
+  safaripilot --tab $tab navigate "$base/iframe" >/dev/null
+  local editor=$(ref "Rich Text Area" textbox)
+  check "the-internet: TinyMCE in a srcdoc frame set" '\(matches\)' form-input $editor "Pilot text"
+  safaripilot --tab $tab key --ref $editor --text " more" >/dev/null
+  check "the-internet: TinyMCE's model has both edits" '^"<p>Pilot text more</p>"$' javascript "tinymce.activeEditor.getContent()"
+  safaripilot --tab $tab navigate "$base/windows" >/dev/null
+  check "the-internet: target=_blank link text pressed as a link" 'opened tab [0-9]+ .*/windows/new' click $(ref "Click Here" link)
+  refute "the-internet: opener not read while behind its popup" 'page changes not read'
+  local popup=$(print -r -- "$output" | sed -nE 's/^opened tab ([0-9]+).*/\1/p')
+  [[ -n $popup ]] && safaripilot tab-close $popup >/dev/null
+  safaripilot --tab $tab navigate "$base/drag_and_drop" >/dev/null
+  local columns=$(safaripilot --tab $tab read-page --all)
+  column() { print -r -- "$columns" | sed -nE "s/^ *generic \"$1\" \\[ref=([0-9]+)\\].*/\\1/p" }
+  safaripilot --tab $tab drag $(column A) $(column B) >/dev/null
+  check "the-internet: HTML5 drag swaps the columns" '^"B,A"$' javascript "[...document.querySelectorAll('.column header')].map((header) => header.innerText).join(',')"
+  close_tab
+}
+
+# demoqa: jQuery UI and React drag widgets that listen to mouse events only.
+site_demoqa() {
+  open_tab "https://demoqa.com/droppable"
+  check "demoqa: pointer drag onto a drop target" '~ paragraph "Dropped!"' drag $(ref "Drag me") $(ref "Drop here")
+  safaripilot --tab $tab navigate "https://demoqa.com/sortable" >/dev/null
+  safaripilot --tab $tab drag $(ref "One") $(ref "Four") >/dev/null
+  check "demoqa: sortable list reordered" '^"Two,Three,One,' javascript "[...document.querySelectorAll('#demo-tabpane-list .list-group-item')].map((item) => item.innerText).join(',')"
+  close_tab
+}
+
+# Rich-text editors that keep their own document model and must see the edit there, not just in the DOM.
+site_editors() {
+  open_tab "https://playground.lexical.dev/"
+  local editor=$(ref "" textbox)
+  safaripilot --tab $tab key --ref $editor --text "Pilot" >/dev/null
+  check "editors: Lexical keys reach its model" '^true$' javascript "JSON.stringify(document.querySelector('[contenteditable=true]').__lexicalEditor.getEditorState().toJSON()).includes('Pilot')"
+  safaripilot --tab $tab form-input $editor "Fresh start" >/dev/null
+  check "editors: Lexical form-input replaces its model" '^\["\\"text\\":\\"Fresh start\\""\]$' javascript "JSON.stringify(document.querySelector('[contenteditable=true]').__lexicalEditor.getEditorState().toJSON()).match(/\"text\":\"[^\"]*\"/g)"
+  safaripilot --tab $tab navigate "https://prosemirror.net/examples/basic/" >/dev/null
+  editor=$(ref "" textbox)
+  check "editors: ProseMirror form-input" '\(matches\)' form-input $editor "Mirror text"
+  safaripilot --tab $tab key --ref $editor --text "!" >/dev/null
+  check "editors: ProseMirror's model has both edits" '^"Mirror text!"$' javascript "document.querySelector('.ProseMirror').pmViewDesc.node.textContent"
   close_tab
 }
 
@@ -439,7 +485,7 @@ for attempt in {1..30}; do
 done
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet uitap windows mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet uitap demoqa editors windows mcp)
 
 for site in $sites; do
   site_$site
