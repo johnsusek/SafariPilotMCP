@@ -50,6 +50,17 @@ refute() {
   failures=$((failures + 1))
 }
 
+# await_text LABEL TEXT: passes once the current tab shows TEXT, checking each second for 20 s.
+await_text() {
+  for attempt in {1..20}; do
+    output=$(safaripilot --tab $tab wait-check --text "$2" 2>&1)
+    [[ $output == found* ]] && break
+    sleep 1
+  done
+
+  verdict $1 '^found text'
+}
+
 # ref NAME [ROLE]: the first ref find returns.
 ref() { safaripilot --tab $tab find "$1" ${2:+--role} ${2:+$2} | head -1 | sed -nE 's/^\[([0-9:]+)\].*/\1/p' }
 
@@ -276,6 +287,58 @@ site_theinternet() {
   close_tab
 }
 
+# UI Testing Playground: pages built to trip up automation, one trap each.
+site_uitap() {
+  local base="http://uitestingplayground.com"
+  open_tab "$base/click"
+  safaripilot --tab $tab click $(ref "Ignores DOM Click" button) >/dev/null
+  check "uitap: click is a real mouse click" 'btn-success' javascript "document.querySelector('#badButton').className"
+  safaripilot --tab $tab navigate "$base/textinput" >/dev/null
+  check "uitap: text input fires the page's input events" '\(matches\)' form-input $(ref "Set New Button Name" textbox) "Pilot"
+  safaripilot --tab $tab click $(ref "Should Change" button) >/dev/null
+  check "uitap: button renamed from the input" 'button "Pilot"' find "" --role button
+  safaripilot --tab $tab navigate "$base/hiddenlayers" >/dev/null
+  local green=$(ref "" button)
+  check "uitap: green button clicked" 'click on' click $green
+  check "uitap: green button under the new layer refused" 'covered by button#blueButton' click $green
+  safaripilot --tab $tab navigate "$base/overlapped" >/dev/null
+  local name=$(ref "Name" textbox)
+  check "uitap: half-covered field in a scroll box set" '\(matches\)' form-input $name "Ada"
+  safaripilot --tab $tab key --ref $name --text "X" >/dev/null
+  check "uitap: keys reach the half-covered field" '^"AdaX"$' javascript "document.querySelector('#name').value"
+  safaripilot --tab $tab navigate "$base/scrollbars" >/dev/null
+  check "uitap: button scrolled out of its box clicked" 'click on' click $(ref "Hiding Button" button)
+  safaripilot --tab $tab navigate "$base/nbsp" >/dev/null
+  check "uitap: non-breaking space matches a space" 'button "My Button"' find "My Button" --role button
+  safaripilot --tab $tab navigate "$base/visibility" >/dev/null
+  safaripilot --tab $tab click $(ref "Hide" button) >/dev/null
+  check "uitap: hidden buttons left out of find" 'button "Opacity 0"' find "" --role button
+  refute "uitap: removed, invisible and undisplayed buttons gone" 'Removed|Visibility Hidden|Display None|Zero Width'
+  check "uitap: covered button refused" 'covered by div#hidingLayer' click $(ref "Overlapped" button)
+  check "uitap: offscreen button refused" 'outside the viewport' click $(ref "Offscreen" button)
+  safaripilot --tab $tab navigate "$base/loaddelay" >/dev/null
+  check "uitap: navigate waits out a slow load" 'button "Button Appearing After Delay"' find "Appearing After Delay" --role button
+  safaripilot --tab $tab navigate "$base/ajax" >/dev/null
+  safaripilot --tab $tab click $(ref "Triggering AJAX" button) >/dev/null
+  await_text "uitap: AJAX result waited for" "Data loaded with AJAX get request"
+  safaripilot --tab $tab navigate "$base/clientdelay" >/dev/null
+  safaripilot --tab $tab click $(ref "Triggering Client Side Logic" button) >/dev/null
+  await_text "uitap: client-side result waited for" "Data calculated on the client side"
+  safaripilot --tab $tab navigate "$base/shadowdom" >/dev/null
+  check "uitap: button inside a shadow root fills its field" 'value="[0-9a-f]{8}-[0-9a-f-]{27}"' click $(ref "" button)
+  safaripilot --tab $tab navigate "$base/dynamictable" >/dev/null
+  # Columns shuffle on each load, so the CPU cell is the row's only percentage.
+  local cpu=$(safaripilot --tab $tab text | awk '$1 == "Chrome" { for (field = 2; field <= NF; field++) if ($field ~ /%$/) { print $field; exit } }')
+  check "uitap: shuffled table cell matches its label" "^Chrome CPU: ${cpu:-none}$" text
+  safaripilot --tab $tab navigate "$base/progressbar" >/dev/null
+  safaripilot --tab $tab click $(ref "Start" button) >/dev/null
+  sleep 3
+  check "uitap: running progress bar read" 'progressbar "([3-9][0-9]|100)%"' read-page --all --max-chars 4000
+  safaripilot --tab $tab navigate "$base/dynamicid" >/dev/null
+  check "uitap: button found by name, not its random id" 'click on' click $(ref "Button with Dynamic ID" button)
+  close_tab
+}
+
 # mcp_request METHOD PARAMS [SECONDS]: sends one JSON-RPC request to the coprocess and leaves its response in $output.
 mcp_id=0
 mcp_request() {
@@ -374,7 +437,7 @@ for attempt in {1..30}; do
 done
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet windows mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet uitap windows mcp)
 
 for site in $sites; do
   site_$site
