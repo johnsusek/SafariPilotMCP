@@ -12,9 +12,17 @@ let centerOf = (element: Element) => {
   return { left: rect.left + rect.width / 2, top: rect.top + rect.height / 2 };
 };
 
-// rAF stalls in hidden tabs, so each frame also has a short timeout.
+// A hidden page renders no frames and Safari runs its timers about once a second, which would stretch a drag past the content timeout,
+// so there each step only yields to the page's own tasks through a message, which is not throttled.
 let nextFrame = () =>
   new Promise((resolve) => {
+    if (document.visibilityState === "hidden") {
+      let channel = new MessageChannel();
+      channel.port1.onmessage = resolve;
+      channel.port2.postMessage(null);
+      return;
+    }
+
     requestAnimationFrame(resolve);
     setTimeout(resolve, 20);
   });

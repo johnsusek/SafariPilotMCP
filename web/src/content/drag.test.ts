@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { beforeEach, describe, expect, test } from "vitest";
+import { beforeEach, describe, expect, test, vi } from "vitest";
 import { drag } from "./drag";
 import { refFor } from "./refs";
 
@@ -59,6 +59,19 @@ let types = (result: Awaited<ReturnType<typeof drag>>) => {
 };
 
 describe("drag", () => {
+  test("on a hidden page the steps run without waiting on frames or timers", async () => {
+    vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    vi.useFakeTimers({ toFake: ["setTimeout", "requestAnimationFrame"] });
+
+    try {
+      let result = await run("plain", "zone");
+      expect(types(result).at(-1)).toBe("click");
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+    }
+  });
+
   test("a draggable source runs an HTML5 drag that drops where dragover was canceled", async () => {
     let dropped = "";
     element("src").addEventListener("dragstart", (event) =>
