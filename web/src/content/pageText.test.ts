@@ -48,3 +48,19 @@ describe("pageText", () => {
     expect(result.truncated).toBe(false);
   });
 });
+
+describe("positioned text", () => {
+  test("absolutely positioned rows read on lines of their own", () => {
+    document.body.innerHTML =
+      '<main><h3>Rows</h3><div style="position: relative"><div style="position: absolute">Row 0</div><div style="position: absolute">Row <b>1</b></div></div><p>After <span>this</span></p></main>';
+    let result = pageText(1000, "text", null) as PageTextResult;
+    expect(result.text).toBe("Rows\nRow 0\nRow 1\nAfter this");
+  });
+
+  test("undisplayed text and line breaks beside a positioned element", () => {
+    document.body.innerHTML =
+      '<main><div><i style="display: none">Gone</i>Shown<br>Next<div style="position: fixed">Bar</div></div></main>';
+    let result = pageText(1000, "text", null) as PageTextResult;
+    expect(result.text).toBe("Shown\nNext\nBar");
+  });
+});

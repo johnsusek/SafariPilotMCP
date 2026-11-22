@@ -317,6 +317,14 @@ site_demoqa() {
   close_tab
 }
 
+# TanStack Virtual's demo: rows placed with position:absolute, which WebKit's innerText runs together.
+site_tanstack() {
+  open_tab "https://tanstack.com/virtual/latest/docs/framework/react/examples/fixed"
+  sleep 3
+  check "tanstack: virtualized rows read on lines of their own" '^Row 1$' text
+  close_tab
+}
+
 # Rich-text editors that keep their own document model and must see the edit there, not just in the DOM.
 site_editors() {
   open_tab "https://playground.lexical.dev/"
@@ -485,7 +493,7 @@ for attempt in {1..30}; do
 done
 
 sites=($@)
-((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet uitap demoqa editors windows mcp)
+((${#sites})) || sites=(wikipedia hackernews github mdn httpbin network pagefetch youtube osm npm apple w3schools bbc discourse frames reddit facebook theinternet uitap demoqa editors tanstack windows mcp)
 
 for site in $sites; do
   site_$site
