@@ -169,22 +169,23 @@ struct Commands {
   static let navigationWatch = Duration.milliseconds(150)
 
   /// Waits for a page the action started loading, up to the background's 15 s load cap, and names where the tab landed. moved is false when the tab's own page stayed, as after opening a popup or loading a frame.
-  func landing(_ tab: TabInfo, since acted: ContinuousClock.Instant, replaced: Bool = false) async -> (moved: Bool, lines: [String]) {
+  /// behind is whether a tab the action opened now hides it, which leaves it to Safari's background timer throttling.
+  func landing(_ tab: TabInfo, since acted: ContinuousClock.Instant, replaced: Bool = false) async -> (moved: Bool, behind: Bool, lines: [String]) {
     let watch = max(.zero, Commands.navigationWatch - (.now - acted))
 
     do {
       let settled = try await call(.settle(tabId: tab.id, url: tab.url, watchMs: Int((watch / .milliseconds(1)).rounded(.up)))).decode(SettleResult.self)
       let moved = settled.moved(from: tab.url, replaced: replaced)
-      return (moved, moved ? [settled.line] : [])
+      return (moved, tab.active && !settled.tab.active, moved ? [settled.line] : [])
     } catch {
-      return (replaced, ["could not read where tab \(tab.id) landed: \(error)"])
+      return (replaced, false, ["could not read where tab \(tab.id) landed: \(error)"])
     }
   }
 
-  /// Ends an action's reply with where the tab landed when its page moved, else with what the action changed on the page.
+  /// Ends an action's reply with where the tab landed when its page moved, else with what the action changed on the page, unless a tab it opened now hides it.
   func withOutcome(_ reply: CLIReply, _ tab: TabInfo, since acted: ContinuousClock.Instant, _ watch: ChangeWatch) async -> CLIReply {
     let landed = await landing(tab, since: acted)
-    let lines = landed.moved ? landed.lines : landed.lines + [await changes(watch, since: acted)]
+    let lines = landed.moved || landed.behind ? landed.lines : landed.lines + [await changes(watch, since: acted)]
     return CLIReply(ok: reply.ok, text: ([reply.text] + lines).joined(separator: "\n"), data: reply.data, code: reply.code)
   }
 
@@ -515,7 +516,8 @@ struct Commands {
     }
 
     // WebKit exposes some custom widgets (react-select's options) as AXStaticText, whose AXPress dispatches nothing yet can move focus and close the menu holding them.
-    if match.node.role == kAXStaticTextRole {
+    // A link's text is pressed through its AXLink instead, since an untrusted click cannot open a target=_blank tab.
+    if match.node.role == kAXStaticTextRole && !located.link {
       let reply = try await syntheticClick(tab.id, ref, .left, [])
       return CLIReply(ok: reply.ok, text: "clicked ref \(ref) from the page script, since Safari exposes it as text, which AXPress does not click\n\(reply.text)", data: reply.data, code: reply.code)
     }
@@ -588,7 +590,7 @@ struct Commands {
     lines += matched + landed.lines
 
     // AXPress sends no pointer events, and some widgets (Radix menus) open on pointerdown alone.
-    if !navigated, !frameNavigated {
+    if !navigated, !frameNavigated, !landed.behind {
       let changed = await changes(watch, since: acted)
       let unchanged = "page unchanged"
 
