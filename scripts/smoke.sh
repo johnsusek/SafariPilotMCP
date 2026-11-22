@@ -181,7 +181,7 @@ site_apple() {
 
 site_w3schools() {
   open_tab "https://www.w3schools.com/howto/howto_js_rangeslider.asp"
-  check "w3schools: slider set" 'read back: "30" \(matches\)' form-input $(ref "" slider) 30
+  check "w3schools: slider set" 'read back: 30 \(matches\)' form-input $(ref "" slider) 30
   close_tab
   open_tab "https://www.w3schools.com/tags/att_a_target.asp"
   check "w3schools: target=_blank link clicked" 'click on' click $(ref "Try it Yourself" link)
