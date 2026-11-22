@@ -142,6 +142,17 @@ test("a range input and an ARIA slider are sliders with their bounds", () => {
   });
 });
 
+test("an emptied editable reads back empty, not its placeholder line break", () => {
+  document.body.innerHTML =
+    '<div id="empty" contenteditable="true"><br></div><div id="lines" contenteditable="true"><div>One</div><div><br></div></div>';
+  expect(inspect(refFor(document.querySelector("#empty")!))).toMatchObject({
+    value: "",
+  });
+  expect(inspect(refFor(document.querySelector("#lines")!))).not.toMatchObject({
+    value: "",
+  });
+});
+
 test("an editor that draws each line as a block reads back with its line breaks", () => {
   document.body.innerHTML =
     '<div contenteditable="true"><div class="cm-line">let index = 4;</div><div class="cm-line">log(index);</div></div>';

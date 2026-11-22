@@ -118,8 +118,16 @@ export function inspect(ref: number): InspectResult | Failure {
     return { ...base, value: element.value, kind: "text" };
 
   // innerText, since an editor that draws each line as its own block (CodeMirror) holds no line breaks in its text.
-  if (element instanceof HTMLElement && element.isContentEditable)
-    return { ...base, value: element.innerText, kind: "text" };
+  // WebKit leaves a lone <br> in an emptied editable to keep its line, which innerText reads as "\n".
+  if (element instanceof HTMLElement && element.isContentEditable) {
+    let placeholder =
+      element.textContent === "" && element.querySelectorAll("br").length < 2;
+    return {
+      ...base,
+      value: placeholder ? "" : element.innerText,
+      kind: "text",
+    };
+  }
 
   let ariaKind = ariaChecks[element.getAttribute("role") ?? ""];
 
