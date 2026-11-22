@@ -59,8 +59,8 @@ export function focusFor(target: Element) {
   (document.activeElement as HTMLElement | null)?.blur?.();
 }
 
-// Pointer and mouse events as a real press sends them, untrusted, at the element's center: a canceled pointerdown drops that press's mousedown and mouseup,
-// a canceled mousedown keeps focus where it was, right clicks fire contextmenu after mousedown (as on macOS) and auxclick instead of click, and dblclick follows the second click.
+// Pointer and mouse events as a real press sends them, untrusted, at the element's center: the pointer first moves in with over, enter and move events, and the press then goes
+// to whatever is at that point, since mouseenter handlers may replace the element. A canceled pointerdown drops that press's mousedown and mouseup, a canceled mousedown keeps focus where it was, right clicks fire contextmenu after mousedown (as on macOS) and auxclick instead of click, and dblclick follows the second click.
 export function syntheticClick(
   ref: number,
   action: ClickAction,
@@ -74,8 +74,13 @@ export function syntheticClick(
     left: rect.left + rect.width / 2,
     top: rect.top + rect.height / 2,
   };
-  let hit = deepElementFromPoint(point);
-  let target = hit && isWithin(element, hit) ? hit : element;
+  let aim = () => {
+    let hit = deepElementFromPoint(point);
+    return hit && (!element.isConnected || isWithin(element, hit))
+      ? hit
+      : element;
+  };
+  let target = aim();
   let button = action === "right_click" ? 2 : 0;
   let held = action === "right_click" ? 2 : 1;
   let base = {
@@ -95,23 +100,46 @@ export function syntheticClick(
     metaKey: modifiers.includes("cmd"),
   };
   let dispatched: ClickResult["dispatched"] = [];
+  let make = (type: string, buttons: number, detail: number) => {
+    // Enter events do not bubble.
+    let init = { ...base, buttons, detail, bubbles: !type.endsWith("enter") };
+
+    if (!type.startsWith("pointer")) return new MouseEvent(type, init);
+
+    return new PointerEvent(type, {
+      ...init,
+      pointerId: 1,
+      pointerType: "mouse",
+      isPrimary: true,
+      width: 1,
+      height: 1,
+      pressure: buttons ? 0.5 : 0,
+    });
+  };
   let fire = (type: string, buttons: number, detail: number) => {
-    let init = { ...base, buttons, detail };
-    let event = type.startsWith("pointer")
-      ? new PointerEvent(type, {
-          ...init,
-          pointerId: 1,
-          pointerType: "mouse",
-          isPrimary: true,
-          width: 1,
-          height: 1,
-          pressure: buttons ? 0.5 : 0,
-        })
-      : new MouseEvent(type, init);
-    let canceled = !target.dispatchEvent(event);
+    let canceled = !target.dispatchEvent(make(type, buttons, detail));
     dispatched.push({ type, canceled });
     return canceled;
   };
+  // Each element the pointer enters gets its own enter event, outermost first.
+  let enter = (type: string) => {
+    let chain: Element[] = [];
+
+    for (let at: Element | null = target; at; at = flatParent(at))
+      chain.unshift(at);
+
+    for (let at of chain) at.dispatchEvent(make(type, 0, 0));
+
+    dispatched.push({ type, canceled: false });
+  };
+
+  fire("pointerover", 0, 0);
+  enter("pointerenter");
+  fire("mouseover", 0, 0);
+  enter("mouseenter");
+  fire("pointermove", 0, 0);
+  fire("mousemove", 0, 0);
+  target = aim();
 
   for (let count = 1; count <= presses[action]; count++) {
     let silenced = fire("pointerdown", held, 0);

@@ -162,6 +162,52 @@ describe("syntheticClick", () => {
     expect(document.activeElement).toBe(element("host"));
   });
 
+  test("the pointer moves in before the press, with one enter event per entered element", () => {
+    let entered: string[] = [];
+    let moves: string[] = [];
+
+    element("button").addEventListener("mouseover", (event) =>
+      moves.push(event.type),
+    );
+
+    for (let at of [document.documentElement, document.body, element("button")])
+      at.addEventListener("mouseenter", (event) => {
+        if (event.target === event.currentTarget) entered.push(at.localName);
+      });
+
+    let result = click("button");
+    expect(entered).toEqual(["html", "body", "button"]);
+    expect(moves).toEqual(["mouseover"]);
+    expect(result).toMatchObject({
+      dispatched: [
+        { type: "pointerover" },
+        { type: "pointerenter" },
+        { type: "mouseover" },
+        { type: "mouseenter" },
+        { type: "pointermove" },
+        { type: "mousemove" },
+        { type: "pointerdown" },
+        { type: "mousedown" },
+        { type: "pointerup" },
+        { type: "mouseup" },
+        { type: "click" },
+      ],
+    });
+  });
+
+  test("the press goes to an element a mouseenter handler swapped in", () => {
+    let clicked = 0;
+    let original = element("plain");
+    let clone = original.cloneNode(true) as HTMLElement;
+    clone.addEventListener("click", () => clicked++);
+    original.addEventListener("mouseenter", () => original.replaceWith(clone));
+    document.elementFromPoint = () => (original.isConnected ? original : clone);
+    let result = click("plain");
+    delete (document as Partial<Document>).elementFromPoint;
+    expect(clicked).toBe(1);
+    expect(result).toMatchObject({ target: 'div#plain "Plain"' });
+  });
+
   test("an unknown ref fails", () => {
     expect(syntheticClick(999999, "left_click", ["shift"])).toMatchObject({
       ok: false,

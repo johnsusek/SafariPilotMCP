@@ -336,6 +336,8 @@ site_uitap() {
   check "uitap: running progress bar read" 'progressbar "([3-9][0-9]|100)%"' read-page --all --max-chars 4000
   safaripilot --tab $tab navigate "$base/dynamicid" >/dev/null
   check "uitap: button found by name, not its random id" 'click on' click $(ref "Button with Dynamic ID" button)
+  safaripilot --tab $tab navigate "$base/mouseover" >/dev/null
+  check "uitap: click runs mouseenter first, then presses the swapped-in link" 'clicked 1 times' click $(ref "Click me")
   close_tab
 }
 
