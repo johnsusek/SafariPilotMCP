@@ -392,6 +392,59 @@ site_uitap() {
   check "uitap: button found by name, not its random id" 'click on' click $(ref "Button with Dynamic ID" button)
   safaripilot --tab $tab navigate "$base/mouseover" >/dev/null
   check "uitap: click runs mouseenter first, then presses the swapped-in link" 'clicked 1 times' click $(ref "Click me")
+  safaripilot --tab $tab navigate "$base/verifytext" >/dev/null
+  check "uitap: text split across spans and whitespace found whole" 'generic "Welcome UserName!" <span>' find "Welcome UserName!"
+  safaripilot --tab $tab navigate "$base/animation" >/dev/null
+  safaripilot --tab $tab click --name "Start Animation" >/dev/null
+  # Only the press mid-spin is checked: WebKit pauses CSS animations in an occluded window, so the spin may never end.
+  check "uitap: press reaches a spinning button" "class name is 'btn btn-primary spin'" click --name "Moving Target"
+  safaripilot --tab $tab navigate "$base/scrolltoclick" >/dev/null
+  check "uitap: button below the fold clicked" 'Buttons clicked: 1 / 4' click --name "Button 1"
+  check "uitap: button in a scroll box clicked" 'Buttons clicked: 2 / 4' click --name "Button 2"
+  check "uitap: button in a nested scroll box clicked" 'Buttons clicked: 3 / 4' click --name "Button 3"
+  check "uitap: hover-only button left out of find" '^no matches' find "Flag" --role button
+  safaripilot --tab $tab navigate "$base/disabledinput" >/dev/null
+  check "uitap: field disabled by its button" 'disabled \(was not disabled\)' click --name "Enable Edit Field with 5 seconds delay"
+  check "uitap: disabled field marked" 'textbox "Edit Field" <input> \(disabled\)' find "Edit Field"
+  safaripilot --tab $tab form-input --name "Edit Field" "Early" >/dev/null 2>&1
+  check "uitap: disabled field kept empty" '^""$' javascript "document.querySelector('#inputField').value"
+  await_text "uitap: field enabling waited for" "Input Enabled..."
+  check "uitap: enabled field set" '\(matches\)' form-input --name "Edit Field" "Pilot"
+  check "uitap: tab commits the field's change" 'Value changed to: Pilot' key Tab --name "Edit Field"
+  safaripilot --tab $tab navigate "$base/clearinput" >/dev/null
+
+  for field in "Input (type=text)" Textarea "Input (type=email)" "Input (type=number)" "Input (type=search)" "Input (type=url)" "Input (type=tel)"; do
+    check "uitap: cleared $field" '\(matches\)' form-input --name $field ""
+  done
+
+  local editable=$(safaripilot --tab $tab find "" --role textbox | sed -nE 's/^\[([0-9:]+)\] textbox <div>.*/\1/p')
+  check "uitap: cleared contenteditable reads back empty" '\(matches\)' form-input $editable ""
+  check "uitap: cleared password field tells the page" 'All fields are cleared!' form-input --name "Input (type=password)" ""
+  # The page leaves options.nonzero unset, so every Apply also shrinks the target to 0x0 until that checkbox changes once.
+  safaripilot --tab $tab navigate "$base/autowait" >/dev/null
+  safaripilot --tab $tab form-input --name "Non Zero Size" false >/dev/null
+  safaripilot --tab $tab form-input --name "Non Zero Size" true >/dev/null
+  safaripilot --tab $tab form-input --name "On Top" false >/dev/null
+  safaripilot --tab $tab click --name "Apply 10s" >/dev/null
+  check "uitap: button under an overlay refused" 'covered by div#overlay' click --name Button --role button
+  safaripilot --tab $tab navigate "$base/autowait" >/dev/null
+  safaripilot --tab $tab form-input --name "Non Zero Size" false >/dev/null
+  safaripilot --tab $tab form-input --name "Non Zero Size" true >/dev/null
+  safaripilot --tab $tab form-input --name "Enabled" false >/dev/null
+  safaripilot --tab $tab click --name "Apply 5s" >/dev/null
+  check "uitap: disabled button runs no handler" 'page unchanged' click --name Button --role button
+  await_text "uitap: button restore waited for" "Target element state restored."
+  check "uitap: restored button clicked" 'Target clicked.' click --name Button --role button
+  # Picking an element type checks every box, which sets options.nonzero.
+  check "uitap: element type picked" 'selected "Input"' form-input --name "Choose an element type:" Input
+  safaripilot --tab $tab form-input --name "Editable" false >/dev/null
+  safaripilot --tab $tab click --name "Apply 5s" >/dev/null
+  local target=$(ref "" textbox)
+  safaripilot --tab $tab form-input $target "Early" >/dev/null 2>&1
+  check "uitap: read-only field kept empty" '^""$' javascript "document.querySelector('#target').value"
+  await_text "uitap: field restore waited for" "Target element state restored."
+  check "uitap: restored field set" '\(matches\)' form-input $target "Pilot"
+  check "uitap: tab commits the restored field" 'Text: Pilot' key Tab --ref $target
   close_tab
 }
 
