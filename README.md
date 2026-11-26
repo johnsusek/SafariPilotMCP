@@ -70,10 +70,10 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 - **Inspect:** `javascript`, `read_console_messages`, `read_network_requests`, `page_fetch`
 - **Batch:** `browser_batch` runs several calls in one round trip.
 
+## Security and Trust
+
 > [!WARNING]
 > **Agent permissions:** An agent acts as you on every site you're signed in to. It can read pages, submit forms and upload files there, as well as run JavaScript and read network requests. Review which clients you approve, and take care with sensitive accounts.
-
-## Security and trust
 
 - **Approve every client.** Each new client needs your approval. A client you always trust gets a credential in its MCP settings, so other software on your Mac can't pass itself off as that client.
 - **Tab isolation.** Each agent session gets its own Safari window and sees only the tabs it opened, plus any popups from those; SafariPilot closes them all when the session ends.

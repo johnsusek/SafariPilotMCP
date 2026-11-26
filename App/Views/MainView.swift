@@ -38,8 +38,22 @@ struct MainView: View {
       .navigationTitle(pane.title)
     }
     .frame(minWidth: 640, minHeight: 420)
-    // A Dock icon and menu bar only while the window is open; otherwise the app lives in the menu bar alone.
-    .onAppear { NSApp.setActivationPolicy(.regular) }
-    .onDisappear { NSApp.setActivationPolicy(.accessory) }
+    .showsDockIcon()
+  }
+}
+
+@MainActor private var openWindows = 0
+
+extension View {
+  /// A Dock icon and menu bar only while a window is open; otherwise the app lives in the menu bar alone.
+  func showsDockIcon() -> some View {
+    onAppear {
+      openWindows += 1
+      NSApp.setActivationPolicy(.regular)
+    }
+    .onDisappear {
+      openWindows -= 1
+      if openWindows == 0 { NSApp.setActivationPolicy(.accessory) }
+    }
   }
 }

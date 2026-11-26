@@ -6,6 +6,7 @@ struct SafariPilotApp: App {
   @NSApplicationDelegateAdaptor private var delegate: AppDelegate
   @AppStorage("showInMenuBar") private var showInMenuBar = true
   @AppStorage("activityErrorsOnly") private var errorsOnly = false
+  @AppStorage("helpTopic") private var helpTopic = Help.titles[0]
   @Environment(\.openWindow) private var openWindow
 
   var body: some Scene {
@@ -29,6 +30,17 @@ struct SafariPilotApp: App {
     .defaultSize(width: 780, height: 580)
     .defaultLaunchBehavior(.suppressed)
     .commands {
+      CommandGroup(replacing: .help) {
+        Button("SafariPilot Help") { openWindow(id: "help") }
+          .keyboardShortcut("?")
+        Divider()
+        ForEach(Help.topics) { topic in
+          Button(topic.title) {
+            helpTopic = topic.id
+            openWindow(id: "help")
+          }
+        }
+      }
       CommandGroup(after: .appInfo) {
         Button("Check for Updates…") { delegate.model.updates.check() }
           .disabled(!delegate.model.updates.canCheck)
@@ -47,6 +59,12 @@ struct SafariPilotApp: App {
         Toggle("Keep Log Between Launches", isOn: Bindable(delegate.model).retainLog)
       }
     }
+
+    Window("SafariPilot Help", id: "help") {
+      HelpView()
+    }
+    .defaultSize(width: 760, height: 540)
+    .defaultLaunchBehavior(.suppressed)
   }
 }
 
@@ -108,6 +126,10 @@ private struct MenuBarMenu: View {
       NSApp.activate()
     }
     .keyboardShortcut(",")
+    Button("SafariPilot Help") {
+      openWindow(id: "help")
+      NSApp.activate()
+    }
     Button("About SafariPilot") {
       NSApp.orderFrontStandardAboutPanel()
       NSApp.activate()
