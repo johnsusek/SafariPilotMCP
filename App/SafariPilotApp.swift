@@ -126,15 +126,15 @@ private struct MenuBarMenu: View {
       NSApp.activate()
     }
     .keyboardShortcut(",")
-    Button("SafariPilot Help") {
+    Button("Help") {
       openWindow(id: "help")
       NSApp.activate()
     }
-    Button("About SafariPilot") {
+    Button("About") {
       NSApp.orderFrontStandardAboutPanel()
       NSApp.activate()
     }
-    Button("Quit SafariPilot") { NSApp.terminate(nil) }
+    Button("Quit") { NSApp.terminate(nil) }
       .keyboardShortcut("q")
   }
 }
