@@ -78,6 +78,7 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 - **Approve every client.** Each new client needs your approval. A client you always trust gets a credential in its MCP settings, so other software on your Mac can't pass itself off as that client.
 - **Tab isolation.** Each agent session gets its own Safari window and sees only the tabs it opened, plus any popups from those; SafariPilot closes them all when the session ends.
 - **Secure local connection.** The Safari extension, the app and the agent talk only over loopback, and every connection needs a secret token that changes each launch.
+- **Attested builds.** Releases are built, signed and notarized in GitHub Actions, which attests each DMG. This means you can verify the app you are running was built from the source code you can see on GitHub. Use `gh attestation verify SafariPilot-*.dmg --repo johnsusek/SafariPilotMCP` on a downloaded release, to verify the commit and workflow run that built it.
 - **Secrets stay hidden.** Page reads, URLs and network logs redact password fields, card numbers, tokens and cookies.
 
 > [!CAUTION]
