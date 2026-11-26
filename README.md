@@ -8,7 +8,7 @@ SafariPilot is a local MCP server for Safari on macOS. Your agent works in the S
 ## Features
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
-- **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in. [Synthetic vs Trusted Input](#synthetic-vs-trusted-input) explains the trade-off.
+- **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in.
 - **Real clicks.** Plain clicks and text input go through macOS Accessibility, so pages get trusted input. Key presses and double-clicks have caveats (see below).
 - **Optimized.** 2.1x faster than Claude in Chrome on 32% fewer tokens.
 
@@ -29,22 +29,20 @@ SafariPilot is a local MCP server for Safari on macOS. Your agent works in the S
 brew install --cask johnsusek/tap/safaripilot
 ```
 
-Or download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest) and drag SafariPilot to Applications. Releases are built, signed and notarized in GitHub Actions; to check that a DMG came from this repo's workflow:
+Or download the DMG from [Releases](https://github.com/johnsusek/SafariPilotMCP/releases/latest) and drag SafariPilot to Applications. 
 
-```bash
-gh attestation verify SafariPilot-*.dmg --repo johnsusek/SafariPilotMCP
-```
+## Configure
 
-Open SafariPilot. It lives in the menu bar; choose **Settings…** there to see its window. Then:
+Open SafariPilot. It has a menu bar icon; choose **Settings…** there if you don't see its window. Then:
 
 1. In Safari, open **Settings > Extensions** and turn on **SafariPilot**.
 2. In SafariPilot's **General** pane, grant **Accessibility**.
-3. In the **Clients** pane, set up your client: Claude Desktop, Claude Code, ChatGPT and Codex, Cursor, VS Code or LM Studio. For any other client, use **Other Clients**.
+3. In the **Clients** pane, set up your client: For supported apps configuration is a single click. Use Other Clients if your app isn't listed.
 4. Ask your agent to open a page in Safari and click a link. Approve the client when SafariPilot asks.
 
 ### Updates
 
-SafariPilot checks for updates and offers to install them. **Check for Updates…** in its menu checks now, and the **General** pane turns automatic checks off. Homebrew installs can also update with:
+SafariPilot automatically updates itself from the attested GitHub releases. Homebrew installs can also update with:
 
 ```bash
 brew upgrade --cask safaripilot
@@ -60,16 +58,6 @@ scripts/install.sh
 
 This builds SafariPilot, installs it in `/Applications`, opens it and links the `safaripilot` CLI into `/opt/homebrew/bin`.
 
-## Tools
-
-The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
-
-- **Tabs:** `tabs_list`, `tab_create`, `tab_select`, `tab_close`, `navigate`
-- **Read:** `read_page`, `find`, `get_page_text`, `screenshot`, `wait`
-- **Act:** `click`, `form_input`, `key`, `drag`, `scroll`, `scroll_to`, `file_upload`, `handle_dialog`, `resize_window`
-- **Inspect:** `javascript`, `read_console_messages`, `read_network_requests`, `page_fetch`
-- **Batch:** `browser_batch` runs several calls in one round trip.
-
 ## Security and Trust
 
 > [!WARNING]
@@ -83,18 +71,6 @@ The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
 
 > [!CAUTION]
 > Redaction isn't data-loss prevention. Screenshots, `javascript` results, `page_fetch` and other tool responses can still contain sensitive information.
-
-## Synthetic vs Trusted Input
-
-Pages can tell real user input ("trusted") from events created in JavaScript ("synthetic"), and some sites reject synthetic events. Nearly all of SafariPilot's input is trusted. The exceptions:
-
-- **Always synthetic:** color inputs, `drag`, and double, triple, right and modifier clicks. SafariPilot can't send these as trusted input without taking your cursor or making Safari the active app.
-- **Synthetic by default:** `key` presses (not `form_input` text entry) and `form_input` on dates, times, selects and sliders. `compat: true` makes them trusted but brings the pilot window in front of your other Safari windows, because Safari sends real key presses and native menus only to its frontmost window. Safari as a whole can still stay behind other apps.
-
-## Limits
-
-- No hover: the CSS `:hover` pseudo-class is never applied.
-- `key` refuses Cmd shortcuts so an agent can't trigger app or system commands with them.
 
 ## Troubleshooting
 
@@ -139,9 +115,26 @@ Tool times are the mean of every call in those runs. Claude in Chrome does its c
 - **[MCPSafari](https://github.com/Epistates/MCPSafari)** can't send a trusted click. Its real input needs Safari in front, and its hover and drag move your pointer. Its network log has no request bodies, and like safari-mcp, it never asks you to approve a client.
 - **[Apple's Safari MCP](https://webkit.org/blog/18136/introducing-the-safari-mcp-server-for-web-developers/)** can't use your signed-in Safari; it opens a separate window without your logins.
 
+## Synthetic vs Trusted Input
+
+Pages can tell real user input ("trusted") from events created in JavaScript ("synthetic"), and some sites reject synthetic events. Nearly all of SafariPilot's input is trusted. The exceptions:
+
+- **Always synthetic:** color inputs, `drag`, and double, triple, right and modifier clicks. SafariPilot can't send these as trusted input without taking your cursor or making Safari the active app.
+- **Synthetic by default:** `key` presses (not `form_input` text entry) and `form_input` on dates, times, selects and sliders. `compat: true` makes them trusted but brings the pilot window in front of your other Safari windows, because Safari sends real key presses and native menus only to its frontmost window. Safari as a whole can still stay behind other apps.
+
 ## How it runs
 
 The MCP client starts `safaripilot mcp`, a stdio MCP server inside the app. That server passes each tool call to the SafariPilot menu bar app, which controls Safari through the SafariPilot extension and macOS Accessibility APIs. The server opens the app if it isn't running.
+
+## Tools
+
+The tools mirror those of [Claude in Chrome](https://claude.com/chrome).
+
+- **Tabs:** `tabs_list`, `tab_create`, `tab_select`, `tab_close`, `navigate`
+- **Read:** `read_page`, `find`, `get_page_text`, `screenshot`, `wait`
+- **Act:** `click`, `form_input`, `key`, `drag`, `scroll`, `scroll_to`, `file_upload`, `handle_dialog`, `resize_window`
+- **Inspect:** `javascript`, `read_console_messages`, `read_network_requests`, `page_fetch`
+- **Batch:** `browser_batch` runs several calls in one round trip.
 
 ## More
 
