@@ -9,7 +9,7 @@ SafariPilot is a local MCP server for Safari on macOS. Your agent works in the S
 
 - **Your signed-in Safari.** Your agent works in the Safari you already use, with your logins and cookies.
 - **No cursor takeover.** Your cursor doesn't move, keystrokes go only to Safari, and Safari can stay behind the app you're working in.
-- **Real clicks.** Plain clicks and text input go through macOS Accessibility, so pages get trusted input. Key presses and double-clicks have caveats (see below).
+- **Real clicks.** Plain clicks and text input go through macOS Accessibility, so pages get trusted input.
 - **Optimized.** 2.1x faster than Claude in Chrome on 32% fewer tokens.
 
 <p align="center"><img src="docs/screenshots/general.webp" width="49%" alt="SafariPilot General pane"> <img src="docs/screenshots/clients.webp" width="49%" alt="SafariPilot Clients pane"></p>
